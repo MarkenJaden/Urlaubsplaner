@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+  <PropertyGroup>
+    <NoWarn>CS0168,CS1998,BL9993,CS0649,CS0436,0436</NoWarn>
+    <NuGetAuditMode>direct</NuGetAuditMode>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <StaticWebAssetProjectMode>Default</StaticWebAssetProjectMode>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="9.*-*" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Authentication" Version="9.*-*" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="9.*-*" />
+    <PackageReference Include="System.Net.Http.Json" Version="9.*-*" />
+    <PackageReference Include="Radzen.Blazor" Version="*" />
+    <Compile Include="../Server/Models/**/*.cs" />
+    <PackageReference Include="Microsoft.Extensions.Localization" Version="9.*-*" />
+  </ItemGroup>
+  <PropertyGroup>
+    <BlazorWebAssemblyLoadAllGlobalizationData>true</BlazorWebAssemblyLoadAllGlobalizationData>
+  </PropertyGroup>
+</Project>

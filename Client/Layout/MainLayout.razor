@@ -1,0 +1,37 @@
+@inherits LayoutComponentBase
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@inject DialogService DialogService
+@inject ContextMenuService ContextMenuService
+@inject TooltipService TooltipService
+@inject NotificationService NotificationService
+<RadzenDialog />
+<RadzenNotification />
+<RadzenTooltip />
+<RadzenContextMenu />
+<RadzenLayout>
+    <RadzenHeader>
+        <RadzenRow JustifyContent="JustifyContent.Start" AlignItems="AlignItems.Center" Gap="0" Class="rz-px-4" Style="height: 100%;">
+            <RadzenColumn Size="6">
+                <RadzenStack AlignItems="AlignItems.Center" Orientation="Orientation.Horizontal" Gap="1rem">
+                    <RadzenText Text="Urlaubsplaner" TextStyle="Radzen.Blazor.TextStyle.Subtitle1" Class="rz-mb-0" Style="color: var(--rz-header-color);" />
+                    <RadzenMenu>
+                        <RadzenMenuItem Text="Home" Path="" />
+                    </RadzenMenu>
+                </RadzenStack>
+            </RadzenColumn>
+            <RadzenColumn Size="6">
+            </RadzenColumn>
+        </RadzenRow>
+    </RadzenHeader>
+    <RadzenBody>
+        <RadzenRow Class="rz-mx-auto rz-px-4 rz-pt-2 rz-pt-md-4 rz-pt-lg-6 rz-pt-xl-12 rz-pb-2 rz-pb-lg-12" Style="max-width: 1440px;">
+            <RadzenColumn Size="12">
+            @Body
+            </RadzenColumn>
+        </RadzenRow>
+    </RadzenBody>
+</RadzenLayout>
+@code {
+
+}

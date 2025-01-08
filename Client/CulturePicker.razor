@@ -1,0 +1,27 @@
+
+@using System.Globalization
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+@inject DialogService DialogService
+@inject ContextMenuService ContextMenuService
+@inject TooltipService TooltipService
+@inject NotificationService NotificationService
+<RadzenDropDown @bind-Value="@culture" TValue="string" Data="@(new [] { new { Text = "Deutsch", Value = "de" } })"
+    TextProperty="Text" ValueProperty="Value" Change="@ChangeCulture" />
+@code {
+        protected string culture;
+
+        protected override void OnInitialized()
+        {
+            culture = CultureInfo.CurrentCulture.Name;
+        }
+
+        protected void ChangeCulture()
+        {
+            var redirect = new Uri(NavigationManager.Uri).GetComponents(UriComponents.PathAndQuery | UriComponents.Fragment, UriFormat.UriEscaped);
+
+            var query = $"?culture={Uri.EscapeDataString(culture)}&redirectUri={redirect}";
+
+            NavigationManager.NavigateTo("Culture/SetCulture" + query, forceLoad: true);
+        }
+}
