@@ -1,4 +1,5 @@
 @page "/"
+@using OpenHolidaysApi.Api
 @inject IJSRuntime JSRuntime
 @inject NavigationManager NavigationManager
 @inject DialogService DialogService
@@ -10,10 +11,19 @@
 <RadzenRow Gap="5" RowGap="5">
     <RadzenColumn Size="12">
         <RadzenText Text="Welcome to your new app" TextStyle="TextStyle.DisplayH2" TagName="TagName.Auto"></RadzenText>
-        
-        <RadzenScheduler TItem="dynamic" SlotRender="SlotRender">
-            <RadzenYearPlannerView></RadzenYearPlannerView>
-            <RadzenYearView></RadzenYearView>
+        <RadzenLabel Text="Feiertage"></RadzenLabel>
+        <RadzenDropDown @bind-Value="_selectedPublicHolidayCountries" Data="_countries" SelectedItemChanged="GetAllMarkings" Change="GetAllMarkings" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" Placeholder="Feiertage" FilterPlaceholder="Deutschland" /><RadzenLabel Text="Feiertage"></RadzenLabel>
+        <RadzenLabel Text="Bundesland"></RadzenLabel>
+        <RadzenDropDown @bind-Value="_selectedPublicHolidaySubdivisions" Data="_subdivisions" SelectedItemChanged="GetAllMarkings" TextProperty="@nameof(Subdivision.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" Placeholder="Feiertage" FilterPlaceholder="Deutschland" />
+
+        <RadzenLabel Text="Ferien"></RadzenLabel>
+        <RadzenDropDown @bind-Value="_selectedSchoolHolidayCountries" Data="_countries" SelectedItemChanged="GetAllMarkings" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" Placeholder="Ferien" FilterPlaceholder="Deutschland" />
+        <RadzenLabel Text="Bundesland"></RadzenLabel>
+        <RadzenDropDown @bind-Value="_selectedSchoolHolidaySubdivisions" Data="_subdivisions" SelectedItemChanged="GetAllMarkings" TextProperty="@nameof(Subdivision.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" Placeholder="Ferien" FilterPlaceholder="Deutschland" />
+
+        <RadzenScheduler @ref="scheduler" Data="_markings" TItem="Marking" SlotRender="SlotRender" style="height: 800px;" StartProperty="Start" EndProperty="End" TextProperty="Name">
+            <RadzenYearPlannerView @ref="yearPlannerView"></RadzenYearPlannerView>
+            <RadzenYearView @ref="yearView"></RadzenYearView>
         </RadzenScheduler>
 
         @* <RadzenCard Style="margin-top: 40px; padding: 20px 40px 40px;">
@@ -41,7 +51,82 @@
 
 @code {
 
-    private void SlotRender(SchedulerSlotRenderEventArgs args)
+    //Idea: save button to save settings to cookies
+
+    RadzenScheduler<Marking> scheduler;
+    RadzenYearPlannerView yearPlannerView;
+    RadzenYearView yearView;
+
+    IEnumerable<Country> _countries;
+    IEnumerable<Country> _selectedPublicHolidayCountries = [];
+    IEnumerable<Country> _selectedSchoolHolidayCountries = [];
+
+    IEnumerable<Subdivision> _subdivisions;
+    IEnumerable<Subdivision> _selectedPublicHolidaySubdivisions = [];
+    IEnumerable<Subdivision> _selectedSchoolHolidaySubdivisions = [];
+
+    List<Marking> _markings = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await base.OnInitializedAsync();
+
+        _countries = (await new RegionalApi().CountriesGetAsync("DE")).Select(country => new Country { Name = country.Name.First().Text, IsoCode = country.IsoCode }).ToList();
+        _subdivisions = (await new RegionalApi().SubdivisionsGetAsync("DE", "DE")).Select(sub => new Subdivision { Name = sub.Name.First().Text, Category = sub.Category.First().Text, Code = sub.Code, IsoCode = sub.IsoCode }).ToList();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // _selectedPublicHolidayCountries = _countries.Where(x => x.IsoCode == "DE").ToList();
+            // _selectedSchoolHolidayCountries = _countries.Where(x => x.IsoCode == "DE").ToList();
+
+            await GetAllMarkings();
+        }
+    }
+
+    private async Task GetAllMarkings()
+    {
+        _markings.Clear();
+
+        foreach (var country in _selectedPublicHolidayCountries)
+        {
+            var publicHolidays = await new HolidaysApi().PublicHolidaysGetAsync(country.IsoCode, scheduler.SelectedView.StartDate, scheduler.SelectedView.EndDate, "DE");
+            if (_selectedPublicHolidaySubdivisions.Any())
+            {
+                _markings.AddRange(
+                    from subdivision in _selectedPublicHolidaySubdivisions
+                    from holiday in publicHolidays
+                    where holiday.Subdivisions.Any(y => y.Code == subdivision.Code)
+                    select new Marking
+                        {
+                            Start = holiday.StartDate.Value,
+                            End = holiday.EndDate.Value,
+                            Name = holiday.Name.First().Text,
+                            Color = "background: red"
+                        }
+                );
+            }
+            else
+            {
+                _markings.AddRange(
+                    from holiday in publicHolidays
+                    where holiday.Nationwide.Value
+                    select new Marking
+                        {
+                            Start = holiday.StartDate.Value,
+                            End = holiday.EndDate.Value,
+                            Name = holiday.Name.First().Text,
+                            Color = "background: red"
+                        });
+            }
+        }
+
+        await scheduler.Reload();
+    }
+
+    private static void SlotRender(SchedulerSlotRenderEventArgs args)
     {
         if (args.Start < DateTime.Today)
         {
@@ -49,5 +134,27 @@
         }
     }
 
-}
+    class Country
+    {
+        public string Name { get; init; }
+        public string IsoCode { get; init; }
+    }
 
+    class Subdivision
+    {
+        public string Name { get; init; }
+        public string Category { get; init; }
+        public string Code { get; init; }
+        public string IsoCode { get; init; }
+    }
+
+    class Marking
+    {
+        public DateTime Start { get; set; }
+        public DateTime End { get; set; }
+
+        public string Name { get; set; }
+
+        public string Color { get; set; } = "background: blue";
+    }
+}

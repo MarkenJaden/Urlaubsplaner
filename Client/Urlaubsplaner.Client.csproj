@@ -15,6 +15,9 @@
     <Compile Include="../Server/Models/**/*.cs" />
     <PackageReference Include="Microsoft.Extensions.Localization" Version="9.*-*" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\OpenHolidaysApi\OpenHolidaysApi.csproj" />
+  </ItemGroup>
   <PropertyGroup>
     <BlazorWebAssemblyLoadAllGlobalizationData>true</BlazorWebAssemblyLoadAllGlobalizationData>
   </PropertyGroup>
