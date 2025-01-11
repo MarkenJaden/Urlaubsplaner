@@ -7,24 +7,36 @@
 @inject TooltipService TooltipService
 @inject NotificationService NotificationService
 @inject Microsoft.Extensions.Localization.IStringLocalizer<Index> L
-<PageTitle>Index</PageTitle>
+<PageTitle>Urlaubsplaner</PageTitle>
 <RadzenRow Gap="5" RowGap="5">
     <RadzenColumn Size="12">
-        <RadzenText Text="Welcome to your new app" TextStyle="TextStyle.DisplayH2" TagName="TagName.Auto"></RadzenText>
-        <RadzenLabel Text="Feiertage"></RadzenLabel>
-        <RadzenDropDown @bind-Value="_selectedPublicHolidayCountries" Data="_countries" Change="GetAllMarkings" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Feiertage" FilterPlaceholder="Deutschland" />
-        <RadzenLabel Text="Bundesland"></RadzenLabel>
-        <RadzenDropDown @bind-Value="_selectedPublicHolidaySubdivisions" Data="_subdivisions" Change="GetAllMarkings" TextProperty="@nameof(Subdivision.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Feiertage" FilterPlaceholder="Deutschland" />
+        <RadzenStack Gap="20px" JustifyContent="Radzen.JustifyContent.Center">
 
-        <RadzenLabel Text="Ferien"></RadzenLabel>
-        <RadzenDropDown @bind-Value="_selectedSchoolHolidayCountries" Data="_countries" Change="GetAllMarkings" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Ferien" FilterPlaceholder="Deutschland" />
-        <RadzenLabel Text="Bundesland"></RadzenLabel>
-        <RadzenDropDown @bind-Value="_selectedSchoolHolidaySubdivisions" Data="_subdivisions" Change="GetAllMarkings" TextProperty="@nameof(Subdivision.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Ferien" FilterPlaceholder="Deutschland" />
+            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center">
+                <RadzenStack AlignItems="AlignItems.Center">
+                    <RadzenText Text="Feiertage" TextStyle="TextStyle.DisplayH4"></RadzenText>
+                    <RadzenStack Orientation="Orientation.Horizontal">
+                        <RadzenDropDown @bind-Value="_selectedPublicHolidayCountries" Data="_countries" Change="GetAllMarkings" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Land" FilterPlaceholder="Deutschland" />
+                        <RadzenDropDown @bind-Value="_selectedPublicHolidaySubdivisions" Data="_subdivisions" Change="GetAllMarkings" TextProperty="@nameof(Subdivision.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Bundesland" FilterPlaceholder="Deutschland" />
+                    </RadzenStack>
+                </RadzenStack>
 
-        <RadzenScheduler @ref="scheduler" Data="_markings" TItem="Marking" SlotRender="SlotRender" AppointmentRender="AppointmentRender" style="height: 800px;" StartProperty="Start" EndProperty="End" TextProperty="Name">
-            <RadzenYearPlannerView @ref="yearPlannerView"></RadzenYearPlannerView>
-            <RadzenYearView @ref="yearView"></RadzenYearView>
-        </RadzenScheduler>
+                <RadzenStack AlignItems="AlignItems.Center">
+                    <RadzenText Text="Ferien" TextStyle="TextStyle.DisplayH4"></RadzenText>
+                    <RadzenStack Orientation="Orientation.Horizontal">
+                        <RadzenDropDown @bind-Value="_selectedSchoolHolidayCountries" Data="_countries" Change="GetAllMarkings" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Land" FilterPlaceholder="Deutschland" />
+                        <RadzenDropDown @bind-Value="_selectedSchoolHolidaySubdivisions" Data="_subdivisions" Change="GetAllMarkings" TextProperty="@nameof(Subdivision.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Bundesland" FilterPlaceholder="Deutschland" />
+                    </RadzenStack>
+                </RadzenStack>
+            </RadzenStack>
+
+            <RadzenScheduler @ref="scheduler" Data="_markings" TItem="Marking" SlotRender="SlotRender" AppointmentRender="AppointmentRender" style="height: 800px;" StartProperty="Start" EndProperty="End" TextProperty="Name">
+                <RadzenYearPlannerView @ref="yearPlannerView"></RadzenYearPlannerView>
+                <RadzenYearView @ref="yearView"></RadzenYearView>
+            </RadzenScheduler>
+        </RadzenStack>
+
+
 
         @* <RadzenCard Style="margin-top: 40px; padding: 20px 40px 40px;">
             <RadzenRow>
@@ -136,12 +148,12 @@
                     foreach (var schoolHoliday in from schoolHoliday in schoolHolidays where schoolHoliday.Subdivisions != null from subdivisionReference in schoolHoliday.Subdivisions where schoolHolidaySubdivision.Code == subdivisionReference.Code select schoolHoliday)
                     {
                         _markings.Add(new Marking
-                        {
-                            Start = schoolHoliday.StartDate.Value,
-                            End = schoolHoliday.EndDate.Value.AddHours(23),
-                            Name = schoolHoliday.Name.First().Text,
-                            Color = "background: yellow"
-                        });
+                            {
+                                Start = schoolHoliday.StartDate.Value,
+                                End = schoolHoliday.EndDate.Value.AddHours(23),
+                                Name = schoolHoliday.Name.First().Text,
+                                Color = "background: yellow"
+                            });
                     }
                 }
             }
@@ -150,12 +162,12 @@
                 from holiday in schoolHolidays
                 where holiday.Nationwide.Value
                 select new Marking
-                {
-                    Start = holiday.StartDate.Value,
+                    {
+                        Start = holiday.StartDate.Value,
                         End = holiday.EndDate.Value.AddHours(23),
-                    Name = holiday.Name.First().Text,
-                    Color = "background: orange"
-                });
+                        Name = holiday.Name.First().Text,
+                        Color = "background: orange"
+                    });
         }
 
         await scheduler.Reload();
