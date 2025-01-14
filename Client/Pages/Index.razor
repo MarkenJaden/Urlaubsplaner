@@ -10,7 +10,7 @@
 <PageTitle>Urlaubsplaner</PageTitle>
 <RadzenRow Gap="5" RowGap="5">
     <RadzenColumn Size="12">
-        <RadzenStack Gap="20px" JustifyContent="Radzen.JustifyContent.Center">
+        <RadzenStack Gap="20px" JustifyContent="JustifyContent.Center">
 
             <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center">
                 <RadzenStack AlignItems="AlignItems.Center">
@@ -70,12 +70,12 @@
     RadzenYearView yearView;
 
     IEnumerable<Country> _countries;
-    IEnumerable<Country> _selectedPublicHolidayCountries = [];
-    IEnumerable<Country> _selectedSchoolHolidayCountries = [];
+    IEnumerable<Country> _selectedPublicHolidayCountries;
+    IEnumerable<Country> _selectedSchoolHolidayCountries;
 
     IEnumerable<Subdivision> _subdivisions;
-    IEnumerable<Subdivision> _selectedPublicHolidaySubdivisions = [];
-    IEnumerable<Subdivision> _selectedSchoolHolidaySubdivisions = [];
+    IEnumerable<Subdivision> _selectedPublicHolidaySubdivisions;
+    IEnumerable<Subdivision> _selectedSchoolHolidaySubdivisions;
 
     List<Marking> _markings = [];
 
@@ -103,82 +103,113 @@
         _markings.Clear();
 
         //Public holidays
-        foreach (var country in _selectedPublicHolidayCountries)
-        {
-            var publicHolidays = await new HolidaysApi().PublicHolidaysGetAsync(country.IsoCode, scheduler.SelectedView.StartDate, scheduler.SelectedView.EndDate, "DE");
-            if (_selectedPublicHolidaySubdivisions.Any())
+        if (_selectedPublicHolidayCountries != null)
+            foreach (var country in _selectedPublicHolidayCountries)
             {
-                foreach (var publicHolidaySubdivision in _selectedPublicHolidaySubdivisions)
+                var publicHolidays = await new HolidaysApi().PublicHolidaysGetAsync(country.IsoCode, scheduler.SelectedView.StartDate, scheduler.SelectedView.EndDate, "DE");
+                if (_selectedPublicHolidaySubdivisions != null && _selectedPublicHolidaySubdivisions.Any())
                 {
-                    // ReSharper disable once ConditionIsAlwaysTrueOrFalse
-                    foreach (var publicHoliday in from publicHoliday in publicHolidays where publicHoliday.Subdivisions != null from subdivisionReference in publicHoliday.Subdivisions where publicHolidaySubdivision.Code == subdivisionReference.Code select publicHoliday)
+                    foreach (var publicHolidaySubdivision in _selectedPublicHolidaySubdivisions)
                     {
-                        _markings.Add(new Marking
+                        // ReSharper disable once ConditionIsAlwaysTrueOrFalse
+                        foreach (var publicHoliday in from publicHoliday in publicHolidays where publicHoliday.Subdivisions != null from subdivisionReference in publicHoliday.Subdivisions where publicHolidaySubdivision.Code == subdivisionReference.Code select publicHoliday)
+                        {
+                            _markings.Add(new Marking
                             {
                                 Start = publicHoliday.StartDate.Value,
                                 End = publicHoliday.EndDate.Value.AddHours(23),
                                 Name = publicHoliday.Name.First().Text,
                                 Color = "background: blue"
                             });
+                        }
                     }
                 }
-            }
 
-            _markings.AddRange(
-                from holiday in publicHolidays
-                where holiday.Nationwide.Value
-                select new Marking
+                _markings.AddRange(
+                    from holiday in publicHolidays
+                    where holiday.Nationwide.Value
+                    select new Marking
                     {
                         Start = holiday.StartDate.Value,
                         End = holiday.EndDate.Value.AddHours(23),
                         Name = holiday.Name.First().Text,
                         Color = "background: red"
                     });
-        }
+            }
 
         //School holidays
-        foreach (var country in _selectedSchoolHolidayCountries)
-        {
-            var schoolHolidays = await new HolidaysApi().SchoolHolidaysGetAsync(country.IsoCode, scheduler.SelectedView.StartDate, scheduler.SelectedView.EndDate, "DE");
-            if (_selectedSchoolHolidaySubdivisions.Any())
+        if (_selectedSchoolHolidayCountries != null)
+            foreach (var country in _selectedSchoolHolidayCountries)
             {
-                foreach (var schoolHolidaySubdivision in _selectedSchoolHolidaySubdivisions)
+                var schoolHolidays = await new HolidaysApi().SchoolHolidaysGetAsync(country.IsoCode, scheduler.SelectedView.StartDate, scheduler.SelectedView.EndDate, "DE");
+                if (_selectedSchoolHolidaySubdivisions != null && _selectedSchoolHolidaySubdivisions.Any())
                 {
-                    // ReSharper disable once ConditionIsAlwaysTrueOrFalse
-                    foreach (var schoolHoliday in from schoolHoliday in schoolHolidays where schoolHoliday.Subdivisions != null from subdivisionReference in schoolHoliday.Subdivisions where schoolHolidaySubdivision.Code == subdivisionReference.Code select schoolHoliday)
+                    foreach (var schoolHolidaySubdivision in _selectedSchoolHolidaySubdivisions)
                     {
-                        _markings.Add(new Marking
+                        // ReSharper disable once ConditionIsAlwaysTrueOrFalse
+                        foreach (var schoolHoliday in from schoolHoliday in schoolHolidays where schoolHoliday.Subdivisions != null from subdivisionReference in schoolHoliday.Subdivisions where schoolHolidaySubdivision.Code == subdivisionReference.Code select schoolHoliday)
+                        {
+                            _markings.Add(new Marking
                             {
                                 Start = schoolHoliday.StartDate.Value,
                                 End = schoolHoliday.EndDate.Value.AddHours(23),
                                 Name = schoolHoliday.Name.First().Text,
                                 Color = "background: yellow"
                             });
+                        }
                     }
                 }
-            }
 
-            _markings.AddRange(
-                from holiday in schoolHolidays
-                where holiday.Nationwide.Value
-                select new Marking
+                _markings.AddRange(
+                    from holiday in schoolHolidays
+                    where holiday.Nationwide.Value
+                    select new Marking
                     {
                         Start = holiday.StartDate.Value,
                         End = holiday.EndDate.Value.AddHours(23),
                         Name = holiday.Name.First().Text,
                         Color = "background: orange"
                     });
-        }
+            }
 
         await scheduler.Reload();
     }
 
-    private static void SlotRender(SchedulerSlotRenderEventArgs args)
+    private void SlotRender(SchedulerSlotRenderEventArgs args)
     {
         if (args.Start < DateTime.Today)
         {
             args.Attributes["style"] = "background: rgba(0,0,0,.08);";
         }
+
+        // Assuming _markings is accessible here. If not, you might need to pass it as a parameter or use another method to access it.
+        DateTime date = args.Start.Date;
+        int markingCount = _markings.Count(m => m.Start.Date <= date && m.End.Date >= date);
+
+        // Define the color gradient from green to dark red
+        string color = GetColorFromDensity(markingCount);
+
+        if (markingCount > 0)
+        {
+            args.Attributes["style"] = $"background: {color};";
+        }
+    }
+
+    // Function to map density to an rgba color
+    private static string GetColorFromDensity(int density, int maxDensity = 13)
+    {
+        // Calculate the interpolation factor
+        double factor = Math.Min((double)density / maxDensity, 1.0);
+
+        // Interpolate between green and dark red
+        int red = (int)(0 * (1 - factor) + 139 * factor);
+        int green = (int)(255 * (1 - factor) + 0 * factor);
+        int blue = (int)(0 * (1 - factor) + 0 * factor);
+
+        // Alpha value calculation
+        double alpha = 1; //+ (0.92 * factor); // From 0.08 to 1
+
+        return $"rgba({red}, {green}, {blue}, .5)";
     }
 
     class Country
