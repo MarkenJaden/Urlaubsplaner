@@ -30,7 +30,7 @@
                 </RadzenStack>
             </RadzenStack>
 
-            <RadzenScheduler @ref="scheduler" Data="_markings" TItem="Marking" SlotRender="SlotRender" AppointmentRender="AppointmentRender" style="height: 800px;" StartProperty="Start" EndProperty="End" TextProperty="Name">
+            <RadzenScheduler @ref="scheduler" Data="_markings" TItem="Marking" SlotRender="SlotRender" AppointmentRender="AppointmentRender" SlotSelect="SelectSlot" style="height: 800px;" StartProperty="Start" EndProperty="End" TextProperty="Name">
                 <RadzenYearPlannerView @ref="yearPlannerView"></RadzenYearPlannerView>
                 <RadzenYearView @ref="yearView"></RadzenYearView>
             </RadzenScheduler>
@@ -118,7 +118,7 @@
                             {
                                 Start = publicHoliday.StartDate.Value,
                                 End = publicHoliday.EndDate.Value.AddHours(23),
-                                    Name = publicHoliday.Name.First().Text + $" {publicHolidaySubdivision.Name}",
+                                    Name = publicHoliday.Name.First().Text + $" - {publicHolidaySubdivision.Name}",
                                 Color = "background: blue"
                             });
                         }
@@ -132,7 +132,7 @@
                     {
                         Start = holiday.StartDate.Value,
                         End = holiday.EndDate.Value.AddHours(23),
-                        Name = holiday.Name.First().Text,
+                        Name = holiday.Name.First().Text + $" - {country.Name}",
                         Color = "background: red"
                     });
             }
@@ -153,12 +153,14 @@
                             {
                                 Start = schoolHoliday.StartDate.Value,
                                 End = schoolHoliday.EndDate.Value.AddHours(23),
-                                    Name = schoolHoliday.Name.First().Text + $" {schoolHolidaySubdivision.Name}",
+                                    Name = schoolHoliday.Name.First().Text + $" - {schoolHolidaySubdivision.Name}",
                                 Color = "background: yellow"
                             });
                         }
                     }
                 }
+
+                //Add support for non-nationwide school holidays
 
                 _markings.AddRange(
                     from holiday in schoolHolidays
@@ -167,13 +169,34 @@
                     {
                         Start = holiday.StartDate.Value,
                         End = holiday.EndDate.Value.AddHours(23),
-                        Name = holiday.Name.First().Text,
+                        Name = holiday.Name.First().Text + $" - {country.Name}",
                         Color = "background: orange"
                     });
             }
 
+        var dailyMarkings = new Dictionary<DateTime, int>();
+
+        foreach (var marking in _markings)
+        {
+            var current = marking.Start.Date;
+            var end = marking.End.Date;
+
+            while (current <= end)
+            {
+                dailyMarkings.TryAdd(current, 0);
+                dailyMarkings[current]++;
+                current = current.AddDays(1);
+            }
+        }
+
+        maxDensity = dailyMarkings.Values.Max();
+
+        if (maxDensity <= 3) maxDensity = 5; 
+
         await scheduler.Reload();
     }
+
+    int maxDensity = 16;
 
     private void SlotRender(SchedulerSlotRenderEventArgs args)
     {
@@ -183,11 +206,11 @@
         }
 
         // Assuming _markings is accessible here. If not, you might need to pass it as a parameter or use another method to access it.
-        DateTime date = args.Start.Date;
-        int markingCount = _markings.Count(m => m.Start.Date <= date && m.End.Date >= date);
+        var date = args.Start.Date;
+        var markingCount = _markings.Count(m => m.Start.Date <= date && m.End.Date >= date);
 
         // Define the color gradient from green to dark red
-        string color = GetColorFromDensity(markingCount);
+        var color = GetColorFromDensity(markingCount);
 
         if (markingCount > 0)
         {
@@ -195,21 +218,39 @@
         }
     }
 
-    // Function to map density to an rgba color
-    private static string GetColorFromDensity(int density, int maxDensity = 13)
+    private static void AppointmentRender(SchedulerAppointmentRenderEventArgs<Marking> args)
+    {
+        args.Attributes["style"] = "background: transparent; color: var(--rz-base-darker)"; //args.Data.Color;
+    }
+
+    // private void SelectSlot(SchedulerSlotSelectEventArgs args)
+    // {
+    //     args.
+    // }
+
+    private string GetColorFromDensity(int density)
     {
         // Calculate the interpolation factor
-        double factor = Math.Min((double)density / maxDensity, 1.0);
+        var factor = Math.Min((double)density / maxDensity, 1.0);
 
-        // Interpolate between green and dark red
-        int red = (int)(0 * (1 - factor) + 139 * factor);
-        int green = (int)(255 * (1 - factor) + 0 * factor);
-        int blue = (int)(0 * (1 - factor) + 0 * factor);
+        int red, green;
 
-        // Alpha value calculation
-        double alpha = 1; //+ (0.92 * factor); // From 0.08 to 1
+        if (factor <= 0.5)
+        {
+            // Interpolate between green and yellow
+            var localFactor = factor / 0.5;
+            red = (int)(0 * (1 - localFactor) + 255 * localFactor);
+            green = 255;
+        }
+        else
+        {
+            // Interpolate between yellow and red
+            var localFactor = (factor - 0.5) / 0.5;
+            red = (int)(255 * (1 - localFactor) + 255 * localFactor);
+            green = (int)(255 * (1 - localFactor) + 0 * localFactor);
+        }
 
-        return $"rgba({red}, {green}, {blue}, .5)";
+        return $"rgba({red}, {green}, 0, .5)";
     }
 
     class Country
@@ -235,10 +276,4 @@
 
         public string Color { get; set; } = "background: blue";
     }
-
-    private static void AppointmentRender(SchedulerAppointmentRenderEventArgs<Marking> args)
-    {
-        args.Attributes["style"] = "background: transparent; color: var(--rz-base-darker)"; //args.Data.Color;
-    }
-
 }
