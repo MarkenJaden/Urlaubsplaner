@@ -118,7 +118,7 @@
                             {
                                 Start = publicHoliday.StartDate.Value,
                                 End = publicHoliday.EndDate.Value.AddHours(23),
-                                Name = publicHoliday.Name.First().Text,
+                                    Name = publicHoliday.Name.First().Text + $" {publicHolidaySubdivision.Name}",
                                 Color = "background: blue"
                             });
                         }
@@ -153,7 +153,7 @@
                             {
                                 Start = schoolHoliday.StartDate.Value,
                                 End = schoolHoliday.EndDate.Value.AddHours(23),
-                                Name = schoolHoliday.Name.First().Text,
+                                    Name = schoolHoliday.Name.First().Text + $" {schoolHolidaySubdivision.Name}",
                                 Color = "background: yellow"
                             });
                         }
@@ -238,7 +238,7 @@
 
     private static void AppointmentRender(SchedulerAppointmentRenderEventArgs<Marking> args)
     {
-        args.Attributes["style"] = args.Data.Color;
+        args.Attributes["style"] = "background: transparent; color: var(--rz-base-darker)"; //args.Data.Color;
     }
 
 }
