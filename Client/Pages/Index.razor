@@ -147,7 +147,7 @@
                     foreach (var schoolHolidaySubdivision in _selectedSchoolHolidaySubdivisions)
                     {
                         // ReSharper disable once ConditionIsAlwaysTrueOrFalse
-                        foreach (var schoolHoliday in from schoolHoliday in schoolHolidays where schoolHoliday.Subdivisions != null from subdivisionReference in schoolHoliday.Subdivisions where schoolHolidaySubdivision.Code == subdivisionReference.Code select schoolHoliday)
+                        foreach (var schoolHoliday in from schoolHoliday in schoolHolidays where schoolHoliday.Subdivisions != null from subdivisionReference in schoolHoliday.Subdivisions where subdivisionReference.Code.Contains(schoolHolidaySubdivision.Code) select schoolHoliday)
                         {
                             _markings.Add(new Marking
                             {
@@ -173,6 +173,8 @@
                         Color = "background: orange"
                     });
             }
+
+        if(!_markings.Any()) return;
 
         var dailyMarkings = new Dictionary<DateTime, int>();
 
@@ -221,6 +223,11 @@
     private static void AppointmentRender(SchedulerAppointmentRenderEventArgs<Marking> args)
     {
         args.Attributes["style"] = "background: transparent; color: var(--rz-base-darker)"; //args.Data.Color;
+    }
+
+    private void SelectSlot(SchedulerSlotSelectEventArgs arg)
+    {
+        //TODO
     }
 
     // private void SelectSlot(SchedulerSlotSelectEventArgs args)
@@ -276,4 +283,5 @@
 
         public string Color { get; set; } = "background: blue";
     }
+
 }
