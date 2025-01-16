@@ -30,7 +30,7 @@
                 </RadzenStack>
             </RadzenStack>
 
-            <RadzenScheduler @ref="scheduler" Data="_markings" TItem="Marking" SlotRender="SlotRender" AppointmentRender="AppointmentRender" SlotSelect="SelectSlot" style="height: 800px;" StartProperty="Start" EndProperty="End" TextProperty="Name">
+            <RadzenScheduler @ref="scheduler" Data="_markings" TItem="Marking" SlotRender="SlotRender" AppointmentRender="AppointmentRender" SlotSelect="SlotSelect" style="height: 800px;" StartProperty="Start" EndProperty="End" TextProperty="Name">
                 <RadzenYearPlannerView @ref="yearPlannerView"></RadzenYearPlannerView>
                 <RadzenYearView @ref="yearView"></RadzenYearView>
             </RadzenScheduler>
@@ -78,6 +78,7 @@
     IEnumerable<Subdivision> _selectedSchoolHolidaySubdivisions;
 
     List<Marking> _markings = [];
+    List<Marking> _selectedSlots = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -112,15 +113,15 @@
                     foreach (var publicHolidaySubdivision in _selectedPublicHolidaySubdivisions)
                     {
                         // ReSharper disable once ConditionIsAlwaysTrueOrFalse
-                        foreach (var publicHoliday in from publicHoliday in publicHolidays where publicHoliday.Subdivisions != null from subdivisionReference in publicHoliday.Subdivisions where publicHolidaySubdivision.Code == subdivisionReference.Code select publicHoliday)
+                        foreach (var publicHoliday in from publicHoliday in publicHolidays where publicHoliday.Subdivisions != null from subdivisionReference in publicHoliday.Subdivisions where subdivisionReference.Code.Contains(publicHolidaySubdivision.Code) select publicHoliday)
                         {
                             _markings.Add(new Marking
-                            {
-                                Start = publicHoliday.StartDate.Value,
-                                End = publicHoliday.EndDate.Value.AddHours(23),
+                                {
+                                    Start = publicHoliday.StartDate.Value,
+                                    End = publicHoliday.EndDate.Value.AddHours(23),
                                     Name = publicHoliday.Name.First().Text + $" - {publicHolidaySubdivision.Name}",
-                                Color = "background: blue"
-                            });
+                                    Color = "background: blue"
+                                });
                         }
                     }
                 }
@@ -129,12 +130,12 @@
                     from holiday in publicHolidays
                     where holiday.Nationwide.Value
                     select new Marking
-                    {
-                        Start = holiday.StartDate.Value,
-                        End = holiday.EndDate.Value.AddHours(23),
-                        Name = holiday.Name.First().Text + $" - {country.Name}",
-                        Color = "background: red"
-                    });
+                        {
+                            Start = holiday.StartDate.Value,
+                            End = holiday.EndDate.Value.AddHours(23),
+                            Name = holiday.Name.First().Text + $" - {country.Name}",
+                            Color = "background: red"
+                        });
             }
 
         //School holidays
@@ -150,12 +151,12 @@
                         foreach (var schoolHoliday in from schoolHoliday in schoolHolidays where schoolHoliday.Subdivisions != null from subdivisionReference in schoolHoliday.Subdivisions where subdivisionReference.Code.Contains(schoolHolidaySubdivision.Code) select schoolHoliday)
                         {
                             _markings.Add(new Marking
-                            {
-                                Start = schoolHoliday.StartDate.Value,
-                                End = schoolHoliday.EndDate.Value.AddHours(23),
+                                {
+                                    Start = schoolHoliday.StartDate.Value,
+                                    End = schoolHoliday.EndDate.Value.AddHours(23),
                                     Name = schoolHoliday.Name.First().Text + $" - {schoolHolidaySubdivision.Name}",
-                                Color = "background: yellow"
-                            });
+                                    Color = "background: yellow"
+                                });
                         }
                     }
                 }
@@ -166,15 +167,15 @@
                     from holiday in schoolHolidays
                     where holiday.Nationwide.Value
                     select new Marking
-                    {
-                        Start = holiday.StartDate.Value,
-                        End = holiday.EndDate.Value.AddHours(23),
-                        Name = holiday.Name.First().Text + $" - {country.Name}",
-                        Color = "background: orange"
-                    });
+                        {
+                            Start = holiday.StartDate.Value,
+                            End = holiday.EndDate.Value.AddHours(23),
+                            Name = holiday.Name.First().Text + $" - {country.Name}",
+                            Color = "background: orange"
+                        });
             }
 
-        if(!_markings.Any()) return;
+        if (!_markings.Any()) return;
 
         var dailyMarkings = new Dictionary<DateTime, int>();
 
@@ -193,7 +194,7 @@
 
         maxDensity = dailyMarkings.Values.Max();
 
-        if (maxDensity <= 3) maxDensity = 5; 
+        if (maxDensity <= 3) maxDensity = 5;
 
         await scheduler.Reload();
     }
@@ -202,21 +203,31 @@
 
     private void SlotRender(SchedulerSlotRenderEventArgs args)
     {
-        if (args.Start < DateTime.Today)
-        {
-            args.Attributes["style"] = "background: rgba(0,0,0,.08);";
-        }
-
-        // Assuming _markings is accessible here. If not, you might need to pass it as a parameter or use another method to access it.
         var date = args.Start.Date;
         var markingCount = _markings.Count(m => m.Start.Date <= date && m.End.Date >= date);
-
-        // Define the color gradient from green to dark red
         var color = GetColorFromDensity(markingCount);
 
+        args.Attributes["style"] = string.Empty;
+
+        if (_selectedSlots.Any(x => x.Start.Date <= date && x.End.Date > date))
+        {
+            var svgCross = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='black' stroke-width='1'/><line x1='0' y1='10' x2='10' y2='0' stroke='black' stroke-width='1'/></svg>";
+            var base64Svg = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(svgCross));
+
+            args.Attributes["style"] += $@"
+        background-image: url('data:image/svg+xml;base64,{base64Svg}');
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: contain;
+    ";
+        }
         if (markingCount > 0)
         {
-            args.Attributes["style"] = $"background: {color};";
+            args.Attributes["style"] += $"background-color: {color};";
+        }
+        if (args.Start < DateTime.Today)
+        {
+            args.Attributes["style"] += "background-color: rgba(0,0,0,.08);";
         }
     }
 
@@ -225,12 +236,19 @@
         args.Attributes["style"] = "background: transparent; color: var(--rz-base-darker)"; //args.Data.Color;
     }
 
-    private void SelectSlot(SchedulerSlotSelectEventArgs arg)
+    private void SlotSelect(SchedulerSlotSelectEventArgs args)
     {
-        //TODO
+        var mark = new Marking
+            {
+                Start = args.Start,
+                End = args.End,
+                Name = "Selected",
+            };
+        if (_selectedSlots.Contains(mark)) _selectedSlots.Remove(mark);
+        else _selectedSlots.Add(mark);
     }
 
-    // private void SelectSlot(SchedulerSlotSelectEventArgs args)
+    // private void SlotSelect(SchedulerSlotSelectEventArgs args)
     // {
     //     args.
     // }
@@ -282,6 +300,20 @@
         public string Name { get; set; }
 
         public string Color { get; set; } = "background: blue";
+
+        public override bool Equals(object obj)
+        {
+            if (obj is Marking other)
+            {
+                return Start == other.Start && End == other.End && Name == other.Name;
+            }
+            return false;
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(Start, End, Name);
+        }
     }
 
 }
