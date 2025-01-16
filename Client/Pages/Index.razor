@@ -30,7 +30,7 @@
                 </RadzenStack>
             </RadzenStack>
 
-            <RadzenScheduler @ref="scheduler" Data="_markings" TItem="Marking" SlotRender="SlotRender" AppointmentRender="AppointmentRender" SlotSelect="SlotSelect" style="height: 800px;" StartProperty="Start" EndProperty="End" TextProperty="Name">
+            <RadzenScheduler @ref="scheduler" TItem="Marking" SlotRender="SlotRender" SlotSelect="SlotSelect"  style="height: 800px;" StartProperty="Start" EndProperty="End" TextProperty="Name">
                 <RadzenYearPlannerView @ref="yearPlannerView"></RadzenYearPlannerView>
                 <RadzenYearView @ref="yearView"></RadzenYearView>
             </RadzenScheduler>
@@ -77,23 +77,25 @@
     IEnumerable<Subdivision> _selectedPublicHolidaySubdivisions;
     IEnumerable<Subdivision> _selectedSchoolHolidaySubdivisions;
 
-    List<Marking> _markings = [];
-    List<Marking> _selectedSlots = [];
+    readonly List<Marking> _markings = [];
+    readonly List<Marking> _selectedSlots = [];
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        await base.OnInitializedAsync();
+        _countries = new RegionalApi().CountriesGet("DE").Select(country => new Country { Name = country.Name.First().Text, IsoCode = country.IsoCode }).ToList();
+        _subdivisions = new RegionalApi().SubdivisionsGet("DE", "DE").Select(sub => new Subdivision { Name = sub.Name.First().Text, Category = sub.Category.First().Text, Code = sub.Code, IsoCode = sub.IsoCode }).ToList();
 
-        _countries = (await new RegionalApi().CountriesGetAsync("DE")).Select(country => new Country { Name = country.Name.First().Text, IsoCode = country.IsoCode }).ToList();
-        _subdivisions = (await new RegionalApi().SubdivisionsGetAsync("DE", "DE")).Select(sub => new Subdivision { Name = sub.Name.First().Text, Category = sub.Category.First().Text, Code = sub.Code, IsoCode = sub.IsoCode }).ToList();
+        base.OnInitialized();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            // _selectedPublicHolidayCountries = _countries.Where(x => x.IsoCode == "DE").ToList();
-            // _selectedSchoolHolidayCountries = _countries.Where(x => x.IsoCode == "DE").ToList();
+            _selectedPublicHolidayCountries = _countries.Where(x => x.IsoCode == "DE").ToList();
+            _selectedSchoolHolidayCountries = _countries.Where(x => x.IsoCode == "DE").ToList();
+
+            StateHasChanged();
 
             await GetAllMarkings();
         }
@@ -192,14 +194,14 @@
             }
         }
 
-        maxDensity = dailyMarkings.Values.Max();
+        _maxDensity = dailyMarkings.Values.Max();
 
-        if (maxDensity <= 3) maxDensity = 5;
+        if (_maxDensity <= 3) _maxDensity = 5;
 
         await scheduler.Reload();
     }
 
-    int maxDensity = 16;
+    int _maxDensity = 16;
 
     private void SlotRender(SchedulerSlotRenderEventArgs args)
     {
@@ -211,7 +213,7 @@
 
         if (_selectedSlots.Any(x => x.Start.Date <= date && x.End.Date > date))
         {
-            var svgCross = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='black' stroke-width='1'/><line x1='0' y1='10' x2='10' y2='0' stroke='black' stroke-width='1'/></svg>";
+            const string svgCross = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='black' stroke-width='1'/><line x1='0' y1='10' x2='10' y2='0' stroke='black' stroke-width='1'/></svg>";
             var base64Svg = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(svgCross));
 
             args.Attributes["style"] += $@"
@@ -221,20 +223,20 @@
         background-size: contain;
     ";
         }
-        if (markingCount > 0)
-        {
-            args.Attributes["style"] += $"background-color: {color};";
-        }
         if (args.Start < DateTime.Today)
         {
             args.Attributes["style"] += "background-color: rgba(0,0,0,.08);";
         }
+        if (markingCount > 0)
+        {
+            args.Attributes["style"] += $"background-color: {color};";
+        }
     }
 
-    private static void AppointmentRender(SchedulerAppointmentRenderEventArgs<Marking> args)
-    {
-        args.Attributes["style"] = "background: transparent; color: var(--rz-base-darker)"; //args.Data.Color;
-    }
+    // private static void AppointmentRender(SchedulerAppointmentRenderEventArgs<Marking> args)
+    // {
+    //     args.Attributes["style"] = "background: transparent; color: var(--rz-base-darker);";
+    // }
 
     private void SlotSelect(SchedulerSlotSelectEventArgs args)
     {
@@ -256,7 +258,7 @@
     private string GetColorFromDensity(int density)
     {
         // Calculate the interpolation factor
-        var factor = Math.Min((double)density / maxDensity, 1.0);
+        var factor = Math.Min((double)density / _maxDensity, 1.0);
 
         int red, green;
 
@@ -294,10 +296,10 @@
 
     class Marking
     {
-        public DateTime Start { get; set; }
-        public DateTime End { get; set; }
+        public DateTime Start { get; init; }
+        public DateTime End { get; init; }
 
-        public string Name { get; set; }
+        public string Name { get; init; }
 
         public string Color { get; set; } = "background: blue";
 
