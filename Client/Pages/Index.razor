@@ -30,7 +30,7 @@
                 </RadzenStack>
             </RadzenStack>
 
-            <RadzenScheduler @ref="scheduler" TItem="Marking" SlotRender="SlotRender" SlotSelect="SlotSelect" style="height: 800px;" StartProperty="Start" EndProperty="End" TextProperty="Name">
+            <RadzenScheduler @ref="scheduler" TItem="Marking" SlotRender="SlotRender" SlotSelect="SlotSelect" LoadData="LoadData" style="height: 800px;" StartProperty="Start" EndProperty="End" TextProperty="Name">
                 <RadzenYearPlannerView @ref="yearPlannerView"></RadzenYearPlannerView>
                 <RadzenYearView @ref="yearView"></RadzenYearView>
             </RadzenScheduler>
@@ -318,4 +318,15 @@
         }
     }
 
+    int _year = DateTime.Now.Year;
+    private async Task LoadData(SchedulerLoadDataEventArgs args)
+    {
+        var middle = FindMiddleDateTime(args.Start, args.End).Year;
+        if (_year == middle) return;
+
+        _year = middle;
+        await GetAllMarkings();
+    }
+
+    static DateTime FindMiddleDateTime(DateTime dt1, DateTime dt2) => dt1 + new TimeSpan((dt2 - dt1).Ticks / 2);
 }
