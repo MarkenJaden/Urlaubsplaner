@@ -8,10 +8,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Urlaubsplaner.Client", "Cli
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenHolidaysApi", "OpenHolidaysApi\OpenHolidaysApi.csproj", "{747A40F6-89AE-432A-959C-E314CAB2FA07}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{9348B74A-0100-4B16-9B1D-C72C384B881F}"
-	ProjectSection(SolutionItems) = preProject
-		Dockerfile = Dockerfile
-	EndProjectSection
+Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "docker-compose.dcproj", "{81872F43-C016-4272-8520-33FC3FD21241}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -31,6 +28,10 @@ Global
 		{747A40F6-89AE-432A-959C-E314CAB2FA07}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{747A40F6-89AE-432A-959C-E314CAB2FA07}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{747A40F6-89AE-432A-959C-E314CAB2FA07}.Release|Any CPU.Build.0 = Release|Any CPU
+		{81872F43-C016-4272-8520-33FC3FD21241}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{81872F43-C016-4272-8520-33FC3FD21241}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{81872F43-C016-4272-8520-33FC3FD21241}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{81872F43-C016-4272-8520-33FC3FD21241}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

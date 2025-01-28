@@ -1,0 +1,6 @@
+services:
+  urlaubsplaner.server:
+    image: ${DOCKER_REGISTRY-}urlaubsplanerserver
+    build:
+      context: .
+      dockerfile: Server/Dockerfile
