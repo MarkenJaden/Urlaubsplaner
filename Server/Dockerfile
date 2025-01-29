@@ -12,9 +12,9 @@ EXPOSE 8081
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY ["Server/Urlaubsplaner.Server.csproj", "Server/"]
-COPY ["Client/Urlaubsplaner.Client.csproj", "Client/"]
-COPY ["OpenHolidaysApi/OpenHolidaysApi.csproj", "OpenHolidaysApi/"]
+COPY ["./Server/Urlaubsplaner.Server.csproj", "Server/"]
+COPY ["./Client/Urlaubsplaner.Client.csproj", "Client/"]
+COPY ["./OpenHolidaysApi/OpenHolidaysApi.csproj", "OpenHolidaysApi/"]
 RUN dotnet restore "./Server/Urlaubsplaner.Server.csproj"
 COPY . .
 WORKDIR "/src/Server"
