@@ -80,25 +80,11 @@
     readonly List<Marking> _markings = [];
     readonly List<Marking> _selectedSlots = [];
 
-    protected override void OnInitialized()
+
+    protected override async Task OnInitializedAsync()
     {
-        _countries = new RegionalApi().CountriesGet("DE").Select(country => new Country { Name = country.Name.First().Text, IsoCode = country.IsoCode }).ToList();
-        _subdivisions = new RegionalApi().SubdivisionsGet("DE", "DE").Select(sub => new Subdivision { Name = sub.Name.First().Text, Category = sub.Category.First().Text, Code = sub.Code, IsoCode = sub.IsoCode }).ToList();
-
-        base.OnInitialized();
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            _selectedPublicHolidayCountries = _countries.Where(x => x.IsoCode == "DE").ToList();
-            _selectedSchoolHolidayCountries = _countries.Where(x => x.IsoCode == "DE").ToList();
-
-            StateHasChanged();
-
-            await GetAllMarkings();
-        }
+        _countries = (await new RegionalApi().CountriesGetAsync("DE")).Select(country => new Country { Name = country.Name.First().Text, IsoCode = country.IsoCode }).ToList();
+        _subdivisions = (await new RegionalApi().SubdivisionsGetAsync("DE", "DE")).Select(sub => new Subdivision { Name = sub.Name.First().Text, Category = sub.Category.First().Text, Code = sub.Code, IsoCode = sub.IsoCode }).ToList();
     }
 
     private async Task GetAllMarkings()
