@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using Radzen;
 using Urlaubsplaner.Server.Components;
 
@@ -13,7 +14,19 @@ builder.Services.AddRadzenCookieThemeService(options =>
 });
 builder.Services.AddHttpClient();
 builder.Services.AddLocalization();
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+    options.KnownProxies.Clear();
+    options.KnownNetworks.Clear();
+});
+
 var app = builder.Build();
+
+app.UseForwardedHeaders();
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -26,7 +39,7 @@ else
     app.UseHsts();
 }
 
-app.UseHttpsRedirection();
+// app.UseHttpsRedirection();
 app.MapControllers();
 app.UseRequestLocalization(options => options.AddSupportedCultures("de").AddSupportedUICultures("de").SetDefaultCulture("de"));
 app.UseStaticFiles();
