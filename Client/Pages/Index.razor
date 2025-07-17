@@ -550,7 +550,7 @@
 
     async Task SuggestPerfectVacation()
     {
-        if (_selectedSubdivisions == null || !_selectedSubdivisions.Any())
+        if (_selectedSubdivisions == null || !_selectedSubdivisions.Any() || _selectedSubdivisions.Count() > 1)
         {
             NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Hinweis", Detail = "Bitte wählen Sie mindestens ein Bundesland aus.", Duration = 4000 });
             return;
