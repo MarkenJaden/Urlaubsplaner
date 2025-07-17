@@ -1,4 +1,5 @@
 @page "/"
+@using System.Text
 @using OpenHolidaysApi.Api
 @inject IJSRuntime JSRuntime
 @inject NavigationManager NavigationManager
@@ -12,20 +13,56 @@
     <RadzenColumn Size="12">
         <RadzenStack Gap="20px" JustifyContent="JustifyContent.Center">
 
-            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center">
+            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="20px" Wrap="FlexWrap.Wrap" AlignItems="AlignItems.Start">
                 <RadzenStack AlignItems="AlignItems.Center">
-                    <RadzenText Text="Feiertage" TextStyle="TextStyle.DisplayH4"></RadzenText>
-                    <RadzenStack Orientation="Orientation.Horizontal">
-                        <RadzenDropDown @bind-Value="_selectedPublicHolidayCountries" Data="_countries" Change="GetAllMarkings" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Land" FilterPlaceholder="Deutschland" />
-                        <RadzenDropDown @bind-Value="_selectedPublicHolidaySubdivisions" Data="_subdivisions" Change="GetAllMarkings" TextProperty="@nameof(Subdivision.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Bundesland" FilterPlaceholder="Deutschland" />
+                    <RadzenText Text="Bundesländer (Deutschland)" TextStyle="TextStyle.H6"></RadzenText>
+                    <RadzenDropDown @bind-Value="_selectedSubdivisions" Data="_subdivisions" Change="GetAllMarkings" TextProperty="@nameof(Subdivision.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Bundesländer auswählen" Style="width: 250px;" />
+                </RadzenStack>
+
+                <RadzenStack AlignItems="AlignItems.Center" Gap="0.5rem">
+                    <RadzenText Text="Anzeigen" TextStyle="TextStyle.H6"></RadzenText>
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center">
+                        <RadzenCheckBox @bind-Value="_showPublicHolidays" TValue="bool" Change="GetAllMarkings" />
+                        <RadzenLabel Text="Feiertage" />
+                    </RadzenStack>
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center">
+                        <RadzenCheckBox @bind-Value="_showSchoolHolidays" TValue="bool" Change="GetAllMarkings" />
+                        <RadzenLabel Text="Ferien" />
+                    </RadzenStack>
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center">
+                        <RadzenCheckBox @bind-Value="_showBridgeDays" TValue="bool" Change="GetAllMarkings" />
+                        <RadzenLabel Text="Brückentage" />
                     </RadzenStack>
                 </RadzenStack>
 
                 <RadzenStack AlignItems="AlignItems.Center">
-                    <RadzenText Text="Ferien" TextStyle="TextStyle.DisplayH4"></RadzenText>
-                    <RadzenStack Orientation="Orientation.Horizontal">
-                        <RadzenDropDown @bind-Value="_selectedSchoolHolidayCountries" Data="_countries" Change="GetAllMarkings" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Land" FilterPlaceholder="Deutschland" />
-                        <RadzenDropDown @bind-Value="_selectedSchoolHolidaySubdivisions" Data="_subdivisions" Change="GetAllMarkings" TextProperty="@nameof(Subdivision.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Bundesland" FilterPlaceholder="Deutschland" />
+                    <RadzenText Text="Zusätzliche Feiertage" TextStyle="TextStyle.H6"></RadzenText>
+                    <RadzenDropDown @bind-Value="_selectedPublicHolidayCountries" Data="_additionalCountries" Change="GetAllMarkings" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Länder auswählen" Style="width: 250px;" />
+                </RadzenStack>
+
+                <RadzenStack AlignItems="AlignItems.Center">
+                    <RadzenText Text="Zusätzliche Ferien" TextStyle="TextStyle.H6"></RadzenText>
+                    <RadzenDropDown @bind-Value="_selectedSchoolHolidayCountries" Data="_additionalCountries" Change="GetAllMarkings" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Länder auswählen" Style="width: 250px;" />
+                </RadzenStack>
+            </RadzenStack>
+            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="20px" Wrap="FlexWrap.Wrap" AlignItems="AlignItems.Center">
+                <RadzenStack AlignItems="AlignItems.Center">
+                    <RadzenText Text="Urlaubstage" TextStyle="TextStyle.H6"></RadzenText>
+                    <RadzenNumeric @bind-Value="_totalVacationDays" TValue="int" Change="@(async (args) => await scheduler.Reload())" Style="width: 100px;" />
+                </RadzenStack>
+                <RadzenStack AlignItems="AlignItems.Center">
+                    <RadzenText Text="Geplant" TextStyle="TextStyle.H6"></RadzenText>
+                    <RadzenText Text="@_plannedDays.ToString()" />
+                </RadzenStack>
+                <RadzenStack AlignItems="AlignItems.Center">
+                    <RadzenText Text="Verbleibend" TextStyle="TextStyle.H6"></RadzenText>
+                    <RadzenText Text="@($"{_totalVacationDays - _plannedDays}")" Style="@(_totalVacationDays - _plannedDays < 0 ? "color: red;" : "")" />
+                </RadzenStack>
+                <RadzenStack AlignItems="AlignItems.Center" Gap="0.5rem">
+                    <RadzenText Text="Zählweise" TextStyle="TextStyle.H6"></RadzenText>
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center">
+                        <RadzenCheckBox @bind-Value="_countWeekendsAndHolidays" TValue="bool" Change="@OnCountWorkdaysOptionChanged" />
+                        <RadzenLabel Text="Wochenende/Feiertage als Arbeitstage" />
                     </RadzenStack>
                 </RadzenStack>
             </RadzenStack>
@@ -35,33 +72,17 @@
                 <RadzenYearView @ref="yearView"></RadzenYearView>
             </RadzenScheduler>
         </RadzenStack>
-
-
-
-        @* <RadzenCard Style="margin-top: 40px; padding: 20px 40px 40px;">
-            <RadzenRow>
-                <RadzenColumn Size="12" SizeMD="4">
-                    <RadzenIcon Icon="smart_button" Style="margin-top: 20px; width: 48px; height: 48px; font-size: 48px; color: var(--rz-text-title-color);"></RadzenIcon>
-                    <RadzenText Text="Learn the Fundamentals" TextStyle="Radzen.Blazor.TextStyle.DisplayH6" TagName="Radzen.Blazor.TagName.H3"></RadzenText>
-                    <RadzenLink Text="Docs" Path="https://www.radzen.com/blazor-studio/documentation/" Icon="east" Target="_blank" Style="font-size: 18px"></RadzenLink>
-                    <RadzenLink Text="Videos" Path="https://youtube.com/playlist?list=PLQyJPeb3xHcBij_RbHD__2TOo8Jv5HQVc" Icon="east" Target="_blank" Style="display: block; font-size: 18px"></RadzenLink>
-                </RadzenColumn>
-                <RadzenColumn Size="12" SizeMD="4">
-                    <RadzenIcon Icon="code" Style="margin-top: 20px; width: 48px; height: 48px; font-size: 48px; color: var(--rz-text-title-color);"></RadzenIcon>
-                    <RadzenText Text="Radzen Blazor Components" TextStyle="Radzen.Blazor.TextStyle.DisplayH6" TagName="Radzen.Blazor.TagName.H3"></RadzenText>
-                    <RadzenLink Text="Demos" Path="https://blazor.radzen.com" Icon="east" Target="_blank" Style="font-size: 18px"></RadzenLink>
-                </RadzenColumn>
-                <RadzenColumn Size="12" SizeMD="4">
-                    <RadzenIcon Icon="people_outline" Style="margin-top: 20px; width: 48px; height: 48px; font-size: 48px; color: var(--rz-text-title-color);"></RadzenIcon>
-                    <RadzenText Text="Radzen Community" TextStyle="Radzen.Blazor.TextStyle.DisplayH6" TagName="Radzen.Blazor.TagName.H3"></RadzenText>
-                    <RadzenLink Text="Radzen Blazor Studio Forums" Path="https://forum.radzen.com/c/radzen-blazor-studio/12" Icon="east" Target="_blank" Style="font-size: 18px"></RadzenLink>
-                </RadzenColumn>
-            </RadzenRow>
-        </RadzenCard> *@
     </RadzenColumn>
 </RadzenRow>
 
 @code {
+    public enum MarkingType
+    {
+        PublicHoliday,
+        SchoolHoliday,
+        Selected,
+        BridgeDay
+    }
 
     //Idea: save button to save settings to cookies
 
@@ -70,12 +91,20 @@
     RadzenYearView yearView;
 
     IEnumerable<Country> _countries;
+    IEnumerable<Country> _additionalCountries;
     IEnumerable<Country> _selectedPublicHolidayCountries;
     IEnumerable<Country> _selectedSchoolHolidayCountries;
 
     IEnumerable<Subdivision> _subdivisions;
-    IEnumerable<Subdivision> _selectedPublicHolidaySubdivisions;
-    IEnumerable<Subdivision> _selectedSchoolHolidaySubdivisions;
+    IEnumerable<Subdivision> _selectedSubdivisions;
+
+    bool _showPublicHolidays = true;
+    bool _showSchoolHolidays = true;
+    bool _showBridgeDays = false;
+    bool _countWeekendsAndHolidays = false;
+
+    int _totalVacationDays = 25;
+    int _plannedDays = 0;
 
     readonly List<Marking> _markings = [];
     readonly List<Marking> _selectedSlots = [];
@@ -83,7 +112,9 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _countries = (await new RegionalApi().CountriesGetAsync("DE")).Select(country => new Country { Name = country.Name.First().Text, IsoCode = country.IsoCode }).ToList();
+        var allCountries = (await new RegionalApi().CountriesGetAsync("DE")).Select(country => new Country { Name = country.Name.First().Text, IsoCode = country.IsoCode }).ToList();
+        _countries = allCountries;
+        _additionalCountries = allCountries.Where(c => c.IsoCode != "DE").ToList();
         _subdivisions = (await new RegionalApi().SubdivisionsGetAsync("DE", "DE")).Select(sub => new Subdivision { Name = sub.Name.First().Text, Category = sub.Category.First().Text, Code = sub.Code, IsoCode = sub.IsoCode }).ToList();
     }
 
@@ -91,79 +122,168 @@
     {
         _markings.Clear();
 
-        //Public holidays
-        if (_selectedPublicHolidayCountries != null)
+        // German holidays from selected subdivisions
+        if (_selectedSubdivisions != null && _selectedSubdivisions.Any())
+        {
+            if (_showPublicHolidays)
+            {
+                var publicHolidays = await new HolidaysApi().PublicHolidaysGetAsync("DE", scheduler.SelectedView.StartDate, scheduler.SelectedView.EndDate, "DE");
+                foreach (var subdivision in _selectedSubdivisions)
+                {
+                    var stateSpecificPublicHolidays = publicHolidays
+                        .Where(p => p.Subdivisions != null && p.Subdivisions.Any(s => s.Code.Contains(subdivision.Code)));
+
+                    foreach (var holiday in stateSpecificPublicHolidays)
+                    {
+                        _markings.Add(new Marking
+                        {
+                            Start = holiday.StartDate.Value,
+                            End = holiday.EndDate.Value.AddHours(23),
+                            Name = holiday.Name.First().Text + $" - {subdivision.Name}",
+                            Color = "background: blue",
+                            Type = MarkingType.PublicHoliday
+                        });
+                    }
+                }
+                var nationwidePublicHolidays = publicHolidays.Where(p => p.Nationwide == true);
+                foreach (var holiday in nationwidePublicHolidays)
+                {
+                    _markings.Add(new Marking
+                    {
+                        Start = holiday.StartDate.Value,
+                        End = holiday.EndDate.Value.AddHours(23),
+                        Name = holiday.Name.First().Text + " (Bundesweit)",
+                        Color = "background: red",
+                        Type = MarkingType.PublicHoliday
+                    });
+                }
+            }
+
+            if (_showSchoolHolidays)
+            {
+                var schoolHolidays = await new HolidaysApi().SchoolHolidaysGetAsync("DE", scheduler.SelectedView.StartDate, scheduler.SelectedView.EndDate, "DE");
+                foreach (var subdivision in _selectedSubdivisions)
+                {
+                    var stateSchoolHolidays = schoolHolidays
+                        .Where(sh => sh.Subdivisions != null && sh.Subdivisions.Any(s => s.Code.Contains(subdivision.Code)));
+
+                    foreach (var schoolHoliday in stateSchoolHolidays)
+                    {
+                        _markings.Add(new Marking
+                        {
+                            Start = schoolHoliday.StartDate.Value,
+                            End = schoolHoliday.EndDate.Value.AddHours(23),
+                            Name = schoolHoliday.Name.First().Text + $" - {subdivision.Name}",
+                            Color = "background: yellow",
+                            Type = MarkingType.SchoolHoliday
+                        });
+                    }
+                }
+            }
+        }
+
+        // Public holidays for additional countries
+        if (_showPublicHolidays && _selectedPublicHolidayCountries != null)
+        {
             foreach (var country in _selectedPublicHolidayCountries)
             {
                 var publicHolidays = await new HolidaysApi().PublicHolidaysGetAsync(country.IsoCode, scheduler.SelectedView.StartDate, scheduler.SelectedView.EndDate, "DE");
-                if (_selectedPublicHolidaySubdivisions != null && _selectedPublicHolidaySubdivisions.Any())
-                {
-                    foreach (var publicHolidaySubdivision in _selectedPublicHolidaySubdivisions)
-                    {
-                        // ReSharper disable once ConditionIsAlwaysTrueOrFalse
-                        foreach (var publicHoliday in from publicHoliday in publicHolidays where publicHoliday.Subdivisions != null from subdivisionReference in publicHoliday.Subdivisions where subdivisionReference.Code.Contains(publicHolidaySubdivision.Code) select publicHoliday)
-                        {
-                            _markings.Add(new Marking
-                                {
-                                    Start = publicHoliday.StartDate.Value,
-                                    End = publicHoliday.EndDate.Value.AddHours(23),
-                                    Name = publicHoliday.Name.First().Text + $" - {publicHolidaySubdivision.Name}",
-                                    Color = "background: blue"
-                                });
-                        }
-                    }
-                }
-
                 _markings.AddRange(
                     from holiday in publicHolidays
                     where holiday.Nationwide.Value
                     select new Marking
-                        {
-                            Start = holiday.StartDate.Value,
-                            End = holiday.EndDate.Value.AddHours(23),
-                            Name = holiday.Name.First().Text + $" - {country.Name}",
-                            Color = "background: red"
-                        });
+                    {
+                        Start = holiday.StartDate.Value,
+                        End = holiday.EndDate.Value.AddHours(23),
+                        Name = holiday.Name.First().Text + $" - {country.Name}",
+                        Color = "background: red",
+                        Type = MarkingType.PublicHoliday
+                    });
             }
+        }
 
-        //School holidays
-        if (_selectedSchoolHolidayCountries != null)
+        // School holidays for additional countries
+        if (_showSchoolHolidays && _selectedSchoolHolidayCountries != null)
+        {
             foreach (var country in _selectedSchoolHolidayCountries)
             {
                 var schoolHolidays = await new HolidaysApi().SchoolHolidaysGetAsync(country.IsoCode, scheduler.SelectedView.StartDate, scheduler.SelectedView.EndDate, "DE");
-                if (_selectedSchoolHolidaySubdivisions != null && _selectedSchoolHolidaySubdivisions.Any())
-                {
-                    foreach (var schoolHolidaySubdivision in _selectedSchoolHolidaySubdivisions)
-                    {
-                        // ReSharper disable once ConditionIsAlwaysTrueOrFalse
-                        foreach (var schoolHoliday in from schoolHoliday in schoolHolidays where schoolHoliday.Subdivisions != null from subdivisionReference in schoolHoliday.Subdivisions where subdivisionReference.Code.Contains(schoolHolidaySubdivision.Code) select schoolHoliday)
-                        {
-                            _markings.Add(new Marking
-                                {
-                                    Start = schoolHoliday.StartDate.Value,
-                                    End = schoolHoliday.EndDate.Value.AddHours(23),
-                                    Name = schoolHoliday.Name.First().Text + $" - {schoolHolidaySubdivision.Name}",
-                                    Color = "background: yellow"
-                                });
-                        }
-                    }
-                }
-
-                //Add support for non-nationwide school holidays
-
                 _markings.AddRange(
                     from holiday in schoolHolidays
                     where holiday.Nationwide.Value
                     select new Marking
-                        {
-                            Start = holiday.StartDate.Value,
-                            End = holiday.EndDate.Value.AddHours(23),
-                            Name = holiday.Name.First().Text + $" - {country.Name}",
-                            Color = "background: orange"
-                        });
+                    {
+                        Start = holiday.StartDate.Value,
+                        End = holiday.EndDate.Value.AddHours(23),
+                        Name = holiday.Name.First().Text + $" - {country.Name}",
+                        Color = "background: orange",
+                        Type = MarkingType.SchoolHoliday
+                    });
+            }
+        }
+
+        if (_showBridgeDays)
+        {
+            var nonWorkDays = new HashSet<DateTime>();
+            var publicHolidays = _markings.Where(m => m.Type == MarkingType.PublicHoliday)
+                                          .SelectMany(m => Enumerable.Range(0, (m.End.Date - m.Start.Date).Days + 1)
+                                          .Select(offset => m.Start.Date.AddDays(offset)))
+                                          .ToHashSet();
+
+            for (var date = scheduler.SelectedView.StartDate; date <= scheduler.SelectedView.EndDate; date = date.AddDays(1))
+            {
+                if (date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday || publicHolidays.Contains(date.Date))
+                {
+                    nonWorkDays.Add(date.Date);
+                }
             }
 
-        if (!_markings.Any()) return;
+            var bridgeDaysToAdd = new List<Marking>();
+            for (var date = scheduler.SelectedView.StartDate; date <= scheduler.SelectedView.EndDate; date = date.AddDays(1))
+            {
+                if (nonWorkDays.Contains(date.Date)) continue;
+
+                DateTime prevNonWorkDay = date.AddDays(-1);
+                while (!nonWorkDays.Contains(prevNonWorkDay.Date) && prevNonWorkDay >= scheduler.SelectedView.StartDate) prevNonWorkDay = prevNonWorkDay.AddDays(-1);
+
+                DateTime nextNonWorkDay = date.AddDays(1);
+                while (!nonWorkDays.Contains(nextNonWorkDay.Date) && nextNonWorkDay <= scheduler.SelectedView.EndDate) nextNonWorkDay = nextNonWorkDay.AddDays(1);
+
+                bool prevIsWeekend = prevNonWorkDay.DayOfWeek == DayOfWeek.Saturday || prevNonWorkDay.DayOfWeek == DayOfWeek.Sunday;
+                bool nextIsWeekend = nextNonWorkDay.DayOfWeek == DayOfWeek.Saturday || nextNonWorkDay.DayOfWeek == DayOfWeek.Sunday;
+                bool prevIsHoliday = publicHolidays.Contains(prevNonWorkDay.Date);
+                bool nextIsHoliday = publicHolidays.Contains(nextNonWorkDay.Date);
+
+                if (!((prevIsWeekend && nextIsHoliday) || (prevIsHoliday && nextIsWeekend))) continue;
+
+                var gap = (nextNonWorkDay - prevNonWorkDay).Days - 1;
+                if (gap > 0 && gap <= 2)
+                {
+                    for (int i = 1; i <= gap; i++)
+                    {
+                        var bridgeDay = prevNonWorkDay.AddDays(i);
+                        if (!bridgeDaysToAdd.Any(b => b.Start.Date == bridgeDay.Date))
+                        {
+                            bridgeDaysToAdd.Add(new Marking { Start = bridgeDay, End = bridgeDay, Name = "Brückentag", Type = MarkingType.BridgeDay });
+                        }
+                    }
+                }
+            }
+            _markings.AddRange(bridgeDaysToAdd);
+        }
+
+
+        // Remove duplicates that might be added (e.g. nationwide holidays)
+        var distinctMarkings = _markings.GroupBy(m => (Date: m.Start.Date, m.End.Date, m.Name)).Select(g => g.First()).ToList();
+        _markings.Clear();
+        _markings.AddRange(distinctMarkings);
+
+
+        if (!_markings.Any())
+        {
+            await scheduler.Reload();
+            return;
+        }
 
         var dailyMarkings = new Dictionary<DateTime, int>();
 
@@ -180,7 +300,7 @@
             }
         }
 
-        _maxDensity = dailyMarkings.Values.Max();
+        _maxDensity = dailyMarkings.Values.Any() ? dailyMarkings.Values.Max() : 5;
 
         if (_maxDensity <= 3) _maxDensity = 5;
 
@@ -189,57 +309,144 @@
 
     int _maxDensity = 16;
 
+    private async Task OnCountWorkdaysOptionChanged(bool value)
+    {
+        _countWeekendsAndHolidays = value;
+        UpdatePlannedDays();
+        await scheduler.Reload();
+    }
+
+    private void UpdatePlannedDays()
+    {
+        var distinctDays = new HashSet<DateTime>();
+        var publicHolidayDates = new HashSet<DateTime>();
+
+        if (!_countWeekendsAndHolidays)
+        {
+            publicHolidayDates = _markings
+                .Where(m => m.Type == MarkingType.PublicHoliday)
+                .SelectMany(m => Enumerable.Range(0, (m.End.Date - m.Start.Date).Days + 1)
+                                          .Select(offset => m.Start.Date.AddDays(offset)))
+                .ToHashSet();
+        }
+
+        foreach (var slot in _selectedSlots)
+        {
+            var current = slot.Start.Date;
+            while (current < slot.End.Date)
+            {
+                if (_countWeekendsAndHolidays)
+                {
+                    distinctDays.Add(current);
+                }
+                else
+                {
+                    bool isWeekend = current.DayOfWeek == DayOfWeek.Saturday || current.DayOfWeek == DayOfWeek.Sunday;
+                    bool isPublicHoliday = publicHolidayDates.Contains(current);
+                    if (!isWeekend && !isPublicHoliday)
+                    {
+                        distinctDays.Add(current);
+                    }
+                }
+                current = current.AddDays(1);
+            }
+        }
+        _plannedDays = distinctDays.Count;
+    }
+
     private void SlotRender(SchedulerSlotRenderEventArgs args)
     {
         var date = args.Start.Date;
-        var markingCount = _markings.Count(m => m.Start.Date <= date && m.End.Date >= date);
-        var color = GetColorFromDensity(markingCount);
+        string bgColor = "";
+        var bgImages = new List<string>();
 
-        args.Attributes["style"] = string.Empty;
-
-        if (_selectedSlots.Any(x => x.Start.Date <= date && x.End.Date > date))
+        // Base color for weekends
+        if (date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday)
         {
-            const string svgCross = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='black' stroke-width='1'/><line x1='0' y1='10' x2='10' y2='0' stroke='black' stroke-width='1'/></svg>";
-            var base64Svg = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(svgCross));
+            bgColor = "background-color: rgba(220, 230, 255, 0.7);";
+        }
 
-            args.Attributes["style"] += $@"
-        background-image: url('data:image/svg+xml;base64,{base64Svg}');
-        background-repeat: no-repeat;
-        background-position: center;
-        background-size: contain;
-    ";
-        }
-        if (args.Start < DateTime.Today)
-        {
-            args.Attributes["style"] += "background-color: rgba(0,0,0,.08);";
-        }
+        // Density color for holidays/vacations
+        var markingCount = _markings.Count(m => m.Start.Date <= date && date < m.End.Date && m.Type != MarkingType.BridgeDay);
         if (markingCount > 0)
         {
-            args.Attributes["style"] += $"background-color: {color};";
+            bgColor = $"background-color: {GetColorFromDensity(markingCount)};";
+        }
+
+        // Grey out past days
+        if (args.Start < DateTime.Today)
+        {
+            bgColor = "background-color: rgba(0,0,0,.08);";
+        }
+
+        // Bridge day arrow
+        var bridgeDayMarking = _markings.FirstOrDefault(m => m.Type == MarkingType.BridgeDay && m.Start.Date == date);
+        if (bridgeDayMarking != null)
+        {
+            string arrowSvg = "";
+            if (date.DayOfWeek == DayOfWeek.Monday || date.DayOfWeek == DayOfWeek.Tuesday)
+            {
+                arrowSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='5,0 0,5 5,10' style='fill:yellow;'/></svg>";
+            }
+            else if (date.DayOfWeek == DayOfWeek.Thursday || date.DayOfWeek == DayOfWeek.Friday)
+            {
+                arrowSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='5,0 10,5 5,10' style='fill:yellow;'/></svg>";
+            }
+            if (!string.IsNullOrEmpty(arrowSvg))
+            {
+                var base64Svg = Convert.ToBase64String(Encoding.UTF8.GetBytes(arrowSvg));
+                bgImages.Add($"url('data:image/svg+xml;base64,{base64Svg}')");
+                bgColor = "background-color: rgba(255, 255, 0, 0.3);";
+            }
+        }
+
+        // Selection cross
+        if (_selectedSlots.Any(x => x.Start.Date <= date && date < x.End.Date))
+        {
+            string svgCross;
+            if (_plannedDays > _totalVacationDays)
+            {
+                svgCross = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='red' stroke-width='1'/><line x1='0' y1='10' x2='10' y2='0' stroke='red' stroke-width='1'/></svg>";
+            }
+            else
+            {
+                svgCross = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='black' stroke-width='1'/><line x1='0' y1='10' x2='10' y2='0' stroke='black' stroke-width='1'/></svg>";
+            }
+            var base64Svg = Convert.ToBase64String(Encoding.UTF8.GetBytes(svgCross));
+            bgImages.Add($"url('data:image/svg+xml;base64,{base64Svg}')");
+        }
+
+        // Build final style attribute
+        args.Attributes["style"] = bgColor;
+        if (bgImages.Any())
+        {
+            args.Attributes["style"] += $"background-image: {string.Join(", ", bgImages)}; background-repeat: no-repeat; background-position: center; background-size: contain;";
         }
     }
 
-    // private static void AppointmentRender(SchedulerAppointmentRenderEventArgs<Marking> args)
-    // {
-    //     args.Attributes["style"] = "background: transparent; color: var(--rz-base-darker);";
-    // }
-
-    private void SlotSelect(SchedulerSlotSelectEventArgs args)
+    private async Task SlotSelect(SchedulerSlotSelectEventArgs args)
     {
         var mark = new Marking
             {
                 Start = args.Start,
-                End = args.End,
+                End = args.Start.AddDays(1), // Correctly handle the end date for single-day selection
                 Name = "Selected",
+                Type = MarkingType.Selected
             };
-        if (_selectedSlots.Contains(mark)) _selectedSlots.Remove(mark);
-        else _selectedSlots.Add(mark);
-    }
 
-    // private void SlotSelect(SchedulerSlotSelectEventArgs args)
-    // {
-    //     args.
-    // }
+        var existingMark = _selectedSlots.FirstOrDefault(m => m.Start.Date == args.Start.Date);
+
+        if (existingMark != null)
+        {
+            _selectedSlots.Remove(existingMark);
+        }
+        else
+        {
+            _selectedSlots.Add(mark);
+        }
+        UpdatePlannedDays();
+        await scheduler.Reload();
+    }
 
     private string GetColorFromDensity(int density)
     {
@@ -288,19 +495,20 @@
         public string Name { get; init; }
 
         public string Color { get; set; } = "background: blue";
+        public MarkingType Type { get; set; }
 
         public override bool Equals(object obj)
         {
             if (obj is Marking other)
             {
-                return Start == other.Start && End == other.End && Name == other.Name;
+                return Start.Date == other.Start.Date && End.Date == other.End.Date && Name == other.Name && Type == other.Type;
             }
             return false;
         }
 
         public override int GetHashCode()
         {
-            return HashCode.Combine(Start, End, Name);
+            return HashCode.Combine(Start.Date, End.Date, Name, Type);
         }
     }
 
