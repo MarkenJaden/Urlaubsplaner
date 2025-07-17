@@ -49,7 +49,7 @@
             <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="20px" Wrap="FlexWrap.Wrap" AlignItems="AlignItems.Center">
                 <RadzenStack AlignItems="AlignItems.Center">
                     <RadzenText Text="Urlaubstage" TextStyle="TextStyle.H6"></RadzenText>
-                    <RadzenNumeric @bind-Value="_totalVacationDays" TValue="decimal" Change="@(async (args) => await scheduler.Reload())" Step="0.5" Style="width: 100px;" />
+                    <RadzenNumeric @bind-Value="_totalVacationDays" TValue="decimal" Change="@(async (args) => await scheduler.Reload())" Step="1" Style="width: 100px;" />
                 </RadzenStack>
                 <RadzenStack AlignItems="AlignItems.Center">
                     <RadzenText Text="Geplant" TextStyle="TextStyle.H6"></RadzenText>
