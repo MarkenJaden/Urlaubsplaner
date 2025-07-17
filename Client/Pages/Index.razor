@@ -101,7 +101,6 @@
     RadzenYearPlannerView yearPlannerView;
     RadzenYearView yearView;
 
-    IEnumerable<Country> _countries;
     IEnumerable<Country> _additionalCountries;
     IEnumerable<Country> _selectedPublicHolidayCountries;
     IEnumerable<Country> _selectedSchoolHolidayCountries;
@@ -125,7 +124,6 @@
     protected override async Task OnInitializedAsync()
     {
         var allCountries = (await new RegionalApi().CountriesGetAsync("DE")).Select(country => new Country { Name = country.Name.First().Text, IsoCode = country.IsoCode }).ToList();
-        _countries = allCountries;
         _additionalCountries = allCountries.Where(c => c.IsoCode != "DE").ToList();
         _subdivisions = (await new RegionalApi().SubdivisionsGetAsync("DE", "DE")).Select(sub => new Subdivision { Name = sub.Name.First().Text, Category = sub.Category.First().Text, Code = sub.Code, IsoCode = sub.IsoCode }).ToList();
     }
@@ -237,7 +235,6 @@
                 var schoolHolidays = await new HolidaysApi().SchoolHolidaysGetAsync(country.IsoCode, scheduler.SelectedView.StartDate, scheduler.SelectedView.EndDate, "DE");
                 _markings.AddRange(
                     from holiday in schoolHolidays
-                    where holiday.Nationwide.Value
                     select new Marking
                     {
                         Start = holiday.StartDate.Value,
