@@ -1,4 +1,5 @@
 @page "/"
+@using System.Diagnostics
 @using System.Text
 @using OpenHolidaysApi.Api
 @inject IJSRuntime JSRuntime
@@ -57,6 +58,9 @@
                 <RadzenStack AlignItems="AlignItems.Center">
                     <RadzenText Text="Verbleibend" TextStyle="TextStyle.H6"></RadzenText>
                     <RadzenText Text="@($"{_totalVacationDays - _plannedDays}")" Style="@(_totalVacationDays - _plannedDays < 0 ? "color: red;" : "")" />
+                </RadzenStack>
+                <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center">
+                    <RadzenButton Text="Perfekten Urlaub vorschlagen" Icon="auto_awesome" ButtonStyle="ButtonStyle.Primary" Click="SuggestPerfectVacation" />
                 </RadzenStack>
                 <RadzenStack AlignItems="AlignItems.Center" Gap="0.5rem">
                     <RadzenText Text="Zählweise" TextStyle="TextStyle.H6"></RadzenText>
@@ -128,6 +132,22 @@
             if (_showPublicHolidays)
             {
                 var publicHolidays = await new HolidaysApi().PublicHolidaysGetAsync("DE", scheduler.SelectedView.StartDate, scheduler.SelectedView.EndDate, "DE");
+
+                // Add nationwide holidays first
+                var nationwidePublicHolidays = publicHolidays.Where(p => p.Nationwide == true);
+                foreach (var holiday in nationwidePublicHolidays)
+                {
+                    _markings.Add(new Marking
+                    {
+                        Start = holiday.StartDate.Value,
+                        End = holiday.EndDate.Value.AddHours(23),
+                        Name = holiday.Name.First().Text + " (Bundesweit)",
+                        Color = "background: red",
+                        Type = MarkingType.PublicHoliday
+                    });
+                }
+
+                // Then add state-specific holidays
                 foreach (var subdivision in _selectedSubdivisions)
                 {
                     var stateSpecificPublicHolidays = publicHolidays
@@ -144,18 +164,6 @@
                             Type = MarkingType.PublicHoliday
                         });
                     }
-                }
-                var nationwidePublicHolidays = publicHolidays.Where(p => p.Nationwide == true);
-                foreach (var holiday in nationwidePublicHolidays)
-                {
-                    _markings.Add(new Marking
-                    {
-                        Start = holiday.StartDate.Value,
-                        End = holiday.EndDate.Value.AddHours(23),
-                        Name = holiday.Name.First().Text + " (Bundesweit)",
-                        Color = "background: red",
-                        Type = MarkingType.PublicHoliday
-                    });
                 }
             }
 
@@ -360,6 +368,12 @@
         string bgColor = "";
         var bgImages = new List<string>();
 
+        // Grey out past days
+        if (args.Start < DateTime.Today)
+        {
+            bgColor = "background-color: rgba(0,0,0,.08);";
+        }
+
         // Base color for weekends
         if (date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday)
         {
@@ -367,37 +381,10 @@
         }
 
         // Density color for holidays/vacations
-        var markingCount = _markings.Count(m => m.Start.Date <= date && date < m.End.Date && m.Type != MarkingType.BridgeDay);
+        var markingCount = _markings.Count(m => m.Start.Date <= date && date <= m.End.Date && m.Type != MarkingType.BridgeDay);
         if (markingCount > 0)
         {
             bgColor = $"background-color: {GetColorFromDensity(markingCount)};";
-        }
-
-        // Grey out past days
-        if (args.Start < DateTime.Today)
-        {
-            bgColor = "background-color: rgba(0,0,0,.08);";
-        }
-
-        // Bridge day arrow
-        var bridgeDayMarking = _markings.FirstOrDefault(m => m.Type == MarkingType.BridgeDay && m.Start.Date == date);
-        if (bridgeDayMarking != null)
-        {
-            string arrowSvg = "";
-            if (date.DayOfWeek == DayOfWeek.Monday || date.DayOfWeek == DayOfWeek.Tuesday)
-            {
-                arrowSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='5,0 0,5 5,10' style='fill:yellow;'/></svg>";
-            }
-            else if (date.DayOfWeek == DayOfWeek.Thursday || date.DayOfWeek == DayOfWeek.Friday)
-            {
-                arrowSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='5,0 10,5 5,10' style='fill:yellow;'/></svg>";
-            }
-            if (!string.IsNullOrEmpty(arrowSvg))
-            {
-                var base64Svg = Convert.ToBase64String(Encoding.UTF8.GetBytes(arrowSvg));
-                bgImages.Add($"url('data:image/svg+xml;base64,{base64Svg}')");
-                bgColor = "background-color: rgba(255, 255, 0, 0.3);";
-            }
         }
 
         // Selection cross
@@ -414,6 +401,27 @@
             }
             var base64Svg = Convert.ToBase64String(Encoding.UTF8.GetBytes(svgCross));
             bgImages.Add($"url('data:image/svg+xml;base64,{base64Svg}')");
+        }
+
+        // Bridge day arrow
+        var bridgeDayMarking = _markings.FirstOrDefault(m => m.Type == MarkingType.BridgeDay && m.Start.Date == date);
+        if (bridgeDayMarking != null)
+        {
+            string arrowSvg = "";
+            if (date.DayOfWeek == DayOfWeek.Monday || date.DayOfWeek == DayOfWeek.Tuesday)
+            {
+                arrowSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='5,0 0,5 5,10' style='fill:orange;'/></svg>";
+            }
+            else if (date.DayOfWeek == DayOfWeek.Thursday || date.DayOfWeek == DayOfWeek.Friday)
+            {
+                arrowSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='5,0 10,5 5,10' style='fill:orange;'/></svg>";
+            }
+            if (!string.IsNullOrEmpty(arrowSvg))
+            {
+                var base64Svg = Convert.ToBase64String(Encoding.UTF8.GetBytes(arrowSvg));
+                bgImages.Add($"url('data:image/svg+xml;base64,{base64Svg}')");
+                bgColor = "background-color: rgba(255, 255, 0, 0.3);";
+            }
         }
 
         // Build final style attribute
