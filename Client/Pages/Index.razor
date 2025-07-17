@@ -55,11 +55,11 @@
                 </RadzenStack>
                 <RadzenStack AlignItems="AlignItems.Center">
                     <RadzenText Text="Geplant" TextStyle="TextStyle.H6"></RadzenText>
-                    <RadzenText Text="@_plannedDays.ToString("N1")" />
+                    <RadzenText Text="@_plannedDays.ToString()" />
                 </RadzenStack>
                 <RadzenStack AlignItems="AlignItems.Center">
                     <RadzenText Text="Verbleibend" TextStyle="TextStyle.H6"></RadzenText>
-                    <RadzenText Text="@($"{(_totalVacationDays - _plannedDays):N1}")" Style="@(_totalVacationDays - _plannedDays < 0 ? "color: red;" : "")" />
+                    <RadzenText Text="@($"{(_totalVacationDays - _plannedDays)}")" Style="@(_totalVacationDays - _plannedDays < 0 ? "color: red;" : "")" />
                 </RadzenStack>
                 <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center">
                     <RadzenButton Text="Perfekten Urlaub vorschlagen" Icon="auto_awesome" ButtonStyle="ButtonStyle.Primary" Click="SuggestPerfectVacation" />
