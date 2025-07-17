@@ -10,6 +10,11 @@
     <link rel="stylesheet" href="css/site.css" />
     <link rel="icon" href="favicon.ico" />
     <HeadOutlet @rendermode="@InteractiveAuto" />
+    <script>
+        function isDevice() {
+            return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile/i.test(navigator.userAgent);
+        }
+    </script>
 </head>
 
 <body>
