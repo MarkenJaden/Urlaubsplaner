@@ -1,0 +1,111 @@
+@using Urlaubsplaner.Client.Pages
+@inject Radzen.DialogService DialogService
+
+<RadzenStack Gap="1rem">
+    <RadzenText TextStyle="TextStyle.H5" TagName="TagName.H2">Optimaler Urlaubsplan</RadzenText>
+    <RadzenText TextStyle="TextStyle.Body1">
+        Wir empfehlen Ihnen die folgenden Urlaubsperioden, um Ihre Freizeit zu maximieren.
+        Die vorgeschlagenen Tage sind im Kalender grün hervorgehoben.
+    </RadzenText>
+
+    <RadzenStack Gap="1rem" Style="max-height: 150px; overflow-y: auto;">
+        @foreach (var block in SuggestionBlocks.OrderBy(b => b.VacationDays.First()))
+        {
+            <RadzenCard>
+                <RadzenText>
+                    Nehmen Sie <b>@block.VacationDays.Count</b> Urlaubstag(e) und erhalten Sie <b>@block.FreeDaysGained</b> freie Tage:
+                    <ul style="margin-top: 5px; margin-bottom: 0; padding-left: 20px;">
+                        @foreach (var day in block.VacationDays)
+                        {
+                            <li>@day.ToString("dd.MM.yyyy (dddd)")</li>
+                        }
+                    </ul>
+                </RadzenText>
+            </RadzenCard>
+        }
+    </RadzenStack>
+
+
+    <RadzenScheduler @ref="_scheduler" TItem="Marking" Data="_markings"
+                     style="height: 60vh;" SelectedView="SchedulerView.Year"
+                     LoadData="LoadData" SlotRender="SlotRender" StartProperty="Start" EndProperty="End" TextProperty="Name">
+        <RadzenYearPlannerView @ref="yearPlannerView" />
+    </RadzenScheduler>
+
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="1rem" class="rz-mt-4">
+        <RadzenButton Text="Schließen" Click="OnCloseClick" ButtonStyle="ButtonStyle.Light" />
+        <RadzenButton Text="Anwenden" Click="OnApplyClick" IsBusy="_isBusy" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    [Parameter]
+    public List<Index.VacationSuggestionBlock> SuggestionBlocks { get; set; } = new();
+
+    private List<DateTime> AllSuggestedDays => SuggestionBlocks.SelectMany(b => b.VacationDays).ToList();
+
+    RadzenScheduler<Marking> _scheduler;
+    RadzenYearPlannerView yearPlannerView;
+
+    List<Marking> _markings = new();
+    bool _isBusy = false;
+
+    protected override void OnInitialized()
+    {
+        // Mark the suggested days on the calendar
+        foreach (var day in AllSuggestedDays)
+        {
+            _markings.Add(new Marking { Start = day.Date, End = day.Date.AddHours(23), Name = "Vorschlag" });
+        }
+    }
+
+    async Task LoadData(SchedulerLoadDataEventArgs args)
+    {
+        // Set the scheduler's date to the year of the suggestions
+        if (AllSuggestedDays.Any())
+        {
+            var year = AllSuggestedDays.First().Year;
+            // Ensure scheduler is rendered before accessing CurrentDate
+            await InvokeAsync(() =>
+            {
+                _scheduler.CurrentDate = new DateTime(year, 1, 1);
+                StateHasChanged();
+            });
+        }
+    }
+
+    void SlotRender(SchedulerSlotRenderEventArgs args)
+    {
+        // Highlight weekends
+        if (args.Start.DayOfWeek == DayOfWeek.Saturday || args.Start.DayOfWeek == DayOfWeek.Sunday)
+        {
+            args.Attributes["style"] = "background: rgba(220, 230, 255, 0.7);";
+        }
+
+        // Highlight suggested days
+        if (AllSuggestedDays.Any(d => d.Date == args.Start.Date))
+        {
+            args.Attributes["style"] = "background: rgba(144, 238, 144, 0.7);"; // Light green
+        }
+    }
+
+    async Task OnApplyClick()
+    {
+        _isBusy = true;
+        await Task.Delay(50); // Give UI time to update
+        DialogService.Close(true);
+    }
+
+    void OnCloseClick()
+    {
+        DialogService.Close(false);
+    }
+
+    // Local class for rendering inside this dialog
+    class Marking
+    {
+        public DateTime Start { get; set; }
+        public DateTime End { get; set; }
+        public string Name { get; set; }
+    }
+}

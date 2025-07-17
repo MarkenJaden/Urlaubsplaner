@@ -49,15 +49,15 @@
             <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="20px" Wrap="FlexWrap.Wrap" AlignItems="AlignItems.Center">
                 <RadzenStack AlignItems="AlignItems.Center">
                     <RadzenText Text="Urlaubstage" TextStyle="TextStyle.H6"></RadzenText>
-                    <RadzenNumeric @bind-Value="_totalVacationDays" TValue="int" Change="@(async (args) => await scheduler.Reload())" Style="width: 100px;" />
+                    <RadzenNumeric @bind-Value="_totalVacationDays" TValue="decimal" Change="@(async (args) => await scheduler.Reload())" Step="0.5" Style="width: 100px;" />
                 </RadzenStack>
                 <RadzenStack AlignItems="AlignItems.Center">
                     <RadzenText Text="Geplant" TextStyle="TextStyle.H6"></RadzenText>
-                    <RadzenText Text="@_plannedDays.ToString()" />
+                    <RadzenText Text="@_plannedDays.ToString("N1")" />
                 </RadzenStack>
                 <RadzenStack AlignItems="AlignItems.Center">
                     <RadzenText Text="Verbleibend" TextStyle="TextStyle.H6"></RadzenText>
-                    <RadzenText Text="@($"{_totalVacationDays - _plannedDays}")" Style="@(_totalVacationDays - _plannedDays < 0 ? "color: red;" : "")" />
+                    <RadzenText Text="@($"{(_totalVacationDays - _plannedDays):N1}")" Style="@(_totalVacationDays - _plannedDays < 0 ? "color: red;" : "")" />
                 </RadzenStack>
                 <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center">
                     <RadzenButton Text="Perfekten Urlaub vorschlagen" Icon="auto_awesome" ButtonStyle="ButtonStyle.Primary" Click="SuggestPerfectVacation" />
@@ -67,6 +67,10 @@
                     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center">
                         <RadzenCheckBox @bind-Value="_countWeekendsAndHolidays" TValue="bool" Change="@OnCountWorkdaysOptionChanged" />
                         <RadzenLabel Text="Wochenende/Feiertage als Arbeitstage" />
+                    </RadzenStack>
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center">
+                        <RadzenCheckBox @bind-Value="_halfDaysChristmas" TValue="bool" Change="@OnHalfDaysChristmasChanged" />
+                        <RadzenLabel Text="Tage zw. Weihnachten & Neujahr als halbe Tage" />
                     </RadzenStack>
                 </RadzenStack>
             </RadzenStack>
@@ -80,6 +84,7 @@
 </RadzenRow>
 
 @code {
+
     public enum MarkingType
     {
         PublicHoliday,
@@ -106,9 +111,10 @@
     bool _showSchoolHolidays = true;
     bool _showBridgeDays = false;
     bool _countWeekendsAndHolidays = false;
+    bool _halfDaysChristmas = false;
 
-    int _totalVacationDays = 25;
-    int _plannedDays = 0;
+    decimal _totalVacationDays = 25m;
+    decimal _plannedDays = 0m;
 
     readonly List<Marking> _markings = [];
     readonly List<Marking> _selectedSlots = [];
@@ -324,9 +330,21 @@
         await scheduler.Reload();
     }
 
+    private async Task OnHalfDaysChristmasChanged(bool value)
+    {
+        _halfDaysChristmas = value;
+        UpdatePlannedDays();
+        await scheduler.Reload();
+    }
+
+    private bool IsBetweenChristmasAndNewYear(DateTime date)
+    {
+        return date.Month == 12 && date.Day >= 24 && date.Day <= 31;
+    }
+
     private void UpdatePlannedDays()
     {
-        var distinctDays = new HashSet<DateTime>();
+        _plannedDays = 0m;
         var publicHolidayDates = new HashSet<DateTime>();
 
         if (!_countWeekendsAndHolidays)
@@ -338,28 +356,26 @@
                 .ToHashSet();
         }
 
-        foreach (var slot in _selectedSlots)
+        var distinctSelectedDays = _selectedSlots.Select(s => s.Start.Date).ToHashSet();
+
+        foreach (var day in distinctSelectedDays)
         {
-            var current = slot.Start.Date;
-            while (current < slot.End.Date)
+            decimal dayCost = _halfDaysChristmas && IsBetweenChristmasAndNewYear(day) ? 0.5m : 1.0m;
+
+            if (_countWeekendsAndHolidays)
             {
-                if (_countWeekendsAndHolidays)
+                _plannedDays += dayCost;
+            }
+            else
+            {
+                bool isWeekend = day.DayOfWeek == DayOfWeek.Saturday || day.DayOfWeek == DayOfWeek.Sunday;
+                bool isPublicHoliday = publicHolidayDates.Contains(day);
+                if (!isWeekend && !isPublicHoliday)
                 {
-                    distinctDays.Add(current);
+                    _plannedDays += dayCost;
                 }
-                else
-                {
-                    bool isWeekend = current.DayOfWeek == DayOfWeek.Saturday || current.DayOfWeek == DayOfWeek.Sunday;
-                    bool isPublicHoliday = publicHolidayDates.Contains(current);
-                    if (!isWeekend && !isPublicHoliday)
-                    {
-                        distinctDays.Add(current);
-                    }
-                }
-                current = current.AddDays(1);
             }
         }
-        _plannedDays = distinctDays.Count;
     }
 
     private void SlotRender(SchedulerSlotRenderEventArgs args)
@@ -388,7 +404,7 @@
         }
 
         // Selection cross
-        if (_selectedSlots.Any(x => x.Start.Date <= date && date < x.End.Date))
+        if (_selectedSlots.Any(x => x.Start.Date == date))
         {
             string svgCross;
             if (_plannedDays > _totalVacationDays)
@@ -531,4 +547,163 @@
     }
 
     static DateTime FindMiddleDateTime(DateTime dt1, DateTime dt2) => dt1 + new TimeSpan((dt2 - dt1).Ticks / 2);
+
+    async Task SuggestPerfectVacation()
+    {
+        if (_selectedSubdivisions == null || !_selectedSubdivisions.Any())
+        {
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Hinweis", Detail = "Bitte wählen Sie mindestens ein Bundesland aus.", Duration = 4000 });
+            return;
+        }
+
+        if (_totalVacationDays <= 0)
+        {
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Hinweis", Detail = "Die Anzahl der Urlaubstage muss größer als 0 sein.", Duration = 4000 });
+            return;
+        }
+
+        var year = FindMiddleDateTime(scheduler.SelectedView.StartDate, scheduler.SelectedView.EndDate).Year;
+        var startDate = new DateTime(year, 1, 1);
+        var endDate = new DateTime(year, 12, 31);
+
+        var publicHolidaysResponse = await new HolidaysApi().PublicHolidaysGetAsync("DE", startDate, endDate, "DE");
+        var holidaysForStates = publicHolidaysResponse
+            .Where(p => p.Nationwide == true || (p.Subdivisions != null && p.Subdivisions.Any(s => _selectedSubdivisions.Any(sub => sub.Code == s.Code))))
+            .SelectMany(h => Enumerable.Range(0, (h.EndDate.Value.Date - h.StartDate.Value.Date).Days + 1).Select(offset => h.StartDate.Value.Date.AddDays(offset)))
+            .ToHashSet();
+
+        var nonWorkDays = new HashSet<DateTime>();
+        for (var date = startDate; date <= endDate; date = date.AddDays(1))
+        {
+            if (date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday || holidaysForStates.Contains(date))
+            {
+                nonWorkDays.Add(date);
+            }
+        }
+
+        var opportunities = new List<BridgeOpportunity>();
+        var currentDate = startDate;
+        while (currentDate <= endDate)
+        {
+            if (!nonWorkDays.Contains(currentDate))
+            {
+                var periodStart = currentDate;
+                var beforePeriod = periodStart.AddDays(-1);
+
+                if (nonWorkDays.Contains(beforePeriod) || periodStart == startDate)
+                {
+                    var workDays = new List<DateTime>();
+                    var tempDate = periodStart;
+                    while (!nonWorkDays.Contains(tempDate) && tempDate <= endDate)
+                    {
+                        workDays.Add(tempDate);
+                        tempDate = tempDate.AddDays(1);
+                    }
+
+                    var afterPeriod = tempDate;
+                    if (nonWorkDays.Contains(afterPeriod) || afterPeriod > endDate)
+                    {
+                        var freeDaysBefore = 0;
+                        var checkDateBefore = beforePeriod;
+                        while (nonWorkDays.Contains(checkDateBefore))
+                        {
+                            freeDaysBefore++;
+                            checkDateBefore = checkDateBefore.AddDays(-1);
+                        }
+
+                        var freeDaysAfter = 0;
+                        var checkDateAfter = afterPeriod;
+                        while (nonWorkDays.Contains(checkDateAfter))
+                        {
+                            freeDaysAfter++;
+                            checkDateAfter = checkDateAfter.AddDays(1);
+                        }
+
+                        decimal cost = workDays.Sum(day => _halfDaysChristmas && IsBetweenChristmasAndNewYear(day) ? 0.5m : 1.0m);
+
+                        opportunities.Add(new BridgeOpportunity
+                        {
+                            VacationDays = workDays,
+                            FreeDaysGained = workDays.Count + freeDaysBefore + freeDaysAfter,
+                            Cost = cost
+                        });
+                    }
+                    currentDate = tempDate;
+                    continue;
+                }
+            }
+            currentDate = currentDate.AddDays(1);
+        }
+
+        var sortedOpportunities = opportunities
+            .Where(o => o.VacationDays.Any())
+            .OrderByDescending(o => o.Efficiency)
+            .ThenBy(o => o.Cost)
+            .ToList();
+
+        var selectedOpportunities = new List<BridgeOpportunity>();
+        decimal remainingVacationDays = _totalVacationDays;
+
+        foreach (var op in sortedOpportunities)
+        {
+            if (op.Cost <= remainingVacationDays)
+            {
+                selectedOpportunities.Add(op);
+                remainingVacationDays -= op.Cost;
+            }
+        }
+
+        if (selectedOpportunities.Any())
+        {
+            var suggestionBlocks = selectedOpportunities.Select(op => new VacationSuggestionBlock
+            {
+                VacationDays = op.VacationDays,
+                FreeDaysGained = op.FreeDaysGained
+            }).ToList();
+
+            var result = await DialogService.OpenAsync<SuggestionDialog>("Optimaler Urlaubsplan",
+                new Dictionary<string, object> { { "SuggestionBlocks", suggestionBlocks } },
+                new DialogOptions { Width = "90vw", Height = "auto", Resizable = true, Draggable = true });
+
+            if (result == true)
+            {
+                _selectedSlots.Clear();
+                var allSuggestedDays = suggestionBlocks.SelectMany(b => b.VacationDays);
+                foreach (var day in allSuggestedDays)
+                {
+                    _selectedSlots.Add(new Marking { Start = day.Date, End = day.Date.AddDays(1), Name = "Selected", Type = MarkingType.Selected });
+                }
+
+                UpdatePlannedDays();
+                StateHasChanged();
+            }
+        }
+        else
+        {
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Kein Vorschlag", Detail = "Es konnten keine Brückentage für eine optimale Planung gefunden werden.", Duration = 4000 });
+        }
+    }
+
+    public class VacationSuggestionBlock
+    {
+        public List<DateTime> VacationDays { get; set; }
+        public int FreeDaysGained { get; set; }
+    }
+
+    class BridgeOpportunity
+    {
+        public List<DateTime> VacationDays { get; set; } = new();
+        public int FreeDaysGained { get; set; }
+        public decimal Cost { get; set; }
+        public double Efficiency => Cost > 0 ? (double)FreeDaysGained / (double)Cost : 0;
+    }
+
+    class VacationSuggestion
+    {
+        public DateTime StartDate { get; set; }
+        public DateTime EndDate { get; set; }
+        public int VacationDaysUsed { get; set; }
+        public int TotalDaysOff { get; set; }
+        public List<DateTime> WorkDays { get; set; }
+    }
 }
