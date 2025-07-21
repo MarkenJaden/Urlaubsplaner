@@ -62,7 +62,13 @@
                     <RadzenText Text="@($"{(_totalVacationDays - _plannedDays)}")" Style="@(_totalVacationDays - _plannedDays < 0 ? "color: red;" : "")" />
                 </RadzenStack>
                 <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center">
-                    <RadzenButton Text="Perfekten Urlaub vorschlagen" Icon="auto_awesome" ButtonStyle="ButtonStyle.Primary" Click="SuggestPerfectVacation" />
+                    <RadzenSplitButton AlwaysOpenPopup="true" Text="Perfekten Urlaub vorschlagen" Icon="auto_awesome" ButtonStyle="ButtonStyle.Primary" Click="@(args => SuggestPerfectVacationWithOptions(args))">
+                        <ChildContent>
+                            <RadzenSplitButtonItem Text="Vollständige Neuplanung (überschreibt Auswahl)" Icon="autorenew" Value="overwrite" />
+                            <RadzenSplitButtonItem Text="Bestehende Auswahl erweitern" Icon="add" Value="extend" />
+                            <RadzenSplitButtonItem Text="Restliches Jahr planen" Icon="event_forward" Value="rest_of_year" />
+                        </ChildContent>
+                    </RadzenSplitButton>
                 </RadzenStack>
                 <RadzenStack AlignItems="AlignItems.Center" Gap="0.5rem">
                     <RadzenText Text="Zählweise" TextStyle="TextStyle.H6"></RadzenText>
@@ -390,15 +396,16 @@
         var date = args.Start.Date;
         string bgColor = "";
         var bgImages = new List<string>();
+        string additionalStyles = "";
 
-        // Grey out past days
+        // Darker overlay for past days
         if (args.Start < DateTime.Today)
         {
-            bgColor = "background-color: rgba(0,0,0,.08);";
+            additionalStyles += "box-shadow: inset 0 0 0 1000px rgba(0,0,0,.15);";
         }
 
         // Base color for weekends
-        if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+        if (date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday)
         {
             bgColor = "background-color: rgba(220, 230, 255, 0.7);";
         }
@@ -413,7 +420,22 @@
         // Selection cross
         if (_selectedSlots.Any(x => x.Start.Date == date))
         {
-            var svgCross = _plannedDays > _totalVacationDays ? "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='red' stroke-width='1'/><line x1='0' y1='10' x2='10' y2='0' stroke='red' stroke-width='1'/></svg>" : "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='black' stroke-width='1'/><line x1='0' y1='10' x2='10' y2='0' stroke='black' stroke-width='1'/></svg>";
+            string strokeColor = "black";
+            if (_plannedDays > _totalVacationDays)
+            {
+                strokeColor = "red";
+            }
+            else if (!_countWeekendsAndHolidays)
+            {
+                bool isWeekend = date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday;
+                bool isPublicHoliday = _markings.Any(m => m.Type == MarkingType.PublicHoliday && m.Start.Date <= date && date <= m.End.Date);
+                if (isWeekend || isPublicHoliday)
+                {
+                    strokeColor = "grey";
+                }
+            }
+
+            string svgCross = $"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='{strokeColor}' stroke-width='1'/><line x1='0' y1='10' x2='10' y2='0' stroke='{strokeColor}' stroke-width='1'/></svg>";
             var base64Svg = Convert.ToBase64String(Encoding.UTF8.GetBytes(svgCross));
             bgImages.Add($"url('data:image/svg+xml;base64,{base64Svg}')");
         }
@@ -422,12 +444,15 @@
         var bridgeDayMarking = _markings.FirstOrDefault(m => m.Type == MarkingType.BridgeDay && m.Start.Date == date);
         if (bridgeDayMarking != null)
         {
-            string arrowSvg = date.DayOfWeek switch
+            string arrowSvg = "";
+            if (date.DayOfWeek == DayOfWeek.Monday || date.DayOfWeek == DayOfWeek.Tuesday)
             {
-                DayOfWeek.Monday or DayOfWeek.Tuesday => "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='5,0 0,5 5,10' style='fill:orange;'/></svg>",
-                DayOfWeek.Thursday or DayOfWeek.Friday => "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='5,0 10,5 5,10' style='fill:orange;'/></svg>",
-                _ => ""
-            };
+                arrowSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='5,0 0,5 5,10' style='fill:orange;'/></svg>";
+            }
+            else if (date.DayOfWeek == DayOfWeek.Thursday || date.DayOfWeek == DayOfWeek.Friday)
+            {
+                arrowSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='5,0 10,5 5,10' style='fill:orange;'/></svg>";
+            }
             if (!string.IsNullOrEmpty(arrowSvg))
             {
                 var base64Svg = Convert.ToBase64String(Encoding.UTF8.GetBytes(arrowSvg));
@@ -437,7 +462,7 @@
         }
 
         // Build final style attribute
-        args.Attributes["style"] = bgColor;
+        args.Attributes["style"] = bgColor + additionalStyles;
         if (bgImages.Any())
         {
             args.Attributes["style"] += $"background-image: {string.Join(", ", bgImages)}; background-repeat: no-repeat; background-position: center; background-size: contain;";
@@ -546,22 +571,41 @@
 
     static DateTime FindMiddleDateTime(DateTime dt1, DateTime dt2) => dt1 + new TimeSpan((dt2 - dt1).Ticks / 2);
 
-    async Task SuggestPerfectVacation()
+    async Task SuggestPerfectVacationWithOptions(RadzenSplitButtonItem args)
     {
-        if (_selectedSubdivisions == null || !_selectedSubdivisions.Any() || _selectedSubdivisions.Count() > 1)
+        bool overwrite = false;
+        bool planFromToday = false;
+
+        switch (args.Value)
+        {
+            case "overwrite":
+                overwrite = true;
+                break;
+            case "extend":
+                overwrite = false;
+                break;
+            case "rest_of_year":
+                overwrite = false;
+                planFromToday = true;
+                break;
+        }
+
+        if (_selectedSubdivisions == null || !_selectedSubdivisions.Any())
         {
             NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Hinweis", Detail = "Bitte wählen Sie mindestens ein Bundesland aus.", Duration = 4000 });
             return;
         }
 
-        if (_totalVacationDays <= 0)
+        decimal vacationDaysToPlan = overwrite ? _totalVacationDays : _totalVacationDays - _plannedDays;
+
+        if (vacationDaysToPlan <= 0)
         {
-            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Hinweis", Detail = "Die Anzahl der Urlaubstage muss größer als 0 sein.", Duration = 4000 });
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Hinweis", Detail = "Die Anzahl der zu planenden Urlaubstage muss größer als 0 sein.", Duration = 4000 });
             return;
         }
 
         var year = FindMiddleDateTime(scheduler.SelectedView.StartDate, scheduler.SelectedView.EndDate).Year;
-        var startDate = new DateTime(year, 1, 1);
+        var startDate = planFromToday ? new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day) : new DateTime(year, 1, 1);
         var endDate = new DateTime(year, 12, 31);
 
         var publicHolidaysResponse = await new HolidaysApi().PublicHolidaysGetAsync("DE", startDate, endDate, "DE");
@@ -639,13 +683,22 @@
             .ThenBy(o => o.Cost)
             .ToList();
 
-        var selectedOpportunities = new List<BridgeOpportunity>();
-        decimal remainingVacationDays = _totalVacationDays;
-
-        foreach (var op in sortedOpportunities.Where(op => op.Cost <= remainingVacationDays))
+        if (!overwrite)
         {
-            selectedOpportunities.Add(op);
-            remainingVacationDays -= op.Cost;
+            var selectedDates = _selectedSlots.Select(s => s.Start.Date).ToHashSet();
+            sortedOpportunities.RemoveAll(op => op.VacationDays.Any(d => selectedDates.Contains(d)));
+        }
+
+        var selectedOpportunities = new List<BridgeOpportunity>();
+        decimal remainingVacationDays = vacationDaysToPlan;
+
+        foreach (var op in sortedOpportunities)
+        {
+            if (op.Cost <= remainingVacationDays)
+            {
+                selectedOpportunities.Add(op);
+                remainingVacationDays -= op.Cost;
+            }
         }
 
         if (selectedOpportunities.Any())
@@ -662,15 +715,21 @@
 
             if (result == true)
             {
-                _selectedSlots.Clear();
+                if (overwrite)
+                {
+                    _selectedSlots.Clear();
+                }
                 var allSuggestedDays = suggestionBlocks.SelectMany(b => b.VacationDays);
                 foreach (var day in allSuggestedDays)
                 {
-                    _selectedSlots.Add(new Marking { Start = day.Date, End = day.Date.AddDays(1), Name = "Selected", Type = MarkingType.Selected });
+                    if (!_selectedSlots.Any(s => s.Start.Date == day.Date))
+                    {
+                        _selectedSlots.Add(new Marking { Start = day.Date, End = day.Date.AddDays(1), Name = "Selected", Type = MarkingType.Selected });
+                    }
                 }
 
                 UpdatePlannedDays();
-                StateHasChanged();
+                await scheduler.Reload();
             }
         }
         else
