@@ -48,7 +48,7 @@
                     <RadzenDropDown @bind-Value="_selectedSchoolHolidayCountries" Data="_additionalCountries" Change="GetAllMarkings" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Länder auswählen" Style="width: 250px;" />
                 </RadzenStack>
             </RadzenStack>
-            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="20px" Wrap="FlexWrap.Wrap" AlignItems="AlignItems.Center">
+            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="15px" Wrap="FlexWrap.Wrap" AlignItems="AlignItems.Center">
                 <RadzenStack AlignItems="AlignItems.Center">
                     <RadzenText Text="Urlaubstage" TextStyle="TextStyle.H6"></RadzenText>
                     <RadzenNumeric @bind-Value="_totalVacationDays" TValue="decimal" Change="@(async (args) => await scheduler.Reload())" Step="1" Style="width: 100px;" />
@@ -60,6 +60,10 @@
                 <RadzenStack AlignItems="AlignItems.Center">
                     <RadzenText Text="Verbleibend" TextStyle="TextStyle.H6"></RadzenText>
                     <RadzenText Text="@($"{(_totalVacationDays - _plannedDays)}")" Style="@(_totalVacationDays - _plannedDays < 0 ? "color: red;" : "")" />
+                </RadzenStack>
+                <RadzenStack AlignItems="AlignItems.Center">
+                    <RadzenText Text="Verbleibende Arbeitstage" TextStyle="TextStyle.H6"></RadzenText>
+                    <RadzenText Text="@_remainingWorkDays.ToString()" />
                 </RadzenStack>
                 <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center">
                     <RadzenSplitButton AlwaysOpenPopup="true" Text="Perfekten Urlaub vorschlagen" Icon="auto_awesome" ButtonStyle="ButtonStyle.Primary" Click="@(args => SuggestPerfectVacationWithOptions(args))">
@@ -125,6 +129,7 @@
 
     decimal _totalVacationDays = 25m;
     decimal _plannedDays;
+    int _remainingWorkDays;
 
     readonly List<Marking> _markings = [];
     readonly List<Marking> _selectedSlots = [];
@@ -146,6 +151,8 @@
         {
             await scheduler.SelectView(yearView);
         }
+
+        UpdateAllCalculations();
     }
 
     private async Task GetAllMarkings()
@@ -342,17 +349,23 @@
 
     int _maxDensity = 16;
 
+    private void UpdateAllCalculations()
+    {
+        UpdatePlannedDays();
+        UpdateRemainingWorkDays();
+    }
+
     private async Task OnCountWorkdaysOptionChanged(bool value)
     {
         _countWeekendsAndHolidays = value;
-        UpdatePlannedDays();
+        UpdateAllCalculations();
         await scheduler.Reload();
     }
 
     private async Task OnHalfDaysChristmasChanged(bool value)
     {
         _halfDaysChristmas = value;
-        UpdatePlannedDays();
+        UpdateAllCalculations();
         await scheduler.Reload();
     }
 
@@ -491,7 +504,7 @@
         {
             _selectedSlots.Add(mark);
         }
-        UpdatePlannedDays();
+        UpdateAllCalculations();
         await scheduler.Reload();
     }
 
@@ -725,7 +738,7 @@
                     }
                 }
 
-                UpdatePlannedDays();
+                UpdateAllCalculations();
                 await scheduler.Reload();
             }
         }
@@ -738,9 +751,48 @@
     async Task ClearAllSelections()
     {
         _selectedSlots.Clear();
-        UpdatePlannedDays();
+        UpdateAllCalculations();
         await scheduler.Reload();
         NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Erfolgreich", Detail = "Alle geplanten Urlaubstage wurden entfernt.", Duration = 4000 });
+    }
+
+    private void UpdateRemainingWorkDays()
+    {
+        var today = DateTime.Today;
+        var endOfYear = new DateTime(today.Year, 12, 31);
+        _remainingWorkDays = 0;
+
+        var publicHolidayDates = new HashSet<DateTime>();
+        if (!_countWeekendsAndHolidays)
+        {
+            publicHolidayDates = _markings
+                .Where(m => m.Type == MarkingType.PublicHoliday)
+                .SelectMany(m => Enumerable.Range(0, (m.End.Date - m.Start.Date).Days + 1)
+                    .Select(offset => m.Start.Date.AddDays(offset)))
+                .ToHashSet();
+        }
+
+        for (var date = today; date <= endOfYear; date = date.AddDays(1))
+        {
+            bool isWeekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+            bool isPublicHoliday = publicHolidayDates.Contains(date);
+            bool isPlannedVacation = _selectedSlots.Any(s => s.Start.Date == date.Date);
+
+            if (_countWeekendsAndHolidays)
+            {
+                if (!isPlannedVacation)
+                {
+                    _remainingWorkDays++;
+                }
+            }
+            else
+            {
+                if (!isWeekend && !isPublicHoliday && !isPlannedVacation)
+                {
+                    _remainingWorkDays++;
+                }
+            }
+        }
     }
 
     public class VacationSuggestionBlock
