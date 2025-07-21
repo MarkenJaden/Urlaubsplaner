@@ -66,9 +66,12 @@
                         <ChildContent>
                             <RadzenSplitButtonItem Text="Vollständige Neuplanung (überschreibt Auswahl)" Icon="autorenew" Value="overwrite" />
                             <RadzenSplitButtonItem Text="Bestehende Auswahl erweitern" Icon="add" Value="extend" />
-                            <RadzenSplitButtonItem Text="Restliches Jahr planen" Icon="event_forward" Value="rest_of_year" />
+                            <RadzenSplitButtonItem Text="Restliches Jahr planen" Icon="clock_arrow_down" Value="rest_of_year" />
                         </ChildContent>
                     </RadzenSplitButton>
+                </RadzenStack>
+                <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center">
+                    <RadzenButton Text="Planung zurücksetzen" Icon="delete_sweep" ButtonStyle="ButtonStyle.Light" Click="ClearAllSelections" />
                 </RadzenStack>
                 <RadzenStack AlignItems="AlignItems.Center" Gap="0.5rem">
                     <RadzenText Text="Zählweise" TextStyle="TextStyle.H6"></RadzenText>
@@ -444,15 +447,12 @@
         var bridgeDayMarking = _markings.FirstOrDefault(m => m.Type == MarkingType.BridgeDay && m.Start.Date == date);
         if (bridgeDayMarking != null)
         {
-            string arrowSvg = "";
-            if (date.DayOfWeek == DayOfWeek.Monday || date.DayOfWeek == DayOfWeek.Tuesday)
+            var arrowSvg = date.DayOfWeek switch
             {
-                arrowSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='5,0 0,5 5,10' style='fill:orange;'/></svg>";
-            }
-            else if (date.DayOfWeek == DayOfWeek.Thursday || date.DayOfWeek == DayOfWeek.Friday)
-            {
-                arrowSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='5,0 10,5 5,10' style='fill:orange;'/></svg>";
-            }
+                DayOfWeek.Monday or DayOfWeek.Tuesday => "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='5,0 0,5 5,10' style='fill:orange;'/></svg>",
+                DayOfWeek.Thursday or DayOfWeek.Friday => "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='5,0 10,5 5,10' style='fill:orange;'/></svg>",
+                _ => ""
+            };
             if (!string.IsNullOrEmpty(arrowSvg))
             {
                 var base64Svg = Convert.ToBase64String(Encoding.UTF8.GetBytes(arrowSvg));
@@ -692,13 +692,10 @@
         var selectedOpportunities = new List<BridgeOpportunity>();
         decimal remainingVacationDays = vacationDaysToPlan;
 
-        foreach (var op in sortedOpportunities)
+        foreach (var op in sortedOpportunities.Where(op => op.Cost <= remainingVacationDays))
         {
-            if (op.Cost <= remainingVacationDays)
-            {
-                selectedOpportunities.Add(op);
-                remainingVacationDays -= op.Cost;
-            }
+            selectedOpportunities.Add(op);
+            remainingVacationDays -= op.Cost;
         }
 
         if (selectedOpportunities.Any())
@@ -722,7 +719,7 @@
                 var allSuggestedDays = suggestionBlocks.SelectMany(b => b.VacationDays);
                 foreach (var day in allSuggestedDays)
                 {
-                    if (!_selectedSlots.Any(s => s.Start.Date == day.Date))
+                    if (_selectedSlots.All(s => s.Start.Date != day.Date))
                     {
                         _selectedSlots.Add(new Marking { Start = day.Date, End = day.Date.AddDays(1), Name = "Selected", Type = MarkingType.Selected });
                     }
@@ -736,6 +733,14 @@
         {
             NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Kein Vorschlag", Detail = "Es konnten keine Brückentage für eine optimale Planung gefunden werden.", Duration = 4000 });
         }
+    }
+
+    async Task ClearAllSelections()
+    {
+        _selectedSlots.Clear();
+        UpdatePlannedDays();
+        await scheduler.Reload();
+        NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Erfolgreich", Detail = "Alle geplanten Urlaubstage wurden entfernt.", Duration = 4000 });
     }
 
     public class VacationSuggestionBlock
