@@ -48,7 +48,7 @@
                     <RadzenDropDown @bind-Value="_selectedSchoolHolidayCountries" Data="_additionalCountries" Change="GetAllMarkings" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Länder auswählen" Style="width: 250px;" />
                 </RadzenStack>
             </RadzenStack>
-            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="15px" Wrap="FlexWrap.Wrap" AlignItems="AlignItems.Center">
+            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="20px" Wrap="FlexWrap.Wrap" AlignItems="AlignItems.Center">
                 <RadzenStack AlignItems="AlignItems.Center">
                     <RadzenText Text="Urlaubstage" TextStyle="TextStyle.H6"></RadzenText>
                     <RadzenNumeric @bind-Value="_totalVacationDays" TValue="decimal" Change="@(async (args) => await scheduler.Reload())" Step="1" Style="width: 100px;" />
@@ -73,8 +73,6 @@
                             <RadzenSplitButtonItem Text="Restliches Jahr planen" Icon="clock_arrow_down" Value="rest_of_year" />
                         </ChildContent>
                     </RadzenSplitButton>
-                </RadzenStack>
-                <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center">
                     <RadzenButton Text="Planung zurücksetzen" Icon="delete_sweep" ButtonStyle="ButtonStyle.Light" Click="ClearAllSelections" />
                 </RadzenStack>
                 <RadzenStack AlignItems="AlignItems.Center" Gap="0.5rem">
