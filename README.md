@@ -6,7 +6,7 @@
 
 This application is designed for users in Germany, providing a powerful tool to visualize and plan vacations for the entire year. It fetches data for public holidays and school holidays, calculates the best opportunities to use your vacation days, and presents everything in an intuitive, interactive calendar.
 
-*(Note: A live demo or a screenshot of the application would be great here!)*
+**Live:** https://urlaubsplaner.me/
 <!-- ![Urlaubsplaner Screenshot](docs/screenshot.gif) -->
 
 ---
