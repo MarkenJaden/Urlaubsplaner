@@ -1,4 +1,5 @@
 @page "/"
+@using System.Globalization
 @using System.Text
 @using OpenHolidaysApi.Api
 
@@ -61,8 +62,19 @@
                     <RadzenText Text="Verbleibend" TextStyle="TextStyle.H6"></RadzenText>
                     <RadzenText Text="@($"{(_totalVacationDays - _plannedDays)}")" Style="@(_totalVacationDays - _plannedDays < 0 ? "color: red;" : "")" />
                 </RadzenStack>
+                <RadzenStack AlignItems="AlignItems.Center">
+                    <RadzenText Text="Verbleibende Arbeitstage" TextStyle="TextStyle.H6"></RadzenText>
+                    <RadzenText Text="@_remainingWorkDays.ToString()" />
+                </RadzenStack>
                 <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center">
-                    <RadzenButton Text="Perfekten Urlaub vorschlagen" Icon="auto_awesome" ButtonStyle="ButtonStyle.Primary" Click="SuggestPerfectVacation" />
+                    <RadzenSplitButton AlwaysOpenPopup="true" Text="Perfekten Urlaub vorschlagen" Icon="auto_awesome" ButtonStyle="ButtonStyle.Primary" Click="@(args => SuggestPerfectVacationWithOptions(args))">
+                        <ChildContent>
+                            <RadzenSplitButtonItem Text="Vollständige Neuplanung (überschreibt Auswahl)" Icon="autorenew" Value="overwrite" />
+                            <RadzenSplitButtonItem Text="Bestehende Auswahl erweitern" Icon="add" Value="extend" />
+                            <RadzenSplitButtonItem Text="Restliches Jahr planen" Icon="clock_arrow_down" Value="rest_of_year" />
+                        </ChildContent>
+                    </RadzenSplitButton>
+                    <RadzenButton Text="Planung zurücksetzen" Icon="delete_sweep" ButtonStyle="ButtonStyle.Light" Click="ClearAllSelections" />
                 </RadzenStack>
                 <RadzenStack AlignItems="AlignItems.Center" Gap="0.5rem">
                     <RadzenText Text="Zählweise" TextStyle="TextStyle.H6"></RadzenText>
@@ -77,7 +89,7 @@
                 </RadzenStack>
             </RadzenStack>
 
-            <RadzenScheduler @ref="scheduler" TItem="Marking" SlotRender="SlotRender" SlotSelect="SlotSelect" LoadData="LoadData" style="height: 800px;" StartProperty="Start" EndProperty="End" TextProperty="Name">
+            <RadzenScheduler @ref="scheduler" TItem="Marking" Culture="@(CultureInfo.GetCultureInfo("de-DE"))" SlotRender="SlotRender" SlotSelect="SlotSelect" LoadData="LoadData" style="height: 800px;" StartProperty="Start" EndProperty="End" TextProperty="Name">
                 <RadzenYearPlannerView @ref="yearPlannerView"></RadzenYearPlannerView>
                 <RadzenYearView @ref="yearView"></RadzenYearView>
             </RadzenScheduler>
@@ -116,6 +128,7 @@
 
     decimal _totalVacationDays = 25m;
     decimal _plannedDays;
+    int _remainingWorkDays;
 
     readonly List<Marking> _markings = [];
     readonly List<Marking> _selectedSlots = [];
@@ -137,6 +150,8 @@
         {
             await scheduler.SelectView(yearView);
         }
+
+        UpdateAllCalculations();
     }
 
     private async Task GetAllMarkings()
@@ -333,17 +348,23 @@
 
     int _maxDensity = 16;
 
+    private void UpdateAllCalculations()
+    {
+        UpdatePlannedDays();
+        UpdateRemainingWorkDays();
+    }
+
     private async Task OnCountWorkdaysOptionChanged(bool value)
     {
         _countWeekendsAndHolidays = value;
-        UpdatePlannedDays();
+        UpdateAllCalculations();
         await scheduler.Reload();
     }
 
     private async Task OnHalfDaysChristmasChanged(bool value)
     {
         _halfDaysChristmas = value;
-        UpdatePlannedDays();
+        UpdateAllCalculations();
         await scheduler.Reload();
     }
 
@@ -390,15 +411,16 @@
         var date = args.Start.Date;
         string bgColor = "";
         var bgImages = new List<string>();
+        string additionalStyles = "";
 
-        // Grey out past days
+        // Darker overlay for past days
         if (args.Start < DateTime.Today)
         {
-            bgColor = "background-color: rgba(0,0,0,.08);";
+            additionalStyles += "box-shadow: inset 0 0 0 1000px rgba(0,0,0,.15);";
         }
 
         // Base color for weekends
-        if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
+        if (date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday)
         {
             bgColor = "background-color: rgba(220, 230, 255, 0.7);";
         }
@@ -413,7 +435,22 @@
         // Selection cross
         if (_selectedSlots.Any(x => x.Start.Date == date))
         {
-            var svgCross = _plannedDays > _totalVacationDays ? "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='red' stroke-width='1'/><line x1='0' y1='10' x2='10' y2='0' stroke='red' stroke-width='1'/></svg>" : "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='black' stroke-width='1'/><line x1='0' y1='10' x2='10' y2='0' stroke='black' stroke-width='1'/></svg>";
+            string strokeColor = "black";
+            if (_plannedDays > _totalVacationDays)
+            {
+                strokeColor = "red";
+            }
+            else if (!_countWeekendsAndHolidays)
+            {
+                bool isWeekend = date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday;
+                bool isPublicHoliday = _markings.Any(m => m.Type == MarkingType.PublicHoliday && m.Start.Date <= date && date <= m.End.Date);
+                if (isWeekend || isPublicHoliday)
+                {
+                    strokeColor = "grey";
+                }
+            }
+
+            string svgCross = $"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='{strokeColor}' stroke-width='1'/><line x1='0' y1='10' x2='10' y2='0' stroke='{strokeColor}' stroke-width='1'/></svg>";
             var base64Svg = Convert.ToBase64String(Encoding.UTF8.GetBytes(svgCross));
             bgImages.Add($"url('data:image/svg+xml;base64,{base64Svg}')");
         }
@@ -422,7 +459,7 @@
         var bridgeDayMarking = _markings.FirstOrDefault(m => m.Type == MarkingType.BridgeDay && m.Start.Date == date);
         if (bridgeDayMarking != null)
         {
-            string arrowSvg = date.DayOfWeek switch
+            var arrowSvg = date.DayOfWeek switch
             {
                 DayOfWeek.Monday or DayOfWeek.Tuesday => "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='5,0 0,5 5,10' style='fill:orange;'/></svg>",
                 DayOfWeek.Thursday or DayOfWeek.Friday => "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><polygon points='5,0 10,5 5,10' style='fill:orange;'/></svg>",
@@ -437,7 +474,7 @@
         }
 
         // Build final style attribute
-        args.Attributes["style"] = bgColor;
+        args.Attributes["style"] = bgColor + additionalStyles;
         if (bgImages.Any())
         {
             args.Attributes["style"] += $"background-image: {string.Join(", ", bgImages)}; background-repeat: no-repeat; background-position: center; background-size: contain;";
@@ -466,7 +503,7 @@
         {
             _selectedSlots.Add(mark);
         }
-        UpdatePlannedDays();
+        UpdateAllCalculations();
         await scheduler.Reload();
     }
 
@@ -546,22 +583,41 @@
 
     static DateTime FindMiddleDateTime(DateTime dt1, DateTime dt2) => dt1 + new TimeSpan((dt2 - dt1).Ticks / 2);
 
-    async Task SuggestPerfectVacation()
+    async Task SuggestPerfectVacationWithOptions(RadzenSplitButtonItem args)
     {
-        if (_selectedSubdivisions == null || !_selectedSubdivisions.Any() || _selectedSubdivisions.Count() > 1)
+        bool overwrite = false;
+        bool planFromToday = false;
+
+        switch (args.Value)
+        {
+            case "overwrite":
+                overwrite = true;
+                break;
+            case "extend":
+                overwrite = false;
+                break;
+            case "rest_of_year":
+                overwrite = false;
+                planFromToday = true;
+                break;
+        }
+
+        if (_selectedSubdivisions == null || !_selectedSubdivisions.Any())
         {
             NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Hinweis", Detail = "Bitte wählen Sie mindestens ein Bundesland aus.", Duration = 4000 });
             return;
         }
 
-        if (_totalVacationDays <= 0)
+        decimal vacationDaysToPlan = overwrite ? _totalVacationDays : _totalVacationDays - _plannedDays;
+
+        if (vacationDaysToPlan <= 0)
         {
-            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Hinweis", Detail = "Die Anzahl der Urlaubstage muss größer als 0 sein.", Duration = 4000 });
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Hinweis", Detail = "Die Anzahl der zu planenden Urlaubstage muss größer als 0 sein.", Duration = 4000 });
             return;
         }
 
         var year = FindMiddleDateTime(scheduler.SelectedView.StartDate, scheduler.SelectedView.EndDate).Year;
-        var startDate = new DateTime(year, 1, 1);
+        var startDate = planFromToday ? new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day) : new DateTime(year, 1, 1);
         var endDate = new DateTime(year, 12, 31);
 
         var publicHolidaysResponse = await new HolidaysApi().PublicHolidaysGetAsync("DE", startDate, endDate, "DE");
@@ -639,8 +695,14 @@
             .ThenBy(o => o.Cost)
             .ToList();
 
+        if (!overwrite)
+        {
+            var selectedDates = _selectedSlots.Select(s => s.Start.Date).ToHashSet();
+            sortedOpportunities.RemoveAll(op => op.VacationDays.Any(d => selectedDates.Contains(d)));
+        }
+
         var selectedOpportunities = new List<BridgeOpportunity>();
-        decimal remainingVacationDays = _totalVacationDays;
+        decimal remainingVacationDays = vacationDaysToPlan;
 
         foreach (var op in sortedOpportunities.Where(op => op.Cost <= remainingVacationDays))
         {
@@ -662,20 +724,73 @@
 
             if (result == true)
             {
-                _selectedSlots.Clear();
+                if (overwrite)
+                {
+                    _selectedSlots.Clear();
+                }
                 var allSuggestedDays = suggestionBlocks.SelectMany(b => b.VacationDays);
                 foreach (var day in allSuggestedDays)
                 {
-                    _selectedSlots.Add(new Marking { Start = day.Date, End = day.Date.AddDays(1), Name = "Selected", Type = MarkingType.Selected });
+                    if (_selectedSlots.All(s => s.Start.Date != day.Date))
+                    {
+                        _selectedSlots.Add(new Marking { Start = day.Date, End = day.Date.AddDays(1), Name = "Selected", Type = MarkingType.Selected });
+                    }
                 }
 
-                UpdatePlannedDays();
-                StateHasChanged();
+                UpdateAllCalculations();
+                await scheduler.Reload();
             }
         }
         else
         {
             NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Kein Vorschlag", Detail = "Es konnten keine Brückentage für eine optimale Planung gefunden werden.", Duration = 4000 });
+        }
+    }
+
+    async Task ClearAllSelections()
+    {
+        _selectedSlots.Clear();
+        UpdateAllCalculations();
+        await scheduler.Reload();
+        NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Erfolgreich", Detail = "Alle geplanten Urlaubstage wurden entfernt.", Duration = 4000 });
+    }
+
+    private void UpdateRemainingWorkDays()
+    {
+        var today = DateTime.Today;
+        var endOfYear = new DateTime(today.Year, 12, 31);
+        _remainingWorkDays = 0;
+
+        var publicHolidayDates = new HashSet<DateTime>();
+        if (!_countWeekendsAndHolidays)
+        {
+            publicHolidayDates = _markings
+                .Where(m => m.Type == MarkingType.PublicHoliday)
+                .SelectMany(m => Enumerable.Range(0, (m.End.Date - m.Start.Date).Days + 1)
+                    .Select(offset => m.Start.Date.AddDays(offset)))
+                .ToHashSet();
+        }
+
+        for (var date = today; date <= endOfYear; date = date.AddDays(1))
+        {
+            bool isWeekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+            bool isPublicHoliday = publicHolidayDates.Contains(date);
+            bool isPlannedVacation = _selectedSlots.Any(s => s.Start.Date == date.Date);
+
+            if (_countWeekendsAndHolidays)
+            {
+                if (!isPlannedVacation)
+                {
+                    _remainingWorkDays++;
+                }
+            }
+            else
+            {
+                if (!isWeekend && !isPublicHoliday && !isPlannedVacation)
+                {
+                    _remainingWorkDays++;
+                }
+            }
         }
     }
 
