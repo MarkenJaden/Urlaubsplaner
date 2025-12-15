@@ -37,6 +37,17 @@
         function isDevice() {
             return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile/i.test(navigator.userAgent);
         }
+
+        window.downloadFileFromStream = async (fileName, mimeType, contentBase64) => {
+            const blob = await (await fetch(`data:${mimeType};base64,${contentBase64}`)).blob();
+            const url = URL.createObjectURL(blob);
+            const anchorElement = document.createElement('a');
+            anchorElement.href = url;
+            anchorElement.download = fileName ?? '';
+            anchorElement.click();
+            anchorElement.remove();
+            URL.revokeObjectURL(url);
+        }
     </script>
     <script defer src="https://umami.urlaubsplaner.me/script.js" data-website-id="8af961da-2d2b-4cb2-9cb4-8e40fe7ef2d1"></script>
 </head>

@@ -1,0 +1,170 @@
+@using Radzen
+@using Radzen.Blazor
+
+<RadzenStack Gap="1.5rem">
+    <RadzenText TextStyle="TextStyle.H6">Wie soll Ihr perfekter Urlaub aussehen?</RadzenText>
+
+    <RadzenTabs>
+        <Tabs>
+            <RadzenTabsItem Text="Allgemein">
+                <RadzenStack Gap="1rem" class="rz-p-2">
+                    <RadzenFieldset Text="Allgemeine Präferenzen">
+                        <RadzenStack Gap="1rem">
+                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                                <RadzenCheckBox @bind-Value="Preferences.PreferBridgeDays" Name="PreferBridgeDays" />
+                                <RadzenLabel Text="Brückentage maximieren (Effizienz vor Dauer)" Component="PreferBridgeDays" />
+                            </RadzenStack>
+                            
+                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                                <RadzenCheckBox @bind-Value="Preferences.PreferSchoolHolidays" Name="PreferSchoolHolidays" />
+                                <RadzenLabel Text="Schulferien bevorzugen (z.B. für Familien)" Component="PreferSchoolHolidays" />
+                            </RadzenStack>
+
+                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                                <RadzenCheckBox @bind-Value="Preferences.AvoidSchoolHolidays" Name="AvoidSchoolHolidays" />
+                                <RadzenLabel Text="Außerhalb der Schulferien (günstiger/ruhiger)" Component="AvoidSchoolHolidays" />
+                            </RadzenStack>
+                        </RadzenStack>
+                    </RadzenFieldset>
+
+                    <RadzenFieldset Text="Dauer Grenzen">
+                        <RadzenRow AlignItems="AlignItems.Center">
+                            <RadzenColumn Size="6">
+                                <RadzenLabel Text="Min. Tage am Stück (Global)" Component="MinDays" />
+                            </RadzenColumn>
+                            <RadzenColumn Size="6">
+                                <RadzenNumeric @bind-Value="Preferences.MinDaysPerBlock" Name="MinDays" Min="1" Max="30" />
+                            </RadzenColumn>
+                        </RadzenRow>
+                        <RadzenRow AlignItems="AlignItems.Center">
+                            <RadzenColumn Size="6">
+                                <RadzenLabel Text="Max. Tage am Stück (Global)" Component="MaxDays" />
+                            </RadzenColumn>
+                            <RadzenColumn Size="6">
+                                <RadzenNumeric @bind-Value="Preferences.MaxDaysPerBlock" Name="MaxDays" Min="1" Max="60" Placeholder="Unbegrenzt" />
+                            </RadzenColumn>
+                        </RadzenRow>
+                    </RadzenFieldset>
+                </RadzenStack>
+            </RadzenTabsItem>
+            
+            <RadzenTabsItem Text="Wunschzeiträume">
+                <RadzenStack Gap="1rem" class="rz-p-2">
+                    <RadzenText TextStyle="TextStyle.Body2">Definieren Sie spezifische Monate oder Jahreszeiten, in denen Sie Urlaub wünschen.</RadzenText>
+                    
+                    <RadzenCard Variant="Variant.Outlined">
+                        <RadzenStack Gap="0.5rem">
+                            <RadzenRow AlignItems="AlignItems.Center">
+                                <RadzenColumn Size="4">
+                                    <RadzenLabel Text="Priorität" />
+                                    <RadzenDropDown @bind-Value="_newPeriodType" Data="@(Enum.GetValues(typeof(PreferenceType)).Cast<PreferenceType>())" Style="width: 100%;">
+                                        <Template>
+                                            @(context is PreferenceType.MustHave ? "Muss sein" : "Wäre schön")
+                                        </Template>
+                                    </RadzenDropDown>
+                                </RadzenColumn>
+                                <RadzenColumn Size="4">
+                                    <RadzenLabel Text="Monate" />
+                                    <RadzenDropDown @bind-Value="_newPeriodMonths" Data="_months" Multiple="true" TextProperty="Name" ValueProperty="Id" Placeholder="Monate wählen" Style="width: 100%;" />
+                                </RadzenColumn>
+                                <RadzenColumn Size="2">
+                                    <RadzenLabel Text="Min. Tage" />
+                                    <RadzenNumeric @bind-Value="_newPeriodMinDays" Min="1" Max="30" Style="width: 100%;" />
+                                </RadzenColumn>
+                                <RadzenColumn Size="2" class="rz-text-align-right">
+                                    <RadzenButton Icon="add" ButtonStyle="ButtonStyle.Success" Click="AddPeriodPreference" Disabled="@(!_newPeriodMonths.Any())" />
+                                </RadzenColumn>
+                            </RadzenRow>
+                        </RadzenStack>
+                    </RadzenCard>
+
+                    <RadzenDataList Data="@Preferences.PeriodPreferences" TItem="PeriodPreference">
+                        <Template Context="pref">
+                            <RadzenCard Variant="Variant.Flat" Class="rz-p-2 rz-mb-2">
+                                <RadzenRow AlignItems="AlignItems.Center">
+                                    <RadzenColumn Size="3">
+                                        <RadzenBadge BadgeStyle="@(pref.Type == PreferenceType.MustHave ? BadgeStyle.Danger : BadgeStyle.Success)" Text="@(pref.Type == PreferenceType.MustHave ? "Muss" : "Wunsch")" />
+                                    </RadzenColumn>
+                                    <RadzenColumn Size="5">
+                                        @string.Join(", ", pref.Months.Select(m => System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(m)))
+                                    </RadzenColumn>
+                                    <RadzenColumn Size="3">
+                                        Min. @pref.MinDuration Tage
+                                    </RadzenColumn>
+                                    <RadzenColumn Size="1">
+                                        <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Size="ButtonSize.Small" Click="@(() => RemovePeriodPreference(pref))" />
+                                    </RadzenColumn>
+                                </RadzenRow>
+                            </RadzenCard>
+                        </Template>
+                    </RadzenDataList>
+                </RadzenStack>
+            </RadzenTabsItem>
+        </Tabs>
+    </RadzenTabs>
+
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="1rem">
+        <RadzenButton Text="Abbrechen" ButtonStyle="ButtonStyle.Light" Click="() => DialogService.Close(null)" />
+        <RadzenButton Text="Planung starten" ButtonStyle="ButtonStyle.Primary" Click="() => DialogService.Close(Preferences)" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    [Inject] DialogService DialogService { get; set; }
+
+    public PlanningPreferences Preferences { get; set; } = new PlanningPreferences();
+
+    // New Period Input Fields
+    PreferenceType _newPeriodType = PreferenceType.NiceToHave;
+    IEnumerable<int> _newPeriodMonths = [];
+    int _newPeriodMinDays = 5;
+
+    class MonthItem { public int Id { get; set; } public string Name { get; set; } }
+    List<MonthItem> _months = Enumerable.Range(1, 12).Select(i => new MonthItem { Id = i, Name = System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.GetMonthName(i) }).ToList();
+
+    void AddPeriodPreference()
+    {
+        if (_newPeriodMonths != null && _newPeriodMonths.Any())
+        {
+            Preferences.PeriodPreferences.Add(new PeriodPreference
+            {
+                Type = _newPeriodType,
+                Months = _newPeriodMonths.ToList(),
+                MinDuration = _newPeriodMinDays
+            });
+            
+            // Reset
+            _newPeriodMonths = [];
+            _newPeriodMinDays = 5;
+        }
+    }
+
+    void RemovePeriodPreference(PeriodPreference pref)
+    {
+        Preferences.PeriodPreferences.Remove(pref);
+    }
+
+    public class PlanningPreferences
+    {
+        public bool PreferBridgeDays { get; set; } = true;
+        public bool PreferSchoolHolidays { get; set; }
+        public bool AvoidSchoolHolidays { get; set; }
+        public int MinDaysPerBlock { get; set; } = 1;
+        public int? MaxDaysPerBlock { get; set; }
+        
+        public List<PeriodPreference> PeriodPreferences { get; set; } = new();
+    }
+
+    public class PeriodPreference
+    {
+        public PreferenceType Type { get; set; }
+        public List<int> Months { get; set; } = new();
+        public int MinDuration { get; set; }
+    }
+
+    public enum PreferenceType
+    {
+        MustHave,
+        NiceToHave
+    }
+}

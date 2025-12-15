@@ -16,29 +16,27 @@ using Newtonsoft.Json;
 namespace OpenHolidaysApi.Model
 {
     /// <summary>
-    /// Representation of a subdivision
+    /// Representation of a holiday zone
     /// </summary>
     [DataContract]
-        public partial class SubdivisionResponse :  IEquatable<SubdivisionResponse>, IValidatableObject
+        public partial class GroupResponse :  IEquatable<GroupResponse>, IValidatableObject
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="SubdivisionResponse" /> class.
+        /// Initializes a new instance of the <see cref="GroupResponse" /> class.
         /// </summary>
-        /// <param name="category">Localized categories of the subdivision (required).</param>
-        /// <param name="children">Child subdivisions.</param>
-        /// <param name="code">Subdivision code (required).</param>
-        /// <param name="comment">Localized comments of the subdivision (required).</param>
-        /// <param name="groups">List of group references.</param>
-        /// <param name="isoCode">ISO 3166-2 subdivision code (if defined).</param>
-        /// <param name="name">Localized names of the subdivision (required).</param>
-        /// <param name="officialLanguages">Official languages as ISO-639-1 codes (required).</param>
+        /// <param name="category">Localized categories of the group (required).</param>
+        /// <param name="children">Child groups.</param>
+        /// <param name="code">Group code (required).</param>
+        /// <param name="comment">Localized comments of the group (required).</param>
+        /// <param name="name">Localized names of the group (required).</param>
         /// <param name="shortName">Short name for display (required).</param>
-        public SubdivisionResponse(List<LocalizedText> category = default(List<LocalizedText>), List<SubdivisionResponse> children = default(List<SubdivisionResponse>), string code = default(string), List<LocalizedText> comment = default(List<LocalizedText>), List<GroupReference> groups = default(List<GroupReference>), string isoCode = default(string), List<LocalizedText> name = default(List<LocalizedText>), List<string> officialLanguages = default(List<string>), string shortName = default(string))
+        /// <param name="subdivisions">List of subdivision references.</param>
+        public GroupResponse(List<LocalizedText> category = default(List<LocalizedText>), List<GroupResponse> children = default(List<GroupResponse>), string code = default(string), List<LocalizedText> comment = default(List<LocalizedText>), List<LocalizedText> name = default(List<LocalizedText>), string shortName = default(string), List<SubdivisionReference> subdivisions = default(List<SubdivisionReference>))
         {
             // to ensure "category" is required (not null)
             if (category == null)
             {
-                throw new InvalidDataException("category is a required property for SubdivisionResponse and cannot be null");
+                throw new InvalidDataException("category is a required property for GroupResponse and cannot be null");
             }
             else
             {
@@ -47,7 +45,7 @@ namespace OpenHolidaysApi.Model
             // to ensure "code" is required (not null)
             if (code == null)
             {
-                throw new InvalidDataException("code is a required property for SubdivisionResponse and cannot be null");
+                throw new InvalidDataException("code is a required property for GroupResponse and cannot be null");
             }
             else
             {
@@ -56,7 +54,7 @@ namespace OpenHolidaysApi.Model
             // to ensure "comment" is required (not null)
             // if (comment == null)
             // {
-            //    throw new InvalidDataException("comment is a required property for SubdivisionResponse and cannot be null");
+            //    throw new InvalidDataException("comment is a required property for GroupResponse and cannot be null");
             // }
             // else
             // {
@@ -65,90 +63,59 @@ namespace OpenHolidaysApi.Model
             // to ensure "name" is required (not null)
             if (name == null)
             {
-                throw new InvalidDataException("name is a required property for SubdivisionResponse and cannot be null");
+                throw new InvalidDataException("name is a required property for GroupResponse and cannot be null");
             }
             else
             {
                 this.Name = name;
             }
-            // to ensure "officialLanguages" is required (not null)
-            if (officialLanguages == null)
-            {
-                throw new InvalidDataException("officialLanguages is a required property for SubdivisionResponse and cannot be null");
-            }
-            else
-            {
-                this.OfficialLanguages = officialLanguages;
-            }
             // to ensure "shortName" is required (not null)
             if (shortName == null)
             {
-                throw new InvalidDataException("shortName is a required property for SubdivisionResponse and cannot be null");
+                throw new InvalidDataException("shortName is a required property for GroupResponse and cannot be null");
             }
             else
             {
                 this.ShortName = shortName;
             }
             this.Children = children;
-            this.Groups = groups;
-            this.IsoCode = isoCode;
+            this.Subdivisions = subdivisions;
         }
         
         /// <summary>
-        /// Localized categories of the subdivision
+        /// Localized categories of the group
         /// </summary>
-        /// <value>Localized categories of the subdivision</value>
+        /// <value>Localized categories of the group</value>
         [DataMember(Name="category", EmitDefaultValue=false)]
         public List<LocalizedText> Category { get; set; }
 
         /// <summary>
-        /// Child subdivisions
+        /// Child groups
         /// </summary>
-        /// <value>Child subdivisions</value>
+        /// <value>Child groups</value>
         [DataMember(Name="children", EmitDefaultValue=false)]
-        public List<SubdivisionResponse> Children { get; set; }
+        public List<GroupResponse> Children { get; set; }
 
         /// <summary>
-        /// Subdivision code
+        /// Group code
         /// </summary>
-        /// <value>Subdivision code</value>
+        /// <value>Group code</value>
         [DataMember(Name="code", EmitDefaultValue=false)]
         public string Code { get; set; }
 
         /// <summary>
-        /// Localized comments of the subdivision
+        /// Localized comments of the group
         /// </summary>
-        /// <value>Localized comments of the subdivision</value>
+        /// <value>Localized comments of the group</value>
         [DataMember(Name="comment", EmitDefaultValue=false)]
         public List<LocalizedText> Comment { get; set; }
 
         /// <summary>
-        /// List of group references
+        /// Localized names of the group
         /// </summary>
-        /// <value>List of group references</value>
-        [DataMember(Name="groups", EmitDefaultValue=false)]
-        public List<GroupReference> Groups { get; set; }
-
-        /// <summary>
-        /// ISO 3166-2 subdivision code (if defined)
-        /// </summary>
-        /// <value>ISO 3166-2 subdivision code (if defined)</value>
-        [DataMember(Name="isoCode", EmitDefaultValue=false)]
-        public string IsoCode { get; set; }
-
-        /// <summary>
-        /// Localized names of the subdivision
-        /// </summary>
-        /// <value>Localized names of the subdivision</value>
+        /// <value>Localized names of the group</value>
         [DataMember(Name="name", EmitDefaultValue=false)]
         public List<LocalizedText> Name { get; set; }
-
-        /// <summary>
-        /// Official languages as ISO-639-1 codes
-        /// </summary>
-        /// <value>Official languages as ISO-639-1 codes</value>
-        [DataMember(Name="officialLanguages", EmitDefaultValue=false)]
-        public List<string> OfficialLanguages { get; set; }
 
         /// <summary>
         /// Short name for display
@@ -158,22 +125,27 @@ namespace OpenHolidaysApi.Model
         public string ShortName { get; set; }
 
         /// <summary>
+        /// List of subdivision references
+        /// </summary>
+        /// <value>List of subdivision references</value>
+        [DataMember(Name="subdivisions", EmitDefaultValue=false)]
+        public List<SubdivisionReference> Subdivisions { get; set; }
+
+        /// <summary>
         /// Returns the string presentation of the object
         /// </summary>
         /// <returns>String presentation of the object</returns>
         public override string ToString()
         {
             var sb = new StringBuilder();
-            sb.Append("class SubdivisionResponse {\n");
+            sb.Append("class GroupResponse {\n");
             sb.Append("  Category: ").Append(Category).Append("\n");
             sb.Append("  Children: ").Append(Children).Append("\n");
             sb.Append("  Code: ").Append(Code).Append("\n");
             sb.Append("  Comment: ").Append(Comment).Append("\n");
-            sb.Append("  Groups: ").Append(Groups).Append("\n");
-            sb.Append("  IsoCode: ").Append(IsoCode).Append("\n");
             sb.Append("  Name: ").Append(Name).Append("\n");
-            sb.Append("  OfficialLanguages: ").Append(OfficialLanguages).Append("\n");
             sb.Append("  ShortName: ").Append(ShortName).Append("\n");
+            sb.Append("  Subdivisions: ").Append(Subdivisions).Append("\n");
             sb.Append("}\n");
             return sb.ToString();
         }
@@ -194,15 +166,15 @@ namespace OpenHolidaysApi.Model
         /// <returns>Boolean</returns>
         public override bool Equals(object input)
         {
-            return this.Equals(input as SubdivisionResponse);
+            return this.Equals(input as GroupResponse);
         }
 
         /// <summary>
-        /// Returns true if SubdivisionResponse instances are equal
+        /// Returns true if GroupResponse instances are equal
         /// </summary>
-        /// <param name="input">Instance of SubdivisionResponse to be compared</param>
+        /// <param name="input">Instance of GroupResponse to be compared</param>
         /// <returns>Boolean</returns>
-        public bool Equals(SubdivisionResponse input)
+        public bool Equals(GroupResponse input)
         {
             if (input == null)
                 return false;
@@ -232,32 +204,21 @@ namespace OpenHolidaysApi.Model
                     this.Comment.SequenceEqual(input.Comment)
                 ) && 
                 (
-                    this.Groups == input.Groups ||
-                    this.Groups != null &&
-                    input.Groups != null &&
-                    this.Groups.SequenceEqual(input.Groups)
-                ) && 
-                (
-                    this.IsoCode == input.IsoCode ||
-                    (this.IsoCode != null &&
-                    this.IsoCode.Equals(input.IsoCode))
-                ) && 
-                (
                     this.Name == input.Name ||
                     this.Name != null &&
                     input.Name != null &&
                     this.Name.SequenceEqual(input.Name)
                 ) && 
                 (
-                    this.OfficialLanguages == input.OfficialLanguages ||
-                    this.OfficialLanguages != null &&
-                    input.OfficialLanguages != null &&
-                    this.OfficialLanguages.SequenceEqual(input.OfficialLanguages)
-                ) && 
-                (
                     this.ShortName == input.ShortName ||
                     (this.ShortName != null &&
                     this.ShortName.Equals(input.ShortName))
+                ) && 
+                (
+                    this.Subdivisions == input.Subdivisions ||
+                    this.Subdivisions != null &&
+                    input.Subdivisions != null &&
+                    this.Subdivisions.SequenceEqual(input.Subdivisions)
                 );
         }
 
@@ -278,16 +239,12 @@ namespace OpenHolidaysApi.Model
                     hashCode = hashCode * 59 + this.Code.GetHashCode();
                 if (this.Comment != null)
                     hashCode = hashCode * 59 + this.Comment.GetHashCode();
-                if (this.Groups != null)
-                    hashCode = hashCode * 59 + this.Groups.GetHashCode();
-                if (this.IsoCode != null)
-                    hashCode = hashCode * 59 + this.IsoCode.GetHashCode();
                 if (this.Name != null)
                     hashCode = hashCode * 59 + this.Name.GetHashCode();
-                if (this.OfficialLanguages != null)
-                    hashCode = hashCode * 59 + this.OfficialLanguages.GetHashCode();
                 if (this.ShortName != null)
                     hashCode = hashCode * 59 + this.ShortName.GetHashCode();
+                if (this.Subdivisions != null)
+                    hashCode = hashCode * 59 + this.Subdivisions.GetHashCode();
                 return hashCode;
             }
         }

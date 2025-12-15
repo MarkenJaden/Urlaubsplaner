@@ -13,6 +13,7 @@ builder.Services.AddRadzenCookieThemeService(options =>
     options.Duration = TimeSpan.FromDays(365);
 });
 builder.Services.AddHttpClient();
+builder.Services.AddScoped<Urlaubsplaner.Client.Services.ExportService>();
 builder.Services.AddLocalization();
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>

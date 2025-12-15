@@ -16,22 +16,22 @@ using Newtonsoft.Json;
 namespace OpenHolidaysApi.Model
 {
     /// <summary>
-    /// Representation of a subdivision reference
+    /// Representation of a holiday group reference
     /// </summary>
     [DataContract]
-        public partial class SubdivisionReference :  IEquatable<SubdivisionReference>, IValidatableObject
+        public partial class GroupReference :  IEquatable<GroupReference>, IValidatableObject
     {
         /// <summary>
-        /// Initializes a new instance of the <see cref="SubdivisionReference" /> class.
+        /// Initializes a new instance of the <see cref="GroupReference" /> class.
         /// </summary>
-        /// <param name="code">Subdivision code (required).</param>
+        /// <param name="code">Group code (required).</param>
         /// <param name="shortName">Short name for display (required).</param>
-        public SubdivisionReference(string code = default(string), string shortName = default(string))
+        public GroupReference(string code = default(string), string shortName = default(string))
         {
             // to ensure "code" is required (not null)
             if (code == null)
             {
-                throw new InvalidDataException("code is a required property for SubdivisionReference and cannot be null");
+                throw new InvalidDataException("code is a required property for GroupReference and cannot be null");
             }
             else
             {
@@ -40,7 +40,7 @@ namespace OpenHolidaysApi.Model
             // to ensure "shortName" is required (not null)
             if (shortName == null)
             {
-                throw new InvalidDataException("shortName is a required property for SubdivisionReference and cannot be null");
+                throw new InvalidDataException("shortName is a required property for GroupReference and cannot be null");
             }
             else
             {
@@ -49,9 +49,9 @@ namespace OpenHolidaysApi.Model
         }
         
         /// <summary>
-        /// Subdivision code
+        /// Group code
         /// </summary>
-        /// <value>Subdivision code</value>
+        /// <value>Group code</value>
         [DataMember(Name="code", EmitDefaultValue=false)]
         public string Code { get; set; }
 
@@ -69,7 +69,7 @@ namespace OpenHolidaysApi.Model
         public override string ToString()
         {
             var sb = new StringBuilder();
-            sb.Append("class SubdivisionReference {\n");
+            sb.Append("class GroupReference {\n");
             sb.Append("  Code: ").Append(Code).Append("\n");
             sb.Append("  ShortName: ").Append(ShortName).Append("\n");
             sb.Append("}\n");
@@ -92,15 +92,15 @@ namespace OpenHolidaysApi.Model
         /// <returns>Boolean</returns>
         public override bool Equals(object input)
         {
-            return this.Equals(input as SubdivisionReference);
+            return this.Equals(input as GroupReference);
         }
 
         /// <summary>
-        /// Returns true if SubdivisionReference instances are equal
+        /// Returns true if GroupReference instances are equal
         /// </summary>
-        /// <param name="input">Instance of SubdivisionReference to be compared</param>
+        /// <param name="input">Instance of GroupReference to be compared</param>
         /// <returns>Boolean</returns>
-        public bool Equals(SubdivisionReference input)
+        public bool Equals(GroupReference input)
         {
             if (input == null)
                 return false;

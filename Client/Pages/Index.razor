@@ -2,6 +2,7 @@
 @using System.Globalization
 @using System.Text
 @using OpenHolidaysApi.Api
+@using OpenHolidaysApi.Model
 
 @inject IJSRuntime JSRuntime
 @inject NavigationManager NavigationManager
@@ -9,6 +10,7 @@
 @inject ContextMenuService ContextMenuService
 @inject TooltipService TooltipService
 @inject NotificationService NotificationService
+@inject Urlaubsplaner.Client.Services.ExportService ExportService
 @inject Microsoft.Extensions.Localization.IStringLocalizer<Index> L
 
 <PageTitle>Urlaubsplaner</PageTitle>
@@ -20,7 +22,7 @@
             <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="20px" Wrap="FlexWrap.Wrap" AlignItems="AlignItems.Start">
                 <RadzenStack AlignItems="AlignItems.Center">
                     <RadzenText Text="Bundesländer (Deutschland)" TextStyle="TextStyle.H6"></RadzenText>
-                    <RadzenDropDown @bind-Value="_selectedSubdivisions" Data="_subdivisions" Change="GetAllMarkings" TextProperty="@nameof(Subdivision.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Bundesländer auswählen" Style="width: 250px;" />
+                    <RadzenDropDown @bind-Value="_selectedSubdivisions" Data="_filteredSubdivisions" LoadData="OnSubdivisionLoadData" AllowFiltering="true" Change="GetAllMarkings" TextProperty="@nameof(Subdivision.Name)" Multiple="true" Chips="true" AllowClear="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Bundesländer auswählen (z.B. NRW)" Style="width: 250px;" />
                 </RadzenStack>
 
                 <RadzenStack AlignItems="AlignItems.Center" Gap="0.5rem">
@@ -41,12 +43,16 @@
 
                 <RadzenStack AlignItems="AlignItems.Center">
                     <RadzenText Text="Zusätzliche Feiertage" TextStyle="TextStyle.H6"></RadzenText>
-                    <RadzenDropDown @bind-Value="_selectedPublicHolidayCountries" Data="_additionalCountries" Change="GetAllMarkings" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Länder auswählen" Style="width: 250px;" />
+                    <RadzenDropDown @bind-Value="_selectedPublicHolidayCountries" Data="_filteredAdditionalCountries" LoadData="OnCountryLoadData" AllowFiltering="true" Change="GetAllMarkings" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Länder auswählen" Style="width: 250px;" />
                 </RadzenStack>
 
                 <RadzenStack AlignItems="AlignItems.Center">
                     <RadzenText Text="Zusätzliche Ferien" TextStyle="TextStyle.H6"></RadzenText>
-                    <RadzenDropDown @bind-Value="_selectedSchoolHolidayCountries" Data="_additionalCountries" Change="GetAllMarkings" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Länder auswählen" Style="width: 250px;" />
+                    <RadzenDropDown @bind-Value="_selectedSchoolHolidayCountries" Data="_filteredAdditionalCountries" LoadData="OnCountryLoadData" AllowFiltering="true" Change="OnSelectedSchoolHolidayCountriesChanged" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Länder auswählen" Style="width: 250px;" />
+                    @if (_holidayGroups != null && _holidayGroups.Any())
+                    {
+                        <RadzenDropDown @bind-Value="_selectedHolidayGroupCode" Data="_holidayGroups" Change="GetAllMarkings" TextProperty="Name.First().Text" ValueProperty="Code" Placeholder="Region/Zone wählen" AllowClear="true" Style="width: 250px; margin-top: 5px;" />
+                    }
                 </RadzenStack>
             </RadzenStack>
             <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="20px" Wrap="FlexWrap.Wrap" AlignItems="AlignItems.Center">
@@ -72,6 +78,15 @@
                             <RadzenSplitButtonItem Text="Vollständige Neuplanung (überschreibt Auswahl)" Icon="autorenew" Value="overwrite" />
                             <RadzenSplitButtonItem Text="Bestehende Auswahl erweitern" Icon="add" Value="extend" />
                             <RadzenSplitButtonItem Text="Restliches Jahr planen" Icon="clock_arrow_down" Value="rest_of_year" />
+                        </ChildContent>
+                    </RadzenSplitButton>
+                    <RadzenSplitButton AlwaysOpenPopup="true" Text="Exportieren" Icon="file_download" ButtonStyle="ButtonStyle.Secondary" Click="@(args => Export(args))">
+                        <ChildContent>
+                            <RadzenSplitButtonItem Text="Kalender (.ics)" Icon="calendar_today" Value="ics" />
+                            <RadzenSplitButtonItem Text="CSV" Icon="grid_on" Value="csv" />
+                            <RadzenSplitButtonItem Text="JSON" Icon="data_object" Value="json" />
+                            <RadzenSplitButtonItem Text="In Zwischenablage (Text)" Icon="content_copy" Value="clipboard" />
+                            <RadzenSplitButtonItem Text="Drucken / PDF" Icon="print" Value="print" />
                         </ChildContent>
                     </RadzenSplitButton>
                     <RadzenButton Text="Planung zurücksetzen" Icon="delete_sweep" ButtonStyle="ButtonStyle.Light" Click="ClearAllSelections" />
@@ -104,7 +119,8 @@
         PublicHoliday,
         SchoolHoliday,
         Selected,
-        BridgeDay
+        BridgeDay,
+        Gleittag
     }
 
     //Idea: save button to save settings to cookies
@@ -114,10 +130,18 @@
     RadzenYearView yearView;
 
     IEnumerable<Country> _additionalCountries;
+    IEnumerable<Country> _filteredAdditionalCountries; // For search
+    List<Country> _allAdditionalCountries; // Full list
+
     IEnumerable<Country> _selectedPublicHolidayCountries;
     IEnumerable<Country> _selectedSchoolHolidayCountries;
 
+    IEnumerable<GroupResponse> _holidayGroups;
+    string _selectedHolidayGroupCode;
+
     IEnumerable<Subdivision> _subdivisions;
+    IEnumerable<Subdivision> _filteredSubdivisions; // For search
+    List<Subdivision> _allSubdivisions; // Full list
     IEnumerable<Subdivision> _selectedSubdivisions;
 
     bool _showPublicHolidays = true;
@@ -132,13 +156,116 @@
 
     readonly List<Marking> _markings = [];
     readonly List<Marking> _selectedSlots = [];
+    readonly List<Marking> _gleittage = [];
+
+    static readonly Dictionary<string, string[]> SubdivisionAbbreviations = new()
+    {
+        { "BW", ["Baden-Württemberg", "Baden Wuerttemberg"] },
+        { "BY", ["Bayern", "Bavaria"] },
+        { "BE", ["Berlin"] },
+        { "BB", ["Brandenburg"] },
+        { "HB", ["Bremen", "Hansestadt Bremen"] },
+        { "HH", ["Hamburg", "Hansestadt Hamburg"] },
+        { "HE", ["Hessen", "Hesse"] },
+        { "MV", ["Mecklenburg-Vorpommern", "MeckPomm", "MVP"] },
+        { "NI", ["Niedersachsen", "Lower Saxony"] },
+        { "NW", ["Nordrhein-Westfalen", "NRW", "North Rhine-Westphalia"] },
+        { "RP", ["Rheinland-Pfalz", "RLP", "Rhineland-Palatinate"] },
+        { "SL", ["Saarland"] },
+        { "SN", ["Sachsen", "Saxony"] },
+        { "ST", ["Sachsen-Anhalt", "Saxony-Anhalt"] },
+        { "SH", ["Schleswig-Holstein", "S-H"] },
+        { "TH", ["Thüringen", "Thuringia"] }
+    };
+
+    static readonly Dictionary<string, string[]> CountryMappings = new()
+    {
+        { "AT", ["Österreich", "Austria"] },
+        { "CH", ["Schweiz", "Switzerland", "Confoederatio Helvetica"] },
+        { "FR", ["Frankreich", "France"] },
+        { "PL", ["Polen", "Poland"] },
+        { "CZ", ["Tschechien", "Czechia", "Czech Republic"] },
+        { "DK", ["Dänemark", "Czechia"] },
+        { "NL", ["Niederlande", "Netherlands", "Holland"] },
+        { "BE", ["Belgien", "Belgium"] },
+        { "LU", ["Luxemburg", "Luxembourg"] }
+    };
 
     /// <inheritdoc />
     protected override async Task OnInitializedAsync()
     {
-        var allCountries = (await new RegionalApi().CountriesGetAsync("DE")).Select(country => new Country { Name = country.Name.First().Text, IsoCode = country.IsoCode }).ToList();
-        _additionalCountries = allCountries.Where(c => c.IsoCode != "DE").ToList();
-        _subdivisions = (await new RegionalApi().SubdivisionsGetAsync("DE", "DE")).Select(sub => new Subdivision { Name = sub.Name.First().Text, Category = sub.Category.First().Text, Code = sub.Code, IsoCode = sub.IsoCode }).ToList();
+        // Fetch Countries (German)
+        var allCountriesApi = await new RegionalApi().CountriesGetAsync("DE");
+        _allAdditionalCountries = allCountriesApi.Select(country => 
+        {
+            var searchTerms = new List<string> { country.Name.First().Text, country.IsoCode };
+            if (CountryMappings.TryGetValue(country.IsoCode, out var aliases))
+            {
+                searchTerms.AddRange(aliases);
+            }
+            return new Country 
+            { 
+                Name = country.Name.First().Text, 
+                IsoCode = country.IsoCode,
+                SearchKeywords = string.Join(" ", searchTerms).ToLower()
+            };
+        }).Where(c => c.IsoCode != "DE").ToList();
+        
+        _additionalCountries = _allAdditionalCountries;
+        _filteredAdditionalCountries = _allAdditionalCountries;
+
+        // Fetch Subdivisions (German)
+        var subdivisionsApi = await new RegionalApi().SubdivisionsGetAsync("DE", "DE");
+        _allSubdivisions = subdivisionsApi.Select(sub => 
+        {
+            var codePart = sub.Code.Split('-').LastOrDefault();
+            var searchTerms = new List<string> { sub.Name.First().Text, sub.Code, codePart };
+            
+            if (codePart != null && SubdivisionAbbreviations.TryGetValue(codePart, out var aliases))
+            {
+                searchTerms.AddRange(aliases);
+            }
+
+            return new Subdivision 
+            { 
+                Name = sub.Name.First().Text, 
+                Category = sub.Category.First().Text, 
+                Code = sub.Code, 
+                IsoCode = sub.IsoCode,
+                SearchKeywords = string.Join(" ", searchTerms).ToLower()
+            };
+        }).ToList();
+
+        _subdivisions = _allSubdivisions;
+        _filteredSubdivisions = _allSubdivisions;
+    }
+
+    void OnSubdivisionLoadData(LoadDataArgs args)
+    {
+        if (string.IsNullOrEmpty(args.Filter))
+        {
+            _filteredSubdivisions = _allSubdivisions;
+        }
+        else
+        {
+            var term = args.Filter.ToLower();
+            _filteredSubdivisions = _allSubdivisions.Where(s => s.SearchKeywords.Contains(term));
+        }
+        InvokeAsync(StateHasChanged);
+    }
+
+    void OnCountryLoadData(LoadDataArgs args)
+    {
+        if (string.IsNullOrEmpty(args.Filter))
+        {
+            _filteredAdditionalCountries = _allAdditionalCountries;
+        }
+        else
+        {
+            var term = args.Filter.ToLower();
+            _filteredAdditionalCountries = _allAdditionalCountries.Where(c => c.SearchKeywords.Contains(term));
+        }
+        InvokeAsync(StateHasChanged);
     }
 
     /// <inheritdoc />
@@ -152,6 +279,27 @@
         }
 
         UpdateAllCalculations();
+    }
+
+    private async Task OnSelectedSchoolHolidayCountriesChanged(object value)
+    {
+        _selectedHolidayGroupCode = null;
+        _holidayGroups = null;
+
+        var selected = _selectedSchoolHolidayCountries;
+        if (selected != null && selected.Count() == 1)
+        {
+            var country = selected.First();
+            try {
+                // Fetch groups for the selected country (e.g. Zones in France)
+                var groups = await new RegionalApi().GroupsGetAsync(country.IsoCode, "DE");
+                if (groups.Any())
+                {
+                    _holidayGroups = groups;
+                }
+            } catch { /* ignore if no groups or error */ }
+        }
+        await GetAllMarkings();
     }
 
     private async Task GetAllMarkings()
@@ -247,7 +395,14 @@
         {
             foreach (var country in _selectedSchoolHolidayCountries)
             {
-                var schoolHolidays = await new HolidaysApi().SchoolHolidaysGetAsync(country.IsoCode, scheduler.SelectedView.StartDate, scheduler.SelectedView.EndDate, "DE");
+                string groupCode = null;
+                // Only apply group filter if exactly one country is selected (to avoid applying Zone A of France to Austria)
+                if (_selectedSchoolHolidayCountries.Count() == 1 && !string.IsNullOrEmpty(_selectedHolidayGroupCode))
+                {
+                    groupCode = _selectedHolidayGroupCode;
+                }
+
+                var schoolHolidays = await new HolidaysApi().SchoolHolidaysGetAsync(country.IsoCode, scheduler.SelectedView.StartDate, scheduler.SelectedView.EndDate, "DE", null, groupCode);
                 _markings.AddRange(
                     from holiday in schoolHolidays
                     select new Marking
@@ -473,6 +628,15 @@
             }
         }
 
+        // Gleittag cross (Blue)
+        if (_gleittage.Any(x => x.Start.Date == date))
+        {
+             string strokeColor = "blue";
+             string svgCross = $"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='{strokeColor}' stroke-width='1'/><line x1='0' y1='10' x2='10' y2='0' stroke='{strokeColor}' stroke-width='1'/></svg>";
+             var base64Svg = Convert.ToBase64String(Encoding.UTF8.GetBytes(svgCross));
+             bgImages.Add($"url('data:image/svg+xml;base64,{base64Svg}')");
+        }
+
         // Build final style attribute
         args.Attributes["style"] = bgColor + additionalStyles;
         if (bgImages.Any())
@@ -485,24 +649,45 @@
     {
         args.PreventDefault();
 
+        // 1. If it's a Gleittag, remove it (Cycle: Gleittag -> None)
+        var existingGleittag = _gleittage.FirstOrDefault(m => m.Start.Date == args.Start.Date);
+        if (existingGleittag != null)
+        {
+            _gleittage.Remove(existingGleittag);
+            UpdateAllCalculations();
+            await scheduler.Reload();
+            return;
+        }
+
+        // 2. If it's a Selection, convert to Gleittag (Cycle: Selected -> Gleittag)
+        var existingSelection = _selectedSlots.FirstOrDefault(m => m.Start.Date == args.Start.Date);
+        if (existingSelection != null)
+        {
+            _selectedSlots.Remove(existingSelection);
+            
+            // Add as Gleittag
+            _gleittage.Add(new Marking { 
+                Start = args.Start, 
+                End = args.Start.AddDays(1), 
+                Name = "Gleittag", 
+                Type = MarkingType.Gleittag 
+            });
+            
+            UpdateAllCalculations();
+            await scheduler.Reload();
+            return;
+        }
+
+        // 3. If neither, add as Selection (Cycle: None -> Selected)
         var mark = new Marking
-            {
-                Start = args.Start,
-                End = args.Start.AddDays(1), // Correctly handle the end date for single-day selection
-                Name = "Selected",
-                Type = MarkingType.Selected
-            };
-
-        var existingMark = _selectedSlots.FirstOrDefault(m => m.Start.Date == args.Start.Date);
-
-        if (existingMark != null)
         {
-            _selectedSlots.Remove(existingMark);
-        }
-        else
-        {
-            _selectedSlots.Add(mark);
-        }
+            Start = args.Start,
+            End = args.Start.AddDays(1), // Correctly handle the end date for single-day selection
+            Name = "Selected",
+            Type = MarkingType.Selected
+        };
+        _selectedSlots.Add(mark);
+
         UpdateAllCalculations();
         await scheduler.Reload();
     }
@@ -536,6 +721,7 @@
     {
         public string Name { get; init; }
         public string IsoCode { get; init; }
+        public string SearchKeywords { get; init; }
     }
 
     class Subdivision
@@ -544,6 +730,7 @@
         public string Category { get; init; }
         public string Code { get; init; }
         public string IsoCode { get; init; }
+        public string SearchKeywords { get; init; }
     }
 
     class Marking
@@ -616,25 +803,54 @@
             return;
         }
 
+        // 1. Get Preferences
+        var preferences = await DialogService.OpenAsync<PlanningPreferencesDialog>("Planungs-Einstellungen", null,
+            new DialogOptions { Width = "500px", Height = "auto", Resizable = false, Draggable = true });
+
+        if (preferences == null) return; // User cancelled
+
+        var prefs = (PlanningPreferencesDialog.PlanningPreferences)preferences;
+
+        // 2. Prepare Data
         var year = FindMiddleDateTime(scheduler.SelectedView.StartDate, scheduler.SelectedView.EndDate).Year;
         var startDate = planFromToday ? new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day) : new DateTime(year, 1, 1);
         var endDate = new DateTime(year, 12, 31);
 
-        var publicHolidaysResponse = await new HolidaysApi().PublicHolidaysGetAsync("DE", startDate, endDate, "DE");
-        var holidaysForStates = publicHolidaysResponse
+        var holidaysApi = new HolidaysApi();
+        var publicHolidaysResponse = await holidaysApi.PublicHolidaysGetAsync("DE", startDate, endDate, "DE");
+        
+        // Fetch school holidays if needed for preferences
+        List<HolidayResponse> schoolHolidays = [];
+        if (prefs.PreferSchoolHolidays || prefs.AvoidSchoolHolidays)
+        {
+             schoolHolidays = await holidaysApi.SchoolHolidaysGetAsync("DE", startDate, endDate, "DE");
+        }
+
+        var relevantPublicHolidays = publicHolidaysResponse
             .Where(p => p.Nationwide == true || (p.Subdivisions != null && p.Subdivisions.Any(s => _selectedSubdivisions.Any(sub => sub.Code == s.Code))))
             .SelectMany(h => Enumerable.Range(0, (h.EndDate.Value.Date - h.StartDate.Value.Date).Days + 1).Select(offset => h.StartDate.Value.Date.AddDays(offset)))
             .ToHashSet();
 
+        // Map school holidays to a set of dates for easier checking
+        var relevantSchoolHolidayDates = new HashSet<DateTime>();
+        if (schoolHolidays.Any())
+        {
+             relevantSchoolHolidayDates = schoolHolidays
+                .Where(sh => sh.Subdivisions != null && sh.Subdivisions.Any(s => _selectedSubdivisions.Any(sub => sub.Code == s.Code)))
+                .SelectMany(h => Enumerable.Range(0, (h.EndDate.Value.Date - h.StartDate.Value.Date).Days + 1).Select(offset => h.StartDate.Value.Date.AddDays(offset)))
+                .ToHashSet();
+        }
+
         var nonWorkDays = new HashSet<DateTime>();
         for (var date = startDate; date <= endDate; date = date.AddDays(1))
         {
-            if (date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday || holidaysForStates.Contains(date))
+            if (date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday || relevantPublicHolidays.Contains(date))
             {
                 nonWorkDays.Add(date);
             }
         }
 
+        // 3. Find Opportunities
         var opportunities = new List<BridgeOpportunity>();
         var currentDate = startDate;
         while (currentDate <= endDate)
@@ -644,6 +860,7 @@
                 var periodStart = currentDate;
                 var beforePeriod = periodStart.AddDays(-1);
 
+                // Check for valid block start (either start of year or preceded by non-work day)
                 if (nonWorkDays.Contains(beforePeriod) || periodStart == startDate)
                 {
                     var workDays = new List<DateTime>();
@@ -655,11 +872,13 @@
                     }
 
                     var afterPeriod = tempDate;
+                    // Valid block end
                     if (nonWorkDays.Contains(afterPeriod) || afterPeriod > endDate)
                     {
+                        // Calculate free days gained
                         var freeDaysBefore = 0;
                         var checkDateBefore = beforePeriod;
-                        while (nonWorkDays.Contains(checkDateBefore))
+                        while (nonWorkDays.Contains(checkDateBefore) && checkDateBefore >= startDate)
                         {
                             freeDaysBefore++;
                             checkDateBefore = checkDateBefore.AddDays(-1);
@@ -667,20 +886,72 @@
 
                         var freeDaysAfter = 0;
                         var checkDateAfter = afterPeriod;
-                        while (nonWorkDays.Contains(checkDateAfter))
+                        while (nonWorkDays.Contains(checkDateAfter) && checkDateAfter <= endDate)
                         {
                             freeDaysAfter++;
                             checkDateAfter = checkDateAfter.AddDays(1);
                         }
 
                         decimal cost = workDays.Sum(day => _halfDaysChristmas && IsBetweenChristmasAndNewYear(day) ? 0.5m : 1.0m);
+                        
+                        // --- Scoring Logic ---
+                        double score = 0;
+                        
+                        // Base Efficiency
+                        double efficiency = cost > 0 ? (workDays.Count + freeDaysBefore + freeDaysAfter) / (double)cost : 0;
+                        score = efficiency * 10; // Base weight
 
-                        opportunities.Add(new BridgeOpportunity
+                        // Filter by Duration
+                        if (workDays.Count < prefs.MinDaysPerBlock) score = 0;
+                        if (prefs.MaxDaysPerBlock.HasValue && workDays.Count > prefs.MaxDaysPerBlock.Value) score = 0;
+
+                        // School Holiday Preference
+                        if (score > 0 && (prefs.PreferSchoolHolidays || prefs.AvoidSchoolHolidays))
                         {
-                            VacationDays = workDays,
-                            FreeDaysGained = workDays.Count + freeDaysBefore + freeDaysAfter,
-                            Cost = cost
-                        });
+                            bool overlapsWithSchool = workDays.Any(d => relevantSchoolHolidayDates.Contains(d));
+                            if (prefs.PreferSchoolHolidays && overlapsWithSchool) score *= 1.5; // Boost
+                            if (prefs.AvoidSchoolHolidays && overlapsWithSchool) score *= 0.5; // Penalize
+                        }
+
+                        // Period Preferences
+                        bool currentBlockSatisfiesMustHave = false; // Track for current block
+                        foreach (var periodPref in prefs.PeriodPreferences)
+                        {
+                            bool monthsMatch = workDays.Any(d => periodPref.Months.Contains(d.Month));
+                            int blockDuration = workDays.Count; // This is the total number of workdays in the block
+
+                            if (monthsMatch && blockDuration >= periodPref.MinDuration)
+                            {
+                                if (periodPref.Type == PlanningPreferencesDialog.PreferenceType.MustHave)
+                                {
+                                    score += 10000; // Strong boost for mandatory periods
+                                    currentBlockSatisfiesMustHave = true;
+                                }
+                                else if (periodPref.Type == PlanningPreferencesDialog.PreferenceType.NiceToHave)
+                                {
+                                    score *= 1.5; // Boost for desired periods
+                                }
+                            }
+                        }
+                        
+                        // Bridge Day Maximization (Efficiency focus)
+                        if (prefs.PreferBridgeDays)
+                        {
+                            // Further boost highly efficient blocks
+                            if (efficiency >= 2.0) score *= 1.2;
+                        }
+
+                        if (score > 0)
+                        {
+                            opportunities.Add(new BridgeOpportunity
+                            {
+                                VacationDays = workDays,
+                                FreeDaysGained = workDays.Count + freeDaysBefore + freeDaysAfter,
+                                Cost = cost,
+                                Score = score,
+                                HasSatisfiedMustHave = currentBlockSatisfiesMustHave
+                            });
+                        }
                     }
                     currentDate = tempDate;
                     continue;
@@ -689,11 +960,17 @@
             currentDate = currentDate.AddDays(1);
         }
 
+        // 4. Select Best Opportunities
         var sortedOpportunities = opportunities
             .Where(o => o.VacationDays.Any())
-            .OrderByDescending(o => o.Efficiency)
-            .ThenBy(o => o.Cost)
+            .OrderByDescending(o => o.Score)
             .ToList();
+
+        // Filter out opportunities that don't satisfy any MustHave preference if MustHave preferences exist
+        if (prefs.PeriodPreferences.Any(p => p.Type == PlanningPreferencesDialog.PreferenceType.MustHave))
+        {
+            sortedOpportunities = sortedOpportunities.Where(o => o.HasSatisfiedMustHave).ToList();
+        }
 
         if (!overwrite)
         {
@@ -704,15 +981,21 @@
         var selectedOpportunities = new List<BridgeOpportunity>();
         decimal remainingVacationDays = vacationDaysToPlan;
 
-        foreach (var op in sortedOpportunities.Where(op => op.Cost <= remainingVacationDays))
+        foreach (var op in sortedOpportunities)
         {
-            selectedOpportunities.Add(op);
-            remainingVacationDays -= op.Cost;
+            if (op.Cost <= remainingVacationDays)
+            {
+                selectedOpportunities.Add(op);
+                remainingVacationDays -= op.Cost;
+            }
         }
 
+        // 5. Present Results
         if (selectedOpportunities.Any())
         {
-            var suggestionBlocks = selectedOpportunities.Select(op => new VacationSuggestionBlock
+            var suggestionBlocks = selectedOpportunities
+                .OrderBy(op => op.VacationDays.First())
+                .Select(op => new VacationSuggestionBlock
             {
                 VacationDays = op.VacationDays,
                 FreeDaysGained = op.FreeDaysGained
@@ -743,16 +1026,75 @@
         }
         else
         {
-            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Kein Vorschlag", Detail = "Es konnten keine Brückentage für eine optimale Planung gefunden werden.", Duration = 4000 });
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Kein Vorschlag", Detail = "Es konnten keine passenden Zeiträume für die gewählten Kriterien gefunden werden.", Duration = 4000 });
         }
     }
 
     async Task ClearAllSelections()
     {
         _selectedSlots.Clear();
+        _gleittage.Clear();
         UpdateAllCalculations();
         await scheduler.Reload();
-        NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Erfolgreich", Detail = "Alle geplanten Urlaubstage wurden entfernt.", Duration = 4000 });
+        NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Info, Summary = "Erfolgreich", Detail = "Alle geplanten Urlaubstage und Gleittage wurden entfernt.", Duration = 4000 });
+    }
+
+    async Task Export(RadzenSplitButtonItem args)
+    {
+        var slots = _selectedSlots.OrderBy(s => s.Start).ToList();
+        if (!slots.Any())
+        {
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Kein Urlaub geplant", Detail = "Bitte planen Sie zuerst Urlaubstage." });
+            return;
+        }
+
+        // Combine adjacent days into ranges
+        var ranges = new List<(DateTime Start, DateTime End)>();
+        if (slots.Any())
+        {
+            var currentStart = slots[0].Start.Date;
+            var currentEnd = slots[0].Start.Date; 
+
+            for (int i = 1; i < slots.Count; i++)
+            {
+                var nextDate = slots[i].Start.Date;
+                if (nextDate == currentEnd.AddDays(1))
+                {
+                    currentEnd = nextDate;
+                }
+                else
+                {
+                    ranges.Add((currentStart, currentEnd));
+                    currentStart = nextDate;
+                    currentEnd = nextDate;
+                }
+            }
+            ranges.Add((currentStart, currentEnd));
+        }
+
+        switch (args.Value)
+        {
+            case "ics":
+                var ics = ExportService.GenerateIcs(ranges);
+                await ExportService.DownloadFile("Urlaub.ics", "text/calendar", ics);
+                break;
+            case "csv":
+                var csv = ExportService.GenerateCsv(ranges);
+                await ExportService.DownloadFile("Urlaub.csv", "text/csv", csv);
+                break;
+            case "json":
+                var json = ExportService.GenerateJson(ranges);
+                await ExportService.DownloadFile("Urlaub.json", "application/json", json);
+                break;
+            case "clipboard":
+                var text = ExportService.GenerateSummaryText(ranges);
+                await ExportService.CopyToClipboard(text);
+                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Kopiert", Detail = "Urlaubsdaten in Zwischenablage kopiert." });
+                break;
+            case "print":
+                await JSRuntime.InvokeVoidAsync("print");
+                break;
+        }
     }
 
     private void UpdateRemainingWorkDays()
@@ -776,17 +1118,18 @@
             bool isWeekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
             bool isPublicHoliday = publicHolidayDates.Contains(date);
             bool isPlannedVacation = _selectedSlots.Any(s => s.Start.Date == date.Date);
+            bool isGleittag = _gleittage.Any(g => g.Start.Date == date.Date);
 
             if (_countWeekendsAndHolidays)
             {
-                if (!isPlannedVacation)
+                if (!isPlannedVacation && !isGleittag)
                 {
                     _remainingWorkDays++;
                 }
             }
             else
             {
-                if (!isWeekend && !isPublicHoliday && !isPlannedVacation)
+                if (!isWeekend && !isPublicHoliday && !isPlannedVacation && !isGleittag)
                 {
                     _remainingWorkDays++;
                 }
@@ -794,18 +1137,38 @@
         }
     }
 
-    public class VacationSuggestionBlock
-    {
-        public List<DateTime> VacationDays { get; set; }
-        public int FreeDaysGained { get; set; }
+        public class VacationSuggestionBlock
+
+        {
+
+            public List<DateTime> VacationDays { get; set; }
+
+            public int FreeDaysGained { get; set; }
+
+        }
+
+    
+
+        class BridgeOpportunity
+
+        {
+
+            public List<DateTime> VacationDays { get; set; } = [];
+
+            public int FreeDaysGained { get; set; }
+
+            public decimal Cost { get; set; }
+
+            public double Efficiency => Cost > 0 ? FreeDaysGained / (double)Cost : 0;
+
+            public double Score { get; set; }
+
+            public bool HasSatisfiedMustHave { get; set; } = false;
+
+        }
+
+    
+
     }
 
-    class BridgeOpportunity
-    {
-        public List<DateTime> VacationDays { get; set; } = [];
-        public int FreeDaysGained { get; set; }
-        public decimal Cost { get; set; }
-        public double Efficiency => Cost > 0 ? FreeDaysGained / (double)Cost : 0;
-    }
-
-}
+    
