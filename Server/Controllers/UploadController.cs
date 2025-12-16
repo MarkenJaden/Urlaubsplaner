@@ -17,12 +17,18 @@ namespace Urlaubsplaner.Server.Controllers
 
         // Single file upload
         [HttpPost("upload/single")]
-        public IActionResult Single(IFormFile file)
+        public async Task<IActionResult> Single(IFormFile file)
         {
             try
             {
-                // Put your code here
-                return StatusCode(200);
+                if (file == null || file.Length == 0)
+                    return BadRequest("File is empty");
+
+                using var stream = new StreamReader(file.OpenReadStream());
+                var content = await stream.ReadToEndAsync();
+                
+                // Return the content directly
+                return Ok(content);
             }
             catch (Exception ex)
             {

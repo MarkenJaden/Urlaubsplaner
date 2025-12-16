@@ -1,5 +1,7 @@
 @using Radzen
 @using Radzen.Blazor
+@using Urlaubsplaner.Client.Models
+@using System.Linq
 
 <RadzenStack Gap="1.5rem">
     <RadzenText TextStyle="TextStyle.H6">Wie soll Ihr perfekter Urlaub aussehen?</RadzenText>
@@ -10,13 +12,17 @@
                 <RadzenStack Gap="1rem" class="rz-p-2">
                     <RadzenFieldset Text="Allgemeine Präferenzen">
                         <RadzenStack Gap="1rem">
-                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
-                                <RadzenCheckBox @bind-Value="Preferences.PreferBridgeDays" Name="PreferBridgeDays" />
-                                <RadzenLabel Text="Brückentage maximieren (Effizienz vor Dauer)" Component="PreferBridgeDays" />
-                            </RadzenStack>
+                                                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                                                            <RadzenCheckBox @bind-Value="Preferences.PreferBridgeDays" Name="PreferBridgeDays" />
+                                                            <RadzenLabel Text="Brückentage nutzen" Component="PreferBridgeDays" />
+                                                        </RadzenStack>
                             
-                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
-                                <RadzenCheckBox @bind-Value="Preferences.PreferSchoolHolidays" Name="PreferSchoolHolidays" />
+                                                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                                                            <RadzenCheckBox @bind-Value="Preferences.OptimizeForEfficiency" Name="OptimizeForEfficiency" />
+                                                            <RadzenLabel Text="Maximale Effizienz (Nur die allerbesten Brückentage)" Component="OptimizeForEfficiency" />
+                                                        </RadzenStack>
+                                                        
+                                                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">                                <RadzenCheckBox @bind-Value="Preferences.PreferSchoolHolidays" Name="PreferSchoolHolidays" />
                                 <RadzenLabel Text="Schulferien bevorzugen (z.B. für Familien)" Component="PreferSchoolHolidays" />
                             </RadzenStack>
 
@@ -24,7 +30,7 @@
                                 <RadzenCheckBox @bind-Value="Preferences.AvoidSchoolHolidays" Name="AvoidSchoolHolidays" />
                                 <RadzenLabel Text="Außerhalb der Schulferien (günstiger/ruhiger)" Component="AvoidSchoolHolidays" />
                             </RadzenStack>
-                            
+                                
                             @if (Preferences.AvoidSchoolHolidays)
                             {
                                 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" Style="margin-left: 2rem;">
@@ -125,7 +131,7 @@
 @code {
     [Inject] DialogService DialogService { get; set; }
 
-    public PlanningPreferences Preferences { get; set; } = new PlanningPreferences();
+    public PlanningPreferences Preferences { get; set; } = new();
 
     // New Period Input Fields
     PreferenceType _newPeriodType = PreferenceType.NiceToHave;
@@ -155,31 +161,5 @@
     void RemovePeriodPreference(PeriodPreference pref)
     {
         Preferences.PeriodPreferences.Remove(pref);
-    }
-
-    public class PlanningPreferences
-    {
-        public bool PreferBridgeDays { get; set; } = true;
-        public bool PreferSchoolHolidays { get; set; }
-        public bool AvoidSchoolHolidays { get; set; }
-        public bool AvoidAllStatesSchoolHolidays { get; set; }
-        public bool DistributeEvenly { get; set; }
-        public int MinDaysPerBlock { get; set; } = 1;
-        public int? MaxDaysPerBlock { get; set; }
-        
-        public List<PeriodPreference> PeriodPreferences { get; set; } = new();
-    }
-
-    public class PeriodPreference
-    {
-        public PreferenceType Type { get; set; }
-        public List<int> Months { get; set; } = new();
-        public int MinDuration { get; set; }
-    }
-
-    public enum PreferenceType
-    {
-        MustHave,
-        NiceToHave
     }
 }

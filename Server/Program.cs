@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.HttpOverrides;
 using Radzen;
 using Urlaubsplaner.Server.Components;
+using Blazored.LocalStorage;
+using Blazored.SessionStorage;
 
 var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
@@ -15,6 +17,11 @@ builder.Services.AddRadzenCookieThemeService(options =>
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<Urlaubsplaner.Client.Services.ExportService>();
 builder.Services.AddLocalization();
+builder.Services.AddBlazoredLocalStorage();
+builder.Services.AddBlazoredSessionStorage();
+builder.Services.AddScoped<Urlaubsplaner.Client.Services.StateService>();
+builder.Services.AddScoped<Urlaubsplaner.Client.Services.HolidayService>();
+builder.Services.AddScoped<Urlaubsplaner.Client.Services.VacationCalculationService>();
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {

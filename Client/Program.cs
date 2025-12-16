@@ -4,6 +4,8 @@ using Radzen;
 using Urlaubsplaner.Client;
 using Microsoft.JSInterop;
 using System.Globalization;
+using Blazored.LocalStorage;
+using Blazored.SessionStorage;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.Services.AddRadzenComponents();
@@ -15,6 +17,11 @@ builder.Services.AddRadzenCookieThemeService(options =>
 builder.Services.AddTransient(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
 builder.Services.AddScoped<Urlaubsplaner.Client.Services.ExportService>();
 builder.Services.AddLocalization();
+builder.Services.AddBlazoredLocalStorage();
+builder.Services.AddBlazoredSessionStorage();
+builder.Services.AddScoped<Urlaubsplaner.Client.Services.StateService>();
+builder.Services.AddScoped<Urlaubsplaner.Client.Services.HolidayService>();
+builder.Services.AddScoped<Urlaubsplaner.Client.Services.VacationCalculationService>();
 var host = builder.Build();
 var jsRuntime = host.Services.GetRequiredService<Microsoft.JSInterop.IJSRuntime>();
 var culture = await jsRuntime.InvokeAsync<string>("Radzen.getCulture");

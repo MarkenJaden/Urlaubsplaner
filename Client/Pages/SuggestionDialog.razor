@@ -1,5 +1,6 @@
 @inject Radzen.DialogService DialogService
 @inject IJSRuntime JSRuntime
+@using Urlaubsplaner.Client.Models // Add this line
 
 <RadzenStack Gap="1rem">
     <RadzenText TextStyle="TextStyle.H5" TagName="TagName.H2">Optimaler Urlaubsplan</RadzenText>
@@ -41,7 +42,7 @@
 
 @code {
     [Parameter]
-    public List<Index.VacationSuggestionBlock> SuggestionBlocks { get; set; } = [];
+    public List<VacationSuggestionBlock> SuggestionBlocks { get; set; } = [];
 
     private List<DateTime> AllSuggestedDays => SuggestionBlocks.SelectMany(b => b.VacationDays).ToList();
 
@@ -112,13 +113,5 @@
     void OnCloseClick()
     {
         DialogService.Close(false);
-    }
-
-    // Local class for rendering inside this dialog
-    class Marking
-    {
-        public DateTime Start { get; set; }
-        public DateTime End { get; set; }
-        public string Name { get; set; }
     }
 }

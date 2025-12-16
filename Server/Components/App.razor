@@ -48,6 +48,24 @@
             anchorElement.remove();
             URL.revokeObjectURL(url);
         }
+
+        window.setupSlotHover = (dotNetHelper) => {
+            document.addEventListener('mouseover', (e) => {
+                // Find closest slot
+                const slot = e.target.closest('.rz-slot');
+                if (slot) {
+                    const title = slot.getAttribute('title');
+                    // Invoke only if changed to avoid spam? No, Debounce handled by Blazor maybe?
+                    // We just send what we found.
+                    dotNetHelper.invokeMethodAsync('OnSlotHover', title || "");
+                } else {
+                    // Only clear if we moved OUT of a slot to something else? 
+                    // Or maybe don't spam empty strings.
+                    // Let's just send "" if not over a slot? No, that clears it too often.
+                    // We only want to detect hover over slots.
+                }
+            });
+        };
     </script>
     <script defer src="https://umami.urlaubsplaner.me/script.js" data-website-id="8af961da-2d2b-4cb2-9cb4-8e40fe7ef2d1"></script>
 </head>
