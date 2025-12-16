@@ -69,7 +69,7 @@
                     <RadzenText Text="@($"{(_totalVacationDays - _plannedDays)}")" Style="@(_totalVacationDays - _plannedDays < 0 ? "color: red;" : "")" />
                 </RadzenStack>
                 <RadzenStack AlignItems="AlignItems.Center">
-                    <RadzenText Text="Verbleibende Arbeitstage" TextStyle="TextStyle.H6"></RadzenText>
+                    <RadzenText Text="@($"Verbleibende Arbeitstage ({_year})")" TextStyle="TextStyle.H6"></RadzenText>
                     <RadzenText Text="@_remainingWorkDays.ToString()" />
                 </RadzenStack>
                 <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center">
@@ -832,13 +832,30 @@
             .ToHashSet();
 
         // Map school holidays to a set of dates for easier checking
-        var relevantSchoolHolidayDates = new HashSet<DateTime>();
+        var datesForPreference = new HashSet<DateTime>();
+        var datesForAvoidance = new HashSet<DateTime>();
+
         if (schoolHolidays.Any())
         {
-             relevantSchoolHolidayDates = schoolHolidays
+             // 1. For "Prefer" (always bound to selected subdivisions)
+             datesForPreference = schoolHolidays
                 .Where(sh => sh.Subdivisions != null && sh.Subdivisions.Any(s => _selectedSubdivisions.Any(sub => sub.Code == s.Code)))
                 .SelectMany(h => Enumerable.Range(0, (h.EndDate.Value.Date - h.StartDate.Value.Date).Days + 1).Select(offset => h.StartDate.Value.Date.AddDays(offset)))
                 .ToHashSet();
+
+             // 2. For "Avoid"
+             if (prefs.AvoidSchoolHolidays && prefs.AvoidAllStatesSchoolHolidays)
+             {
+                 // All states
+                 datesForAvoidance = schoolHolidays
+                    .SelectMany(h => Enumerable.Range(0, (h.EndDate.Value.Date - h.StartDate.Value.Date).Days + 1).Select(offset => h.StartDate.Value.Date.AddDays(offset)))
+                    .ToHashSet();
+             }
+             else
+             {
+                 // Selected states only
+                 datesForAvoidance = datesForPreference;
+             }
         }
 
         var nonWorkDays = new HashSet<DateTime>();
@@ -906,11 +923,19 @@
                         if (prefs.MaxDaysPerBlock.HasValue && workDays.Count > prefs.MaxDaysPerBlock.Value) score = 0;
 
                         // School Holiday Preference
-                        if (score > 0 && (prefs.PreferSchoolHolidays || prefs.AvoidSchoolHolidays))
+                        if (score > 0)
                         {
-                            bool overlapsWithSchool = workDays.Any(d => relevantSchoolHolidayDates.Contains(d));
-                            if (prefs.PreferSchoolHolidays && overlapsWithSchool) score *= 1.5; // Boost
-                            if (prefs.AvoidSchoolHolidays && overlapsWithSchool) score *= 0.5; // Penalize
+                            if (prefs.PreferSchoolHolidays)
+                            {
+                                bool overlaps = workDays.Any(d => datesForPreference.Contains(d));
+                                if (overlaps) score *= 1.5; // Boost
+                            }
+                            
+                            if (prefs.AvoidSchoolHolidays)
+                            {
+                                bool overlaps = workDays.Any(d => datesForAvoidance.Contains(d));
+                                if (overlaps) score *= 0.5; // Penalize
+                            }
                         }
 
                         // Period Preferences
@@ -960,7 +985,7 @@
             currentDate = currentDate.AddDays(1);
         }
 
-        // 4. Select Best Opportunities
+        // 4. Select Best Opportunities (Smart Portfolio Strategy)
         var sortedOpportunities = opportunities
             .Where(o => o.VacationDays.Any())
             .OrderByDescending(o => o.Score)
@@ -981,12 +1006,88 @@
         var selectedOpportunities = new List<BridgeOpportunity>();
         decimal remainingVacationDays = vacationDaysToPlan;
 
-        foreach (var op in sortedOpportunities)
+        var candidates = sortedOpportunities.ToList();
+
+        // Strategy Flags: Used to ensure a balanced portfolio of trips
+        bool hasLongVacation = false; // Aim for at least one block >= 10 days (2 weeks)
+        bool hasSummerVacation = false; // Aim for at least one block in Jun/Jul/Aug
+
+        while (candidates.Count > 0 && remainingVacationDays > 0)
         {
-            if (op.Cost <= remainingVacationDays)
+            // --- Dynamic Re-Scoring Step ---
+            // We recalculate scores in every iteration to react to what we have already picked.
+            foreach (var cand in candidates)
             {
-                selectedOpportunities.Add(op);
-                remainingVacationDays -= op.Cost;
+                cand.DynamicScore = cand.Score; // Start with the base efficiency/preference score
+
+                // 1. Portfolio Balance: Prioritize a "Main Vacation" (Long Trip) if missing
+                // Only boost if the user allows blocks this long
+                if (!hasLongVacation && (!prefs.MaxDaysPerBlock.HasValue || prefs.MaxDaysPerBlock.Value >= 10))
+                {
+                    // If this candidate offers a long trip (>= 8 work days usually means ~12-16 days total with weekends), boost it.
+                    if (cand.VacationDays.Count >= 8) 
+                    {
+                        cand.DynamicScore *= 1.35; // Significant boost (35%) to ensure we get a main holiday
+                    }
+                }
+
+                // 2. Seasonal Balance: Prioritize Summer if missing
+                // (Only applies if no specific "MustHave" period preferences are overriding this)
+                bool hasMustHaveConstraints = prefs.PeriodPreferences.Any(p => p.Type == PlanningPreferencesDialog.PreferenceType.MustHave);
+                if (!hasSummerVacation && !hasMustHaveConstraints)
+                {
+                    var midPoint = cand.VacationDays[cand.VacationDays.Count / 2];
+                    if (midPoint.Month is >= 6 and <= 8) 
+                    {
+                        cand.DynamicScore *= 1.15; // 15% Boost for summer vibes
+                    }
+                }
+
+                // 3. Distribution/Spacing Logic (if enabled)
+                // Penalize candidates that are too close to already selected trips
+                if (prefs.DistributeEvenly && selectedOpportunities.Any())
+                {
+                    var candDate = cand.VacationDays.First();
+                    // Find the gap to the closest selected vacation
+                    var minDistance = selectedOpportunities.Min(s => Math.Abs((s.VacationDays.First() - candDate).Days));
+
+                    if (minDistance < 60) // Within ~2 months
+                    {
+                        cand.DynamicScore *= 0.2; // Heavy penalty (80% reduction)
+                    }
+                    else if (minDistance < 90) // Within ~3 months
+                    {
+                        cand.DynamicScore *= 0.7; // Moderate penalty (30% reduction)
+                    }
+                    // Else: No penalty
+                }
+            }
+
+            // Re-sort based on the new dynamic context
+            candidates = candidates.OrderByDescending(o => o.DynamicScore).ToList();
+            
+            if (!candidates.Any()) break;
+
+            var bestOp = candidates.First();
+            candidates.RemoveAt(0);
+
+            // Attempt to add the best candidate
+            if (bestOp.Cost <= remainingVacationDays)
+            {
+                // Check for overlapping dates (just in case logic above missed something or for sanity)
+                bool overlaps = selectedOpportunities.Any(s => s.VacationDays.Intersect(bestOp.VacationDays).Any());
+                
+                if (!overlaps)
+                {
+                    selectedOpportunities.Add(bestOp);
+                    remainingVacationDays -= bestOp.Cost;
+
+                    // Update Strategy Flags
+                    if (bestOp.VacationDays.Count >= 8) hasLongVacation = true;
+                    
+                    var mid = bestOp.VacationDays[bestOp.VacationDays.Count / 2];
+                    if (mid.Month is >= 6 and <= 8) hasSummerVacation = true;
+                }
             }
         }
 
@@ -1162,6 +1263,8 @@
             public double Efficiency => Cost > 0 ? FreeDaysGained / (double)Cost : 0;
 
             public double Score { get; set; }
+
+            public double DynamicScore { get; set; }
 
             public bool HasSatisfiedMustHave { get; set; } = false;
 

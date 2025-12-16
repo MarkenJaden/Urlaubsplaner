@@ -24,6 +24,19 @@
                                 <RadzenCheckBox @bind-Value="Preferences.AvoidSchoolHolidays" Name="AvoidSchoolHolidays" />
                                 <RadzenLabel Text="Außerhalb der Schulferien (günstiger/ruhiger)" Component="AvoidSchoolHolidays" />
                             </RadzenStack>
+                            
+                            @if (Preferences.AvoidSchoolHolidays)
+                            {
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" Style="margin-left: 2rem;">
+                                    <RadzenCheckBox @bind-Value="Preferences.AvoidAllStatesSchoolHolidays" Name="AvoidAllStatesSchoolHolidays" />
+                                    <RadzenLabel Text="Schulferien aller Bundesländer berücksichtigen" Component="AvoidAllStatesSchoolHolidays" />
+                                </RadzenStack>
+                            }
+
+                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                                <RadzenCheckBox @bind-Value="Preferences.DistributeEvenly" Name="DistributeEvenly" />
+                                <RadzenLabel Text="Gleichmäßig über das Jahr verteilen" Component="DistributeEvenly" />
+                            </RadzenStack>
                         </RadzenStack>
                     </RadzenFieldset>
 
@@ -149,6 +162,8 @@
         public bool PreferBridgeDays { get; set; } = true;
         public bool PreferSchoolHolidays { get; set; }
         public bool AvoidSchoolHolidays { get; set; }
+        public bool AvoidAllStatesSchoolHolidays { get; set; }
+        public bool DistributeEvenly { get; set; }
         public int MinDaysPerBlock { get; set; } = 1;
         public int? MaxDaysPerBlock { get; set; }
         
