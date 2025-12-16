@@ -22,7 +22,7 @@
             <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="20px" Wrap="FlexWrap.Wrap" AlignItems="AlignItems.Start">
                 <RadzenStack AlignItems="AlignItems.Center">
                     <RadzenText Text="Bundesländer (Deutschland)" TextStyle="TextStyle.H6"></RadzenText>
-                    <RadzenDropDown @bind-Value="_selectedSubdivisions" Data="_filteredSubdivisions" LoadData="OnSubdivisionLoadData" AllowFiltering="true" Change="GetAllMarkings" TextProperty="@nameof(Subdivision.Name)" Multiple="true" Chips="true" AllowClear="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Bundesländer auswählen (z.B. NRW)" Style="width: 250px;" />
+                    <RadzenDropDown @bind-Value="_selectedSubdivisions" Data="_filteredSubdivisions" LoadData="OnSubdivisionLoadData" AllowFiltering="true" Change="GetAllMarkings" TextProperty="@nameof(Subdivision.Name)" Multiple="true" Chips="true" AllowClear="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Bundesländer auswählen (z.B. NRW)" Style="width: 250px;" ClearSearchAfterSelection="true" />
                 </RadzenStack>
 
                 <RadzenStack AlignItems="AlignItems.Center" Gap="0.5rem">
@@ -43,15 +43,15 @@
 
                 <RadzenStack AlignItems="AlignItems.Center">
                     <RadzenText Text="Zusätzliche Feiertage" TextStyle="TextStyle.H6"></RadzenText>
-                    <RadzenDropDown @bind-Value="_selectedPublicHolidayCountries" Data="_filteredAdditionalCountries" LoadData="OnCountryLoadData" AllowFiltering="true" Change="GetAllMarkings" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Länder auswählen" Style="width: 250px;" />
+                    <RadzenDropDown @bind-Value="_selectedPublicHolidayCountries" Data="_filteredAdditionalCountries" LoadData="OnCountryLoadData" AllowFiltering="true" Change="GetAllMarkings" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Länder auswählen" Style="width: 250px;" ClearSearchAfterSelection="true" />
                 </RadzenStack>
 
                 <RadzenStack AlignItems="AlignItems.Center">
                     <RadzenText Text="Zusätzliche Ferien" TextStyle="TextStyle.H6"></RadzenText>
-                    <RadzenDropDown @bind-Value="_selectedSchoolHolidayCountries" Data="_filteredAdditionalCountries" LoadData="OnCountryLoadData" AllowFiltering="true" Change="OnSelectedSchoolHolidayCountriesChanged" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Länder auswählen" Style="width: 250px;" />
+                    <RadzenDropDown @bind-Value="_selectedSchoolHolidayCountries" Data="_filteredAdditionalCountries" LoadData="OnCountryLoadData" AllowFiltering="true" Change="OnSelectedSchoolHolidayCountriesChanged" TextProperty="@nameof(Country.Name)" Multiple="true" Chips="true" AllowClear="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Placeholder="Länder auswählen" Style="width: 250px;" ClearSearchAfterSelection="true" />
                     @if (_holidayGroups != null && _holidayGroups.Any())
                     {
-                        <RadzenDropDown @bind-Value="_selectedHolidayGroupCode" Data="_holidayGroups" Change="GetAllMarkings" TextProperty="Name.First().Text" ValueProperty="Code" Placeholder="Region/Zone wählen" AllowClear="true" Style="width: 250px; margin-top: 5px;" />
+                        <RadzenDropDown @bind-Value="_selectedHolidayGroupCode" Data="_holidayGroups" Change="GetAllMarkings" TextProperty="Name.First().Text" ValueProperty="Code" Placeholder="Region/Zone wählen" AllowClear="true" Style="width: 250px; margin-top: 5px;" ClearSearchAfterSelection="true" />
                     }
                 </RadzenStack>
             </RadzenStack>
@@ -104,7 +104,7 @@
                 </RadzenStack>
             </RadzenStack>
 
-            <RadzenScheduler @ref="scheduler" TItem="Marking" Culture="@(CultureInfo.GetCultureInfo("de-DE"))" SlotRender="SlotRender" SlotSelect="SlotSelect" LoadData="LoadData" style="height: 800px;" StartProperty="Start" EndProperty="End" TextProperty="Name">
+            <RadzenScheduler @ref="scheduler" TItem="Marking" Culture="@(CultureInfo.GetCultureInfo("de-DE"))" SlotRender="SlotRender" SlotSelect="SlotSelect" LoadData="LoadData" style="height: 800px;" StartProperty="Start" EndProperty="End" TextProperty="Name" AppointmentMouseEnter="">
                 <RadzenYearPlannerView @ref="yearPlannerView"></RadzenYearPlannerView>
                 <RadzenYearView @ref="yearView"></RadzenYearView>
             </RadzenScheduler>
@@ -146,9 +146,9 @@
 
     bool _showPublicHolidays = true;
     bool _showSchoolHolidays = true;
-    bool _showBridgeDays;
+    bool _showBridgeDays = true;
     bool _countWeekendsAndHolidays;
-    bool _halfDaysChristmas;
+    bool _halfDaysChristmas = true;
 
     decimal _totalVacationDays = 25m;
     decimal _plannedDays;
