@@ -13,6 +13,14 @@ public class ExportService
         _jsRuntime = jsRuntime;
     }
 
+    public sealed class ExportItem
+    {
+        public required DateTime Start { get; init; }
+        public required DateTime End { get; init; }
+        public required string Title { get; init; }
+        public required string Category { get; init; }
+    }
+
     public async Task DownloadFile(string fileName, string mimeType, byte[] content)
     {
         await _jsRuntime.InvokeVoidAsync("downloadFileFromStream", fileName, mimeType, Convert.ToBase64String(content));
@@ -28,20 +36,23 @@ public class ExportService
         await _jsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
     }
 
-    public string GenerateIcs(IEnumerable<(DateTime Start, DateTime End)> slots)
+    public string GenerateIcs(IReadOnlyList<ExportItem> items)
     {
+        var merged = MergeContiguous(items);
+
         var sb = new StringBuilder();
         sb.AppendLine("BEGIN:VCALENDAR");
         sb.AppendLine("VERSION:2.0");
         sb.AppendLine("PRODID:-//Urlaubsplaner//DE");
 
-        foreach (var slot in slots)
+        foreach (var item in merged)
         {
             sb.AppendLine("BEGIN:VEVENT");
-            sb.AppendLine($"DTSTART;VALUE=DATE:{slot.Start:yyyyMMdd}");
-            // End date in iCal is exclusive, so add 1 day to the end date which is usually inclusive in our logic
-            sb.AppendLine($"DTEND;VALUE=DATE:{slot.End.AddDays(1):yyyyMMdd}"); 
-            sb.AppendLine("SUMMARY:Urlaub");
+            sb.AppendLine($"DTSTART;VALUE=DATE:{item.Start:yyyyMMdd}");
+            // End date in iCal is exclusive
+            sb.AppendLine($"DTEND;VALUE=DATE:{item.End.AddDays(1):yyyyMMdd}");
+            sb.AppendLine($"SUMMARY:{EscapeIcsText(item.Title)}");
+            sb.AppendLine($"CATEGORIES:{EscapeIcsText(item.Category)}");
             sb.AppendLine("END:VEVENT");
         }
 
@@ -49,22 +60,28 @@ public class ExportService
         return sb.ToString();
     }
 
-    public string GenerateCsv(IEnumerable<(DateTime Start, DateTime End)> slots)
+    public string GenerateCsv(IReadOnlyList<ExportItem> items)
     {
+        var merged = MergeContiguous(items);
+
         var sb = new StringBuilder();
-        sb.AppendLine("Startdatum;Enddatum;Tage");
-        foreach (var slot in slots)
+        sb.AppendLine("Kategorie;Titel;Startdatum;Enddatum;Tage");
+        foreach (var item in merged)
         {
-            var days = (slot.End - slot.Start).Days + 1;
-            sb.AppendLine($"{slot.Start:dd.MM.yyyy};{slot.End:dd.MM.yyyy};{days}");
+            var days = (item.End - item.Start).Days + 1;
+            sb.AppendLine($"{item.Category};{item.Title};{item.Start:dd.MM.yyyy};{item.End:dd.MM.yyyy};{days}");
         }
         return sb.ToString();
     }
 
-    public string GenerateJson(IEnumerable<(DateTime Start, DateTime End)> slots)
+    public string GenerateJson(IReadOnlyList<ExportItem> items)
     {
-        var data = slots.Select(s => new
+        var merged = MergeContiguous(items);
+
+        var data = merged.Select(s => new
         {
+            Category = s.Category,
+            Title = s.Title,
             StartDate = s.Start.ToString("yyyy-MM-dd"),
             EndDate = s.End.ToString("yyyy-MM-dd"),
             Days = (s.End - s.Start).Days + 1
@@ -72,21 +89,70 @@ public class ExportService
         return JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
     }
 
-    public string GenerateSummaryText(IEnumerable<(DateTime Start, DateTime End)> slots)
+    public string GenerateSummaryText(IReadOnlyList<ExportItem> items)
     {
+        var merged = MergeContiguous(items);
+
         var sb = new StringBuilder();
-        sb.AppendLine("Geplanter Urlaub:");
-        foreach (var slot in slots)
+        foreach (var grp in merged.GroupBy(x => x.Category).OrderBy(x => x.Key))
         {
-            if (slot.Start.Date == slot.End.Date)
+            sb.AppendLine($"{grp.Key}:");
+            foreach (var item in grp)
             {
-                sb.AppendLine($"- {slot.Start:dd.MM.yyyy}");
+                if (item.Start.Date == item.End.Date)
+                {
+                    sb.AppendLine($"- {item.Start:dd.MM.yyyy}: {item.Title}");
+                }
+                else
+                {
+                    sb.AppendLine($"- {item.Start:dd.MM.yyyy} bis {item.End:dd.MM.yyyy}: {item.Title}");
+                }
+            }
+            sb.AppendLine();
+        }
+        return sb.ToString().TrimEnd();
+    }
+
+    private static List<ExportItem> MergeContiguous(IReadOnlyList<ExportItem> items)
+    {
+        var ordered = items.OrderBy(x => x.Category).ThenBy(x => x.Title).ThenBy(x => x.Start).ToList();
+        if (ordered.Count == 0)
+        {
+            return [];
+        }
+
+        var result = new List<ExportItem>();
+        ExportItem current = ordered[0];
+
+        for (int i = 1; i < ordered.Count; i++)
+        {
+            var next = ordered[i];
+            bool sameBucket = next.Category == current.Category && next.Title == current.Title;
+            bool isNextDay = next.Start.Date == current.End.Date.AddDays(1);
+
+            if (sameBucket && isNextDay)
+            {
+                current = new ExportItem
+                {
+                    Start = current.Start,
+                    End = next.End,
+                    Title = current.Title,
+                    Category = current.Category
+                };
             }
             else
             {
-                sb.AppendLine($"- {slot.Start:dd.MM.yyyy} bis {slot.End:dd.MM.yyyy}");
+                result.Add(current);
+                current = next;
             }
         }
-        return sb.ToString();
+
+        result.Add(current);
+        return result;
+    }
+
+    private static string EscapeIcsText(string value)
+    {
+        return value.Replace("\\", "\\\\").Replace(";", "\\;").Replace(",", "\\,").Replace("\n", "\\n");
     }
 }

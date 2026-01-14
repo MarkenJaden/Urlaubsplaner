@@ -18,5 +18,6 @@ namespace Urlaubsplaner.Client.Models
         public Dictionary<int, decimal> TotalVacationDaysPerYear { get; set; } = new();
         public List<MarkingDto> SelectedSlots { get; set; } = [];
         public List<MarkingDto> Gleittage { get; set; } = [];
+        public List<MarkingDto> Notes { get; set; } = [];
     }
 }

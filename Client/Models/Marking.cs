@@ -8,7 +8,8 @@ namespace Urlaubsplaner.Client.Models
         SchoolHolidayCompare,
         Selected,
         BridgeDay,
-        Gleittag
+        Gleittag,
+        Note
     }
 
     public class Marking

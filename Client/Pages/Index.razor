@@ -262,15 +262,43 @@
 
                 <RadzenDivider />
 
-                <RadzenText TextStyle="TextStyle.H6">Legende</RadzenText>
-                <RadzenStack Gap="0.5rem">
-                    <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: rgba(40, 167, 69, 0.3); border: 1px solid #28a745;"></div> Urlaub</div>
-                    <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: rgba(0, 123, 255, 0.3); border: 1px solid #007bff;"></div> Gleittag</div>
-                    <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: transparent; border: 3px solid #dc3545;"></div> Feiertag (Mein BL)</div>
-                    <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: transparent; border: 3px solid #6f42c1;"></div> Schulferien (Mein BL)</div>
-                    <div class="holiday-legend-item"><div class="holiday-legend-color" style="background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAxMCAxMCc+PHBvbHlnb24gcG9pbnRzPSc1LDAgMTAsNSA1LDEwJyBzdHlsZT0nZmlsbDpvcmFuZ2U7IG9wYWNpdHk6IDAuOScvPjwvc3ZnPg=='); background-repeat: no-repeat; background-position: center; background-size: contain; border: none;"></div> Brückentag</div>
-                    <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: linear-gradient(to right, rgba(0,255,0,0.3), rgba(255,255,0,0.3), rgba(255,165,0,0.4), rgba(255,0,0,0.5));"></div> Heatmap (Dichte)</div>
-                </RadzenStack>
+                 <RadzenText TextStyle="TextStyle.H6">Markieren</RadzenText>
+                 <RadzenText TextStyle="TextStyle.Body2" Style="color: #666; font-size: 0.8rem;">
+                     Wähle einen Modus und klicke dann im Kalender.
+                 </RadzenText>
+                 <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Style="flex-wrap: wrap;">
+                     <RadzenButton Text="Urlaub" Icon="beach_access" Size="ButtonSize.Small"
+                                   ButtonStyle="@(_inputMode == MarkingInputMode.Vacation ? ButtonStyle.Primary : ButtonStyle.Light)"
+                                   Variant="Variant.Flat" Click="@(() => _inputMode = MarkingInputMode.Vacation)" />
+                     <RadzenButton Text="Gleittag" Icon="event_available" Size="ButtonSize.Small"
+                                   ButtonStyle="@(_inputMode == MarkingInputMode.Gleittag ? ButtonStyle.Primary : ButtonStyle.Light)"
+                                   Variant="Variant.Flat" Click="@(() => _inputMode = MarkingInputMode.Gleittag)" />
+                     <RadzenButton Text="Notiz" Icon="note" Size="ButtonSize.Small"
+                                   ButtonStyle="@(_inputMode == MarkingInputMode.Note ? ButtonStyle.Primary : ButtonStyle.Light)"
+                                   Variant="Variant.Flat" Click="@(() => _inputMode = MarkingInputMode.Note)" />
+                 </RadzenStack>
+
+                 @if (_inputMode == MarkingInputMode.Note)
+                 {
+                     <RadzenStack Gap="0.25rem" Style="margin-top: 0.5rem;">
+                         <RadzenText TextStyle="TextStyle.Body2" Style="color: #666; font-size: 0.8rem;">Notiz-Text (für neue Notizen)</RadzenText>
+                         <RadzenTextBox @bind-Value="_defaultNoteText" Placeholder="z.B. Arzt, Geburtstag" Style="width: 100%;" />
+                     </RadzenStack>
+                 }
+
+                 <RadzenDivider Style="margin: 0.75rem 0;" />
+
+                 <RadzenText TextStyle="TextStyle.H6">Legende</RadzenText>
+                 <RadzenStack Gap="0.5rem">
+                     <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: rgba(40, 167, 69, 0.3); border: 1px solid #28a745;"></div> Urlaub</div>
+                     <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: rgba(0, 123, 255, 0.3); border: 1px solid #007bff;"></div> Gleittag</div>
+                     <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: rgba(255, 193, 7, 0.35); border: 1px solid #ffc107;"></div> Notiz</div>
+                     <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: transparent; border: 3px solid #dc3545;"></div> Feiertag (Mein BL)</div>
+                     <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: transparent; border: 3px solid #6f42c1;"></div> Schulferien (Mein BL)</div>
+                     <div class="holiday-legend-item"><div class="holiday-legend-color" style="background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAxMCAxMCc+PHBvbHlnb24gcG9pbnRzPSc1LDAgMTAsNSA1LDEwJyBzdHlsZT0nZmlsbDpvcmFuZ2U7IG9wYWNpdHk6IDAuOScvPjwvc3ZnPg=='); background-repeat: no-repeat; background-position: center; background-size: contain; border: none;"></div> Brückentag</div>
+                     <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: linear-gradient(to right, rgba(0,255,0,0.3), rgba(255,255,0,0.3), rgba(255,165,0,0.4), rgba(255,0,0,0.5));"></div> Heatmap (Dichte)</div>
+                 </RadzenStack>
+
             </RadzenStack>
         </RadzenCard>
     </RadzenColumn>
@@ -309,14 +337,27 @@
     int _gleittageCount;
     int _year = DateTime.Now.Year;
 
-    string _hoveredInfo = "";
+     string _hoveredInfo = "";
+     string _defaultNoteText = "";
+
+
+    enum MarkingInputMode
+    {
+        Vacation,
+        Gleittag,
+        Note
+    }
+
+    MarkingInputMode _inputMode = MarkingInputMode.Vacation;
 
     // Data Store
     readonly List<Marking> _markings = [];
     readonly List<Marking> _selectedSlots = [];
     readonly List<Marking> _gleittage = [];
+    readonly List<Marking> _notes = [];
     readonly Dictionary<DateTime, int> _dailyHeatScore = new();
     readonly HashSet<DateTime> _overBudgetDates = new();
+
     int _maxDailyHeatScore = 1;
     Dictionary<int, decimal> _vacationDaysPerYear = new();
 
@@ -492,16 +533,16 @@
             _halfDaysChristmas);
 
         _remainingWorkDays = VacationCalculationService.CalculateRemainingWorkDays(
-            _year, 
-            _selectedSlots, 
-            _gleittage, 
-            _markings, 
+            _year,
+            _selectedSlots,
+            _gleittage,
+            _markings,
             _countWeekendsAndHolidays);
 
         // Calculate Over Budget Dates (Insertion Order)
         _overBudgetDates.Clear();
         decimal currentCost = 0;
-        
+
         var primaryHolidays = _markings
             .Where(m => m.Type == MarkingType.PublicHoliday)
             .SelectMany(m => Enumerable.Range(0, (m.End.Date - m.Start.Date).Days + 1).Select(d => m.Start.Date.AddDays(d)))
@@ -509,20 +550,20 @@
 
         foreach (var slot in _selectedSlots)
         {
-             var date = slot.Start.Date;
-             bool isWeekend = date.DayOfWeek == DayOfWeek.Saturday || date.DayOfWeek == DayOfWeek.Sunday;
-             bool isHoliday = primaryHolidays.Contains(date);
-             
-             if (!isWeekend && !isHoliday)
-             {
-                 decimal cost = (_halfDaysChristmas && (date.Month == 12 && date.Day >= 24 && date.Day <= 31)) ? 0.5m : 1.0m;
-                 currentCost += cost;
-                 
-                 if (currentCost > _totalVacationDays)
-                 {
-                     _overBudgetDates.Add(date);
-                 }
-             }
+            var date = slot.Start.Date;
+            bool isWeekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+            bool isHoliday = primaryHolidays.Contains(date);
+
+            if (!isWeekend && !isHoliday)
+            {
+                decimal cost = (_halfDaysChristmas && (date.Month == 12 && date.Day >= 24 && date.Day <= 31)) ? 0.5m : 1.0m;
+                currentCost += cost;
+
+                if (currentCost > _totalVacationDays)
+                {
+                    _overBudgetDates.Add(date);
+                }
+            }
         }
     }
 
@@ -630,19 +671,21 @@
 
         info.AddRange(dayMarkings.Where(x => x.Type is MarkingType.PublicHolidayCompare or MarkingType.SchoolHolidayCompare).Select(m => $"{m.Name} ({m.SubdivisionName})"));
 
-                        var selection = _selectedSlots.FirstOrDefault(s => s.Start.Date == date);
-                        if (selection != null)
-                        {
-                            bool isOverBudget = _overBudgetDates.Contains(date);
-                            string stroke = isOverBudget ? "rgba(220, 53, 69, 0.9)" : "rgba(40, 167, 69, 0.9)"; // Red vs Green
-                            string bgColor = isOverBudget ? "rgba(220, 53, 69, 0.15)" : "rgba(40, 167, 69, 0.15)";
-                
-                            string svg = $"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='{stroke}' stroke-width='2'/><line x1='0' y1='10' x2='10' y2='0' stroke='{stroke}' stroke-width='2'/></svg>";
-                            bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(svg))}')");
-                            bgImages.Add($"linear-gradient({bgColor}, {bgColor})"); 
-                            
-                            info.Add(isOverBudget ? "Geplanter Urlaub (Über Budget!)" : "Geplanter Urlaub");
-                        }        var gleittag = _gleittage.FirstOrDefault(s => s.Start.Date == date);
+        var selection = _selectedSlots.FirstOrDefault(s => s.Start.Date == date);
+        if (selection != null)
+        {
+            bool isOverBudget = _overBudgetDates.Contains(date);
+            string stroke = isOverBudget ? "rgba(220, 53, 69, 0.9)" : "rgba(40, 167, 69, 0.9)"; // Red vs Green
+            string bgColor = isOverBudget ? "rgba(220, 53, 69, 0.15)" : "rgba(40, 167, 69, 0.15)";
+
+            string svg = $"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='{stroke}' stroke-width='2'/><line x1='0' y1='10' x2='10' y2='0' stroke='{stroke}' stroke-width='2'/></svg>";
+            bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(svg))}')");
+            bgImages.Add($"linear-gradient({bgColor}, {bgColor})");
+
+            info.Add(isOverBudget ? "Geplanter Urlaub (Über Budget!)" : "Geplanter Urlaub");
+        }
+
+        var gleittag = _gleittage.FirstOrDefault(s => s.Start.Date == date);
         if (gleittag != null)
         {
             string stroke = "rgba(0, 123, 255, 0.9)";
@@ -650,6 +693,15 @@
             bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(svg))}')");
             info.Add("Gleittag");
         }
+
+         var note = _notes.FirstOrDefault(s => s.Start.Date == date);
+         if (note != null)
+         {
+             string bgColor = "rgba(255, 193, 7, 0.35)";
+             bgImages.Add($"linear-gradient({bgColor}, {bgColor})");
+             info.Add(string.IsNullOrWhiteSpace(note.Name) ? "Notiz" : $"Notiz: {note.Name}");
+         }
+
 
         if (_showBridgeDays && dayMarkings.Any(m => m.Type == MarkingType.BridgeDay))
         {
@@ -691,19 +743,49 @@
 
         var existingSel = _selectedSlots.FirstOrDefault(s => s.Start.Date == date);
         var existingGleit = _gleittage.FirstOrDefault(s => s.Start.Date == date);
+        var existingNote = _notes.FirstOrDefault(s => s.Start.Date == date);
 
-        if (existingSel != null)
+        switch (_inputMode)
         {
-            _selectedSlots.Remove(existingSel);
-            _gleittage.Add(new Marking { Start = date, End = date.AddDays(1), Name = "Gleittag", Type = MarkingType.Gleittag });
-        }
-        else if (existingGleit != null)
-        {
-            _gleittage.Remove(existingGleit);
-        }
-        else
-        {
-            _selectedSlots.Add(new Marking { Start = date, End = date.AddDays(1), Name = "Urlaub", Type = MarkingType.Selected });
+            case MarkingInputMode.Vacation:
+                if (existingSel != null)
+                {
+                    _selectedSlots.Remove(existingSel);
+                }
+                else
+                {
+                    _gleittage.RemoveAll(s => s.Start.Date == date);
+                    _notes.RemoveAll(s => s.Start.Date == date);
+                    _selectedSlots.Add(new Marking { Start = date, End = date.AddDays(1), Name = "Urlaub", Type = MarkingType.Selected });
+                }
+                break;
+
+            case MarkingInputMode.Gleittag:
+                if (existingGleit != null)
+                {
+                    _gleittage.Remove(existingGleit);
+                }
+                else
+                {
+                    _selectedSlots.RemoveAll(s => s.Start.Date == date);
+                    _notes.RemoveAll(s => s.Start.Date == date);
+                    _gleittage.Add(new Marking { Start = date, End = date.AddDays(1), Name = "Gleittag", Type = MarkingType.Gleittag });
+                }
+                break;
+
+             case MarkingInputMode.Note:
+                 if (existingNote != null)
+                 {
+                     _notes.Remove(existingNote);
+                 }
+                 else
+                 {
+                     _selectedSlots.RemoveAll(s => s.Start.Date == date);
+                     _gleittage.RemoveAll(s => s.Start.Date == date);
+                     var text = string.IsNullOrWhiteSpace(_defaultNoteText) ? "Notiz" : _defaultNoteText.Trim();
+                     _notes.Add(new Marking { Start = date, End = date.AddDays(1), Name = text, Type = MarkingType.Note });
+                 }
+                 break;
         }
 
         await SaveConfigToStorage();
@@ -777,6 +859,7 @@
                 {
                     _selectedSlots.Clear();
                     _gleittage.Clear();
+                    _notes.Clear();
                 }
                 var allSuggestedDays = suggestedBlocks.SelectMany(b => b.VacationDays);
                 foreach (var day in allSuggestedDays)
@@ -803,11 +886,13 @@
         var result = await DialogService.Confirm("Möchten Sie wirklich alle Planungen löschen?", "Planung zurücksetzen", new ConfirmOptions() { OkButtonText = "Ja", CancelButtonText = "Nein" });
         if (result == true)
         {
-            _selectedSlots.Clear();
-            _gleittage.Clear();
-            await SaveConfigToStorage();
-            UpdateAllCalculations();
-            await scheduler.Reload();
+        _selectedSlots.Clear();
+        _gleittage.Clear();
+        _notes.Clear();
+        await SaveConfigToStorage();
+        UpdateAllCalculations();
+        await scheduler.Reload();
+
         }
     }
 
@@ -847,7 +932,8 @@
             HalfDaysChristmas = _halfDaysChristmas,
             TotalVacationDaysPerYear = _vacationDaysPerYear,
             SelectedSlots = _selectedSlots.Select(s => new MarkingDto { Start = s.Start, End = s.End, Name = s.Name, Type = (int)s.Type }).ToList(),
-            Gleittage = _gleittage.Select(s => new MarkingDto { Start = s.Start, End = s.End, Name = s.Name, Type = (int)s.Type }).ToList()
+            Gleittage = _gleittage.Select(s => new MarkingDto { Start = s.Start, End = s.End, Name = s.Name, Type = (int)s.Type }).ToList(),
+            Notes = _notes.Select(s => new MarkingDto { Start = s.Start, End = s.End, Name = s.Name, Type = (int)s.Type }).ToList()
         };
         await StateService.SaveConfigAsync(config);
     }
@@ -887,78 +973,101 @@
         if (config.Gleittage != null)
             _gleittage.AddRange(config.Gleittage.Select(d => new Marking { Start = d.Start, End = d.End, Name = d.Name, Type = (MarkingType)d.Type }));
 
+        _notes.Clear();
+        if (config.Notes != null)
+            _notes.AddRange(config.Notes.Select(d => new Marking { Start = d.Start, End = d.End, Name = d.Name, Type = (MarkingType)d.Type }));
+
         _ = GetAllMarkings();
     }
 
-    async Task Export(RadzenSplitButtonItem? args)
-    {
-        if (args == null) return; // Do nothing if main button clicked without a specific value
+     async Task Export(RadzenSplitButtonItem? args)
+     {
+         if (args == null) return; // Do nothing if main button clicked without a specific value
 
-        if (args.Value == "config_json")
-        {
-            await SaveConfigToStorage(); // Ensure latest state
-            var config = await StateService.LoadConfigAsync();
-            if (config != null)
-            {
-                var json = StateService.ExportConfigToJson(config);
-                await ExportService.DownloadFile("urlaubsplaner_config.json", "application/json", json);
-            }
-            return;
-        }
+         if (args.Value == "config_json")
+         {
+             await SaveConfigToStorage(); // Ensure latest state
+             var config = await StateService.LoadConfigAsync();
+             if (config != null)
+             {
+                 var json = StateService.ExportConfigToJson(config);
+                 await ExportService.DownloadFile("urlaubsplaner_config.json", "application/json", json);
+             }
+             return;
+         }
 
-        var slots = _selectedSlots.OrderBy(s => s.Start).ToList();
-        if (!slots.Any())
-        {
-            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Kein Urlaub geplant", Detail = "Bitte planen Sie zuerst Urlaubstage." });
-            return;
-        }
+         var result = await DialogService.OpenAsync<ExportOptionsDialog>("Export-Optionen", null,
+             new DialogOptions { Width = "420px", Height = "auto", Resizable = false, Draggable = true });
 
-        var ranges = new List<(DateTime Start, DateTime End)>();
-        if (slots.Any())
-        {
-            var currentStart = slots[0].Start.Date;
-            var currentEnd = slots[0].Start.Date;
+         if (result == null) return;
 
-            for (int i = 1; i < slots.Count; i++)
-            {
-                var nextDate = slots[i].Start.Date;
-                if (nextDate == currentEnd.AddDays(1))
-                {
-                    currentEnd = nextDate;
-                }
-                else
-                {
-                    ranges.Add((currentStart, currentEnd));
-                    currentStart = nextDate;
-                    currentEnd = nextDate;
-                }
-            }
-            ranges.Add((currentStart, currentEnd));
-        }
+         var options = (ExportOptionsDialog.ExportOptions)result;
 
-        switch (args.Value)
-        {
-            case "ics":
-                var ics = ExportService.GenerateIcs(ranges);
-                await ExportService.DownloadFile("Urlaub.ics", "text/calendar", ics);
-                break;
-            case "csv":
-                var csv = ExportService.GenerateCsv(ranges);
-                await ExportService.DownloadFile("Urlaub.csv", "text/csv", csv);
-                break;
-            case "json":
-                var json = ExportService.GenerateJson(ranges);
-                await ExportService.DownloadFile("Urlaub.json", "application/json", json);
-                break;
-            case "clipboard":
-                var text = ExportService.GenerateSummaryText(ranges);
-                await ExportService.CopyToClipboard(text);
-                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Kopiert", Detail = "Urlaubsdaten in Zwischenablage kopiert." });
-                break;
-            case "print":
-                await JSRuntime.InvokeVoidAsync("print");
-                break;
-        }
-    }
+         var items = new List<ExportService.ExportItem>();
+
+         if (options.ExportVacation)
+         {
+             items.AddRange(_selectedSlots.Select(s => new ExportService.ExportItem
+             {
+                 Start = s.Start.Date,
+                 End = s.End.Date,
+                 Title = "Urlaub",
+                 Category = "Urlaub"
+             }));
+         }
+
+         if (options.ExportGleittage)
+         {
+             items.AddRange(_gleittage.Select(s => new ExportService.ExportItem
+             {
+                 Start = s.Start.Date,
+                 End = s.End.Date,
+                 Title = "Gleittag",
+                 Category = "Gleittag"
+             }));
+         }
+
+         if (options.ExportNotes)
+         {
+             items.AddRange(_notes.Select(s => new ExportService.ExportItem
+             {
+                 Start = s.Start.Date,
+                 End = s.End.Date,
+                 Title = string.IsNullOrWhiteSpace(s.Name) ? "Notiz" : s.Name,
+                 Category = "Notiz"
+             }));
+         }
+
+         if (!items.Any())
+         {
+             NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Nichts zu exportieren", Detail = "Bitte wählen Sie mindestens eine Kategorie mit Daten." });
+             return;
+         }
+
+         switch (args.Value)
+         {
+             case "ics":
+                 var ics = ExportService.GenerateIcs(items);
+                 await ExportService.DownloadFile("Urlaubsplaner.ics", "text/calendar", ics);
+                 break;
+             case "csv":
+                 var csv = ExportService.GenerateCsv(items);
+                 await ExportService.DownloadFile("Urlaubsplaner.csv", "text/csv", csv);
+                 break;
+             case "json":
+                 var json = ExportService.GenerateJson(items);
+                 await ExportService.DownloadFile("Urlaubsplaner.json", "application/json", json);
+                 break;
+             case "clipboard":
+                 var text = ExportService.GenerateSummaryText(items);
+                 await ExportService.CopyToClipboard(text);
+                 NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Kopiert", Detail = "Exportdaten in Zwischenablage kopiert." });
+                 break;
+             case "print":
+                 await JSRuntime.InvokeVoidAsync("print");
+                 break;
+         }
+     }
+
 
 }

@@ -1,0 +1,40 @@
+@using Radzen
+
+<RadzenStack Gap="0.75rem">
+    <RadzenText TextStyle="TextStyle.Body1">Welche Einträge sollen exportiert werden?</RadzenText>
+
+    <RadzenCheckBox @bind-Value="ExportVacation" TValue="bool" /> <RadzenLabel Text="Urlaub" Style="margin-left: .25rem;" />
+    <RadzenCheckBox @bind-Value="ExportGleittage" TValue="bool" /> <RadzenLabel Text="Gleittage" Style="margin-left: .25rem;" />
+    <RadzenCheckBox @bind-Value="ExportNotes" TValue="bool" /> <RadzenLabel Text="Notizen" Style="margin-left: .25rem;" />
+
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem" Style="margin-top: 0.5rem;">
+        <RadzenButton Text="Abbrechen" ButtonStyle="ButtonStyle.Light" Click="@OnCancel" />
+        <RadzenButton Text="Exportieren" ButtonStyle="ButtonStyle.Primary" Disabled="@(!CanExport)" Click="@OnOk" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    [Inject] private DialogService DialogService { get; set; } = default!;
+
+    [Parameter] public bool ExportVacation { get; set; } = true;
+    [Parameter] public bool ExportGleittage { get; set; }
+    [Parameter] public bool ExportNotes { get; set; }
+
+    bool CanExport => ExportVacation || ExportGleittage || ExportNotes;
+
+    void OnCancel() => DialogService.Close(null);
+
+    void OnOk() => DialogService.Close(new ExportOptions
+    {
+        ExportVacation = ExportVacation,
+        ExportGleittage = ExportGleittage,
+        ExportNotes = ExportNotes
+    });
+
+    public sealed class ExportOptions
+    {
+        public bool ExportVacation { get; set; }
+        public bool ExportGleittage { get; set; }
+        public bool ExportNotes { get; set; }
+    }
+}
