@@ -24,7 +24,11 @@ builder.Services.AddScoped<Urlaubsplaner.Client.Services.StateService>();
 builder.Services.AddScoped<Urlaubsplaner.Client.Services.HolidayService>();
 builder.Services.AddScoped<Urlaubsplaner.Client.Services.VacationCalculationService>();
 
-builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo("/var/keys")).SetApplicationName("Urlaubsplaner");
+var keysDirectory = builder.Environment.IsDevelopment()
+    ? new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, ".keys"))
+    : new DirectoryInfo("/var/keys");
+
+builder.Services.AddDataProtection().PersistKeysToFileSystem(keysDirectory).SetApplicationName("Urlaubsplaner");
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
