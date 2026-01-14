@@ -245,8 +245,34 @@
     <RadzenColumn Size="12" SizeLG="3" SizeXL="2">
         <RadzenCard Style="height: 100vh; max-height: 900px; overflow-y: auto;">
             <RadzenStack Gap="1rem">
+                <RadzenText TextStyle="TextStyle.H6">Markieren</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2" Style="color: #666; font-size: 0.8rem;">
+                    Wähle einen Modus und klicke dann im Kalender.
+                </RadzenText>
+                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Style="flex-wrap: wrap;">
+                    <RadzenButton Text="Urlaub" Icon="beach_access" Size="ButtonSize.Small"
+                                  ButtonStyle="@(_inputMode == MarkingInputMode.Vacation ? ButtonStyle.Primary : ButtonStyle.Light)"
+                                  Variant="Variant.Flat" Click="@(() => _inputMode = MarkingInputMode.Vacation)" />
+                    <RadzenButton Text="Gleittag" Icon="event_available" Size="ButtonSize.Small"
+                                  ButtonStyle="@(_inputMode == MarkingInputMode.Gleittag ? ButtonStyle.Primary : ButtonStyle.Light)"
+                                  Variant="Variant.Flat" Click="@(() => _inputMode = MarkingInputMode.Gleittag)" />
+                    <RadzenButton Text="Notiz" Icon="note" Size="ButtonSize.Small"
+                                  ButtonStyle="@(_inputMode == MarkingInputMode.Note ? ButtonStyle.Primary : ButtonStyle.Light)"
+                                  Variant="Variant.Flat" Click="@(() => _inputMode = MarkingInputMode.Note)" />
+                </RadzenStack>
+
+                @if (_inputMode == MarkingInputMode.Note)
+                {
+                    <RadzenStack Gap="0.25rem" Style="margin-top: 0.5rem;">
+                        <RadzenText TextStyle="TextStyle.Body2" Style="color: #666; font-size: 0.8rem;">Notiz-Text (für neue Notizen)</RadzenText>
+                        <RadzenTextBox @bind-Value="_defaultNoteText" Placeholder="z.B. Arzt, Geburtstag" Style="width: 100%;" />
+                    </RadzenStack>
+                }
+
+                <RadzenDivider />
+
                 <RadzenText TextStyle="TextStyle.H6">Details zum Tag</RadzenText>
-                
+
                 <RadzenCard Variant="Variant.Flat" Class="rz-p-2" Style="background-color: #f8f9fa; min-height: 100px;">
                     @if (string.IsNullOrEmpty(_hoveredInfo))
                     {
@@ -260,36 +286,10 @@
                     }
                 </RadzenCard>
 
-                <RadzenDivider />
+                <RadzenDivider Style="margin: 0.75rem 0;" />
 
-                 <RadzenText TextStyle="TextStyle.H6">Markieren</RadzenText>
-                 <RadzenText TextStyle="TextStyle.Body2" Style="color: #666; font-size: 0.8rem;">
-                     Wähle einen Modus und klicke dann im Kalender.
-                 </RadzenText>
-                 <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Style="flex-wrap: wrap;">
-                     <RadzenButton Text="Urlaub" Icon="beach_access" Size="ButtonSize.Small"
-                                   ButtonStyle="@(_inputMode == MarkingInputMode.Vacation ? ButtonStyle.Primary : ButtonStyle.Light)"
-                                   Variant="Variant.Flat" Click="@(() => _inputMode = MarkingInputMode.Vacation)" />
-                     <RadzenButton Text="Gleittag" Icon="event_available" Size="ButtonSize.Small"
-                                   ButtonStyle="@(_inputMode == MarkingInputMode.Gleittag ? ButtonStyle.Primary : ButtonStyle.Light)"
-                                   Variant="Variant.Flat" Click="@(() => _inputMode = MarkingInputMode.Gleittag)" />
-                     <RadzenButton Text="Notiz" Icon="note" Size="ButtonSize.Small"
-                                   ButtonStyle="@(_inputMode == MarkingInputMode.Note ? ButtonStyle.Primary : ButtonStyle.Light)"
-                                   Variant="Variant.Flat" Click="@(() => _inputMode = MarkingInputMode.Note)" />
-                 </RadzenStack>
-
-                 @if (_inputMode == MarkingInputMode.Note)
-                 {
-                     <RadzenStack Gap="0.25rem" Style="margin-top: 0.5rem;">
-                         <RadzenText TextStyle="TextStyle.Body2" Style="color: #666; font-size: 0.8rem;">Notiz-Text (für neue Notizen)</RadzenText>
-                         <RadzenTextBox @bind-Value="_defaultNoteText" Placeholder="z.B. Arzt, Geburtstag" Style="width: 100%;" />
-                     </RadzenStack>
-                 }
-
-                 <RadzenDivider Style="margin: 0.75rem 0;" />
-
-                 <RadzenText TextStyle="TextStyle.H6">Legende</RadzenText>
-                 <RadzenStack Gap="0.5rem">
+                <RadzenText TextStyle="TextStyle.H6">Legende</RadzenText>
+                <RadzenStack Gap="0.5rem">
                      <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: rgba(40, 167, 69, 0.3); border: 1px solid #28a745;"></div> Urlaub</div>
                      <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: rgba(0, 123, 255, 0.3); border: 1px solid #007bff;"></div> Gleittag</div>
                      <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: rgba(255, 193, 7, 0.35); border: 1px solid #ffc107;"></div> Notiz</div>
@@ -671,34 +671,60 @@
 
         info.AddRange(dayMarkings.Where(x => x.Type is MarkingType.PublicHolidayCompare or MarkingType.SchoolHolidayCompare).Select(m => $"{m.Name} ({m.SubdivisionName})"));
 
-        var selection = _selectedSlots.FirstOrDefault(s => s.Start.Date == date);
-        if (selection != null)
-        {
-            bool isOverBudget = _overBudgetDates.Contains(date);
-            string stroke = isOverBudget ? "rgba(220, 53, 69, 0.9)" : "rgba(40, 167, 69, 0.9)"; // Red vs Green
-            string bgColor = isOverBudget ? "rgba(220, 53, 69, 0.15)" : "rgba(40, 167, 69, 0.15)";
+         var selection = _selectedSlots.FirstOrDefault(s => s.Start.Date == date);
+         if (selection != null)
+         {
+             bool isOverBudget = _overBudgetDates.Contains(date);
+             string stroke = isOverBudget ? "rgba(220, 53, 69, 0.9)" : "rgba(40, 167, 69, 0.9)"; // Red vs Green
+             string bgColor = isOverBudget ? "rgba(220, 53, 69, 0.15)" : "rgba(40, 167, 69, 0.15)";
 
-            string svg = $"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='{stroke}' stroke-width='2'/><line x1='0' y1='10' x2='10' y2='0' stroke='{stroke}' stroke-width='2'/></svg>";
-            bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(svg))}')");
-            bgImages.Add($"linear-gradient({bgColor}, {bgColor})");
+             string svg = $"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='{stroke}' stroke-width='2'/><line x1='0' y1='10' x2='10' y2='0' stroke='{stroke}' stroke-width='2'/></svg>";
+             bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(svg))}')");
+             bgImages.Add($"linear-gradient({bgColor}, {bgColor})");
 
-            info.Add(isOverBudget ? "Geplanter Urlaub (Über Budget!)" : "Geplanter Urlaub");
-        }
+             string planeSvg = isOverBudget
+                 ? "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23dc3545' d='M2 16l20-8-20-8v6l14 2-14 2v6z' opacity='0.95'/></svg>"
+                 : "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%2328a745' d='M2 16l20-8-20-8v6l14 2-14 2v6z' opacity='0.95'/></svg>";
+             bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(planeSvg))}')");
 
-        var gleittag = _gleittage.FirstOrDefault(s => s.Start.Date == date);
-        if (gleittag != null)
-        {
-            string stroke = "rgba(0, 123, 255, 0.9)";
-            string svg = $"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='{stroke}' stroke-width='2'/><line x1='0' y1='10' x2='10' y2='0' stroke='{stroke}' stroke-width='2'/></svg>";
-            bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(svg))}')");
-            info.Add("Gleittag");
-        }
+             style.Append("background-position: center, center, top right; ");
+             style.Append("background-size: contain, contain, 12px 12px; ");
+             style.Append("background-repeat: no-repeat, no-repeat, no-repeat; ");
+
+             info.Add(isOverBudget ? "Geplanter Urlaub (Über Budget!)" : "Geplanter Urlaub");
+         }
+
+         var gleittag = _gleittage.FirstOrDefault(s => s.Start.Date == date);
+         if (gleittag != null)
+         {
+             string stroke = "rgba(0, 123, 255, 0.9)";
+             string svg = $"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='{stroke}' stroke-width='2'/><line x1='0' y1='10' x2='10' y2='0' stroke='{stroke}' stroke-width='2'/></svg>";
+             bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(svg))}')");
+
+             const string gSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23007bff' d='M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm0 6h10v2H7V9zm0 4h8v2H7v-2z' opacity='0.95'/></svg>";
+             bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(gSvg))}')");
+
+             style.Append("background-position: center, top right; ");
+             style.Append("background-size: contain, 12px 12px; ");
+             style.Append("background-repeat: no-repeat, no-repeat; ");
+
+             info.Add("Gleittag");
+         }
+
 
          var note = _notes.FirstOrDefault(s => s.Start.Date == date);
          if (note != null)
          {
              string bgColor = "rgba(255, 193, 7, 0.35)";
              bgImages.Add($"linear-gradient({bgColor}, {bgColor})");
+
+             const string noteSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23ffc107' d='M3 5a2 2 0 0 1 2-2h10l6 6v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5zm12 0v5h5' opacity='0.95'/><path fill='%238a6d00' d='M6 13h12v2H6v-2zm0 4h10v2H6v-2z' opacity='0.9'/></svg>";
+             bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(noteSvg))}')");
+
+             style.Append("background-position: center, top right; ");
+             style.Append("background-size: contain, 12px 12px; ");
+             style.Append("background-repeat: no-repeat, no-repeat; ");
+
              info.Add(string.IsNullOrWhiteSpace(note.Name) ? "Notiz" : $"Notiz: {note.Name}");
          }
 
