@@ -1,8 +1,9 @@
+using Blazored.LocalStorage;
+using Blazored.SessionStorage;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Radzen;
 using Urlaubsplaner.Server.Components;
-using Blazored.LocalStorage;
-using Blazored.SessionStorage;
 
 var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
@@ -22,6 +23,8 @@ builder.Services.AddBlazoredSessionStorage();
 builder.Services.AddScoped<Urlaubsplaner.Client.Services.StateService>();
 builder.Services.AddScoped<Urlaubsplaner.Client.Services.HolidayService>();
 builder.Services.AddScoped<Urlaubsplaner.Client.Services.VacationCalculationService>();
+
+builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo("/var/keys")).SetApplicationName("Urlaubsplaner");
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
