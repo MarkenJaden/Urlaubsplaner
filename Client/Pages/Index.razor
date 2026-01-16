@@ -679,16 +679,12 @@
          if (selection != null)
          {
              bool isOverBudget = _overBudgetDates.Contains(date);
-             string bgColor = isOverBudget ? "rgba(220, 53, 69, 0.15)" : "rgba(40, 167, 69, 0.15)";
-
-             bgImages.Add($"linear-gradient({bgColor}, {bgColor})");
-             bgPositions.Add("center");
-             bgSizes.Add("contain");
-
-             // Icon: beach_access (Umbrella)
+             
+             // Removed background color (linear-gradient) as requested.
+             // Icon: beach_access (Umbrella), increased opacity to 0.8 to be "filled"
              string vacationSvg = isOverBudget
-                 ? "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23dc3545' d='M13.127 14.56l1.96-1.96 6.11 6.11-1.96 1.96-6.11-6.11zm-3.909 1.761l2.546-2.546-3.741-3.741-2.546 2.546 3.741 3.741zm10.272-10.272l-3.264-3.264c-.351-.351-.919-.351-1.272 0l-12.72 12.72c-.351.351-.351.919 0 1.272l3.264 3.264c.351.351.919.351 1.272 0l12.72-12.72c.351-.351.351-.92 0-1.272zm-7.636 1.195l3.741 3.741-2.546 2.546-3.741-3.741 2.546-2.546z' opacity='0.4'/></svg>"
-                 : "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%2328a745' d='M13.127 14.56l1.96-1.96 6.11 6.11-1.96 1.96-6.11-6.11zm-3.909 1.761l2.546-2.546-3.741-3.741-2.546 2.546 3.741 3.741zm10.272-10.272l-3.264-3.264c-.351-.351-.919-.351-1.272 0l-12.72 12.72c-.351.351-.351.919 0 1.272l3.264 3.264c.351.351.919.351 1.272 0l12.72-12.72c.351-.351.351-.92 0-1.272zm-7.636 1.195l3.741 3.741-2.546 2.546-3.741-3.741 2.546-2.546z' opacity='0.4'/></svg>";
+                 ? "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23dc3545' d='M13.127 14.56l1.96-1.96 6.11 6.11-1.96 1.96-6.11-6.11zm-3.909 1.761l2.546-2.546-3.741-3.741-2.546 2.546 3.741 3.741zm10.272-10.272l-3.264-3.264c-.351-.351-.919-.351-1.272 0l-12.72 12.72c-.351.351-.351.919 0 1.272l3.264 3.264c.351.351.919.351 1.272 0l12.72-12.72c.351-.351.351-.92 0-1.272zm-7.636 1.195l3.741 3.741-2.546 2.546-3.741-3.741 2.546-2.546z' opacity='0.8'/></svg>"
+                 : "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%2328a745' d='M13.127 14.56l1.96-1.96 6.11 6.11-1.96 1.96-6.11-6.11zm-3.909 1.761l2.546-2.546-3.741-3.741-2.546 2.546 3.741 3.741zm10.272-10.272l-3.264-3.264c-.351-.351-.919-.351-1.272 0l-12.72 12.72c-.351.351-.351.919 0 1.272l3.264 3.264c.351.351.919.351 1.272 0l12.72-12.72c.351-.351.351-.92 0-1.272zm-7.636 1.195l3.741 3.741-2.546 2.546-3.741-3.741 2.546-2.546z' opacity='0.8'/></svg>";
              
              bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(vacationSvg))}')");
              bgPositions.Add("center");
@@ -700,8 +696,8 @@
          var gleittag = _gleittage.FirstOrDefault(s => s.Start.Date == date);
          if (gleittag != null)
          {
-             // Icon: event_available (Calendar Check)
-             const string gSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23007bff' d='M16.53 11.06L15.47 10l-4.88 4.88-2.12-2.12-1.06 1.06L10.59 16l5.94-4.94zM19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z' opacity='0.4'/></svg>";
+             // Icon: event_available (Calendar Check), increased opacity to 0.8
+             const string gSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23007bff' d='M16.53 11.06L15.47 10l-4.88 4.88-2.12-2.12-1.06 1.06L10.59 16l5.94-4.94zM19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z' opacity='0.8'/></svg>";
              bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(gSvg))}')");
              bgPositions.Add("center");
              bgSizes.Add("70%");
@@ -713,15 +709,13 @@
          var note = _notes.FirstOrDefault(s => s.Start.Date == date);
          if (note != null)
          {
-             string bgColor = "rgba(255, 193, 7, 0.35)";
-             bgImages.Add($"linear-gradient({bgColor}, {bgColor})");
-             bgPositions.Add("center");
-             bgSizes.Add("contain");
-
+             // Removed background color.
+             // Scaled up icon to match others (70%, center).
+             // Increased opacity.
              const string noteSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23ffc107' d='M3 5a2 2 0 0 1 2-2h10l6 6v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5zm12 0v5h5' opacity='0.95'/><path fill='%238a6d00' d='M6 13h12v2H6v-2zm0 4h10v2H6v-2z' opacity='0.9'/></svg>";
              bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(noteSvg))}')");
-             bgPositions.Add("top right");
-             bgSizes.Add("12px 12px");
+             bgPositions.Add("center");
+             bgSizes.Add("70%");
 
              info.Add(string.IsNullOrWhiteSpace(note.Name) ? "Notiz" : $"Notiz: {note.Name}");
          }
