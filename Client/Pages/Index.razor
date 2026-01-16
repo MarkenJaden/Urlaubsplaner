@@ -685,12 +685,14 @@
              bgPositions.Add("center");
              bgSizes.Add("contain");
 
-             string planeSvg = isOverBudget
-                 ? "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23dc3545' d='M2 16l20-8-20-8v6l14 2-14 2v6z' opacity='0.95'/></svg>"
-                 : "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%2328a745' d='M2 16l20-8-20-8v6l14 2-14 2v6z' opacity='0.95'/></svg>";
-             bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(planeSvg))}')");
-             bgPositions.Add("top right");
-             bgSizes.Add("12px 12px");
+             // Icon: beach_access (Umbrella)
+             string vacationSvg = isOverBudget
+                 ? "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23dc3545' d='M13.127 14.56l1.96-1.96 6.11 6.11-1.96 1.96-6.11-6.11zm-3.909 1.761l2.546-2.546-3.741-3.741-2.546 2.546 3.741 3.741zm10.272-10.272l-3.264-3.264c-.351-.351-.919-.351-1.272 0l-12.72 12.72c-.351.351-.351.919 0 1.272l3.264 3.264c.351.351.919.351 1.272 0l12.72-12.72c.351-.351.351-.92 0-1.272zm-7.636 1.195l3.741 3.741-2.546 2.546-3.741-3.741 2.546-2.546z' opacity='0.4'/></svg>"
+                 : "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%2328a745' d='M13.127 14.56l1.96-1.96 6.11 6.11-1.96 1.96-6.11-6.11zm-3.909 1.761l2.546-2.546-3.741-3.741-2.546 2.546 3.741 3.741zm10.272-10.272l-3.264-3.264c-.351-.351-.919-.351-1.272 0l-12.72 12.72c-.351.351-.351.919 0 1.272l3.264 3.264c.351.351.919.351 1.272 0l12.72-12.72c.351-.351.351-.92 0-1.272zm-7.636 1.195l3.741 3.741-2.546 2.546-3.741-3.741 2.546-2.546z' opacity='0.4'/></svg>";
+             
+             bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(vacationSvg))}')");
+             bgPositions.Add("center");
+             bgSizes.Add("70%"); 
 
              info.Add(isOverBudget ? "Geplanter Urlaub (Über Budget!)" : "Geplanter Urlaub");
          }
@@ -698,10 +700,11 @@
          var gleittag = _gleittage.FirstOrDefault(s => s.Start.Date == date);
          if (gleittag != null)
          {
-             const string gSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23007bff' d='M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm0 6h10v2H7V9zm0 4h8v2H7v-2z' opacity='0.95'/></svg>";
+             // Icon: event_available (Calendar Check)
+             const string gSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23007bff' d='M16.53 11.06L15.47 10l-4.88 4.88-2.12-2.12-1.06 1.06L10.59 16l5.94-4.94zM19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z' opacity='0.4'/></svg>";
              bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(gSvg))}')");
-             bgPositions.Add("top right");
-             bgSizes.Add("12px 12px");
+             bgPositions.Add("center");
+             bgSizes.Add("70%");
 
              info.Add("Gleittag");
          }
