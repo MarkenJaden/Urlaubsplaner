@@ -639,6 +639,8 @@
         var date = args.Start.Date;
         var style = new StringBuilder();
         var bgImages = new List<string>();
+        var bgPositions = new List<string>();
+        var bgSizes = new List<string>();
         var info = new List<string>();
 
         if (_showHeatmap && _dailyHeatScore.TryGetValue(date, out int score))
@@ -648,7 +650,9 @@
 
         if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
         {
-            style.Append("background-image: linear-gradient(rgba(0,0,0,0.05), rgba(0,0,0,0.05));");
+            bgImages.Add("linear-gradient(rgba(0,0,0,0.05), rgba(0,0,0,0.05))");
+            bgPositions.Add("center");
+            bgSizes.Add("contain");
         }
 
         var dayMarkings = _markings.Where(m => m.Start.Date <= date && m.End.Date >= date).ToList();
@@ -675,21 +679,18 @@
          if (selection != null)
          {
              bool isOverBudget = _overBudgetDates.Contains(date);
-             string stroke = isOverBudget ? "rgba(220, 53, 69, 0.9)" : "rgba(40, 167, 69, 0.9)"; // Red vs Green
              string bgColor = isOverBudget ? "rgba(220, 53, 69, 0.15)" : "rgba(40, 167, 69, 0.15)";
 
-             string svg = $"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='{stroke}' stroke-width='2'/><line x1='0' y1='10' x2='10' y2='0' stroke='{stroke}' stroke-width='2'/></svg>";
-             bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(svg))}')");
              bgImages.Add($"linear-gradient({bgColor}, {bgColor})");
+             bgPositions.Add("center");
+             bgSizes.Add("contain");
 
              string planeSvg = isOverBudget
                  ? "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23dc3545' d='M2 16l20-8-20-8v6l14 2-14 2v6z' opacity='0.95'/></svg>"
                  : "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%2328a745' d='M2 16l20-8-20-8v6l14 2-14 2v6z' opacity='0.95'/></svg>";
              bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(planeSvg))}')");
-
-             style.Append("background-position: center, center, top right; ");
-             style.Append("background-size: contain, contain, 12px 12px; ");
-             style.Append("background-repeat: no-repeat, no-repeat, no-repeat; ");
+             bgPositions.Add("top right");
+             bgSizes.Add("12px 12px");
 
              info.Add(isOverBudget ? "Geplanter Urlaub (Über Budget!)" : "Geplanter Urlaub");
          }
@@ -697,16 +698,10 @@
          var gleittag = _gleittage.FirstOrDefault(s => s.Start.Date == date);
          if (gleittag != null)
          {
-             string stroke = "rgba(0, 123, 255, 0.9)";
-             string svg = $"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><line x1='0' y1='0' x2='10' y2='10' stroke='{stroke}' stroke-width='2'/><line x1='0' y1='10' x2='10' y2='0' stroke='{stroke}' stroke-width='2'/></svg>";
-             bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(svg))}')");
-
              const string gSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23007bff' d='M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm0 6h10v2H7V9zm0 4h8v2H7v-2z' opacity='0.95'/></svg>";
              bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(gSvg))}')");
-
-             style.Append("background-position: center, top right; ");
-             style.Append("background-size: contain, 12px 12px; ");
-             style.Append("background-repeat: no-repeat, no-repeat; ");
+             bgPositions.Add("top right");
+             bgSizes.Add("12px 12px");
 
              info.Add("Gleittag");
          }
@@ -717,13 +712,13 @@
          {
              string bgColor = "rgba(255, 193, 7, 0.35)";
              bgImages.Add($"linear-gradient({bgColor}, {bgColor})");
+             bgPositions.Add("center");
+             bgSizes.Add("contain");
 
              const string noteSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23ffc107' d='M3 5a2 2 0 0 1 2-2h10l6 6v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5zm12 0v5h5' opacity='0.95'/><path fill='%238a6d00' d='M6 13h12v2H6v-2zm0 4h10v2H6v-2z' opacity='0.9'/></svg>";
              bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(noteSvg))}')");
-
-             style.Append("background-position: center, top right; ");
-             style.Append("background-size: contain, 12px 12px; ");
-             style.Append("background-repeat: no-repeat, no-repeat; ");
+             bgPositions.Add("top right");
+             bgSizes.Add("12px 12px");
 
              info.Add(string.IsNullOrWhiteSpace(note.Name) ? "Notiz" : $"Notiz: {note.Name}");
          }
@@ -740,6 +735,8 @@
             if (!string.IsNullOrEmpty(arrowSvg))
             {
                 bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(arrowSvg))}')");
+                bgPositions.Add("center");
+                bgSizes.Add("contain");
                 info.Add("Möglicher Brückentag");
             }
         }
@@ -751,7 +748,10 @@
 
         if (bgImages.Any())
         {
-            style.Append($"background-image: {string.Join(", ", bgImages)}; background-repeat: no-repeat; background-position: center; background-size: contain;");
+            style.Append($"background-image: {string.Join(", ", bgImages)}; ");
+            style.Append($"background-position: {string.Join(", ", bgPositions)}; ");
+            style.Append($"background-size: {string.Join(", ", bgSizes)}; ");
+            style.Append("background-repeat: no-repeat; ");
         }
 
         args.Attributes["style"] = style.ToString();
