@@ -57,7 +57,7 @@ else
 // app.UseHttpsRedirection();
 app.MapControllers();
 app.UseRequestLocalization(options => options.AddSupportedCultures("de").AddSupportedUICultures("de").SetDefaultCulture("de"));
-app.UseStaticFiles();
+app.MapStaticAssets();
 app.UseAntiforgery();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode().AddInteractiveWebAssemblyRenderMode().AddAdditionalAssemblies(typeof(Urlaubsplaner.Client._Imports).Assembly);
 app.Run();
