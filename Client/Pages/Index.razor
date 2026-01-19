@@ -492,6 +492,14 @@
             if (config != null)
             {
                 ApplyConfig(config);
+
+                // Config applies selected subdivision(s) by looking them up in _allSubdivisions.
+                // In offline mode (OpenHolidays down) _allSubdivisions may be empty when ApplyConfig runs.
+                // Re-apply once data is (possibly) available so the dropdowns restore correctly.
+                if (_openHolidaysApiAvailable)
+                {
+                    ApplyConfig(config);
+                }
             }
             else
             {
@@ -920,7 +928,6 @@
                 else
                 {
                     _gleittage.RemoveAll(s => s.Start.Date == date);
-                    _notes.RemoveAll(s => s.Start.Date == date);
                     _selectedSlots.Add(new Marking { Start = date, End = date.AddDays(1), Name = "Urlaub", Type = MarkingType.Selected });
                 }
                 break;
@@ -933,7 +940,6 @@
                 else
                 {
                     _selectedSlots.RemoveAll(s => s.Start.Date == date);
-                    _notes.RemoveAll(s => s.Start.Date == date);
                     _gleittage.Add(new Marking { Start = date, End = date.AddDays(1), Name = "Gleittag", Type = MarkingType.Gleittag });
                 }
                 break;
@@ -943,13 +949,11 @@
                  {
                      _notes.Remove(existingNote);
                  }
-                 else
-                 {
-                     _selectedSlots.RemoveAll(s => s.Start.Date == date);
-                     _gleittage.RemoveAll(s => s.Start.Date == date);
-                     var text = string.IsNullOrWhiteSpace(_defaultNoteText) ? "Notiz" : _defaultNoteText.Trim();
-                     _notes.Add(new Marking { Start = date, End = date.AddDays(1), Name = text, Type = MarkingType.Note });
-                 }
+                  else
+                  {
+                      var text = string.IsNullOrWhiteSpace(_defaultNoteText) ? "Notiz" : _defaultNoteText.Trim();
+                      _notes.Add(new Marking { Start = date, End = date.AddDays(1), Name = text, Type = MarkingType.Note });
+                  }
                  break;
         }
 

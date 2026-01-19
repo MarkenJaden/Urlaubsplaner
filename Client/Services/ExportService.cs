@@ -49,8 +49,9 @@ public class ExportService
         {
             sb.AppendLine("BEGIN:VEVENT");
             sb.AppendLine($"DTSTART;VALUE=DATE:{item.Start:yyyyMMdd}");
-            // End date in iCal is exclusive
-            sb.AppendLine($"DTEND;VALUE=DATE:{item.End.AddDays(1):yyyyMMdd}");
+            // DTEND in iCal is exclusive; for an all-day single-day event use Start+1 day.
+            var endExclusive = (item.End.Date <= item.Start.Date ? item.Start.Date.AddDays(1) : item.End.Date.AddDays(1));
+            sb.AppendLine($"DTEND;VALUE=DATE:{endExclusive:yyyyMMdd}");
             sb.AppendLine($"SUMMARY:{EscapeIcsText(item.Title)}");
             sb.AppendLine($"CATEGORIES:{EscapeIcsText(item.Category)}");
             sb.AppendLine("END:VEVENT");
@@ -127,10 +128,17 @@ public class ExportService
         for (int i = 1; i < ordered.Count; i++)
         {
             var next = ordered[i];
-            bool sameBucket = next.Category == current.Category && next.Title == current.Title;
+
+            // Same "kind" means same Category.
+            // Notes should only merge when the description matches; for vacation/gleittag we merge by Category only.
+            bool sameKind = next.Category == current.Category;
+            if (sameKind && string.Equals(current.Category, "Notiz", StringComparison.OrdinalIgnoreCase))
+            {
+                sameKind = next.Title == current.Title;
+            }
             bool isNextDay = next.Start.Date == current.End.Date.AddDays(1);
 
-            if (sameBucket && isNextDay)
+            if (sameKind && isNextDay)
             {
                 current = new ExportItem
                 {
