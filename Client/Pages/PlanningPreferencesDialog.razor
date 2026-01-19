@@ -12,17 +12,18 @@
                 <RadzenStack Gap="1rem" class="rz-p-2">
                     <RadzenFieldset Text="Allgemeine Präferenzen">
                         <RadzenStack Gap="1rem">
-                                                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
-                                                            <RadzenCheckBox @bind-Value="Preferences.PreferBridgeDays" Name="PreferBridgeDays" />
-                                                            <RadzenLabel Text="Brückentage nutzen" Component="PreferBridgeDays" />
-                                                        </RadzenStack>
-                            
-                                                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
-                                                            <RadzenCheckBox @bind-Value="Preferences.OptimizeForEfficiency" Name="OptimizeForEfficiency" />
-                                                            <RadzenLabel Text="Maximale Effizienz (Nur die allerbesten Brückentage)" Component="OptimizeForEfficiency" />
-                                                        </RadzenStack>
-                                                        
-                                                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">                                <RadzenCheckBox @bind-Value="Preferences.PreferSchoolHolidays" Name="PreferSchoolHolidays" />
+                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                                <RadzenCheckBox @bind-Value="Preferences.PreferBridgeDays" Name="PreferBridgeDays" />
+                                <RadzenLabel Text="Brückentage nutzen" Component="PreferBridgeDays" />
+                            </RadzenStack>
+
+                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                                <RadzenCheckBox @bind-Value="Preferences.OptimizeForEfficiency" Name="OptimizeForEfficiency" />
+                                <RadzenLabel Text="Maximale Effizienz (Nur die allerbesten Brückentage)" Component="OptimizeForEfficiency" />
+                            </RadzenStack>
+
+                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                                <RadzenCheckBox @bind-Value="Preferences.PreferSchoolHolidays" Name="PreferSchoolHolidays" />
                                 <RadzenLabel Text="Schulferien bevorzugen (z.B. für Familien)" Component="PreferSchoolHolidays" />
                             </RadzenStack>
 
@@ -30,7 +31,7 @@
                                 <RadzenCheckBox @bind-Value="Preferences.AvoidSchoolHolidays" Name="AvoidSchoolHolidays" />
                                 <RadzenLabel Text="Außerhalb der Schulferien (günstiger/ruhiger)" Component="AvoidSchoolHolidays" />
                             </RadzenStack>
-                                
+
                             @if (Preferences.AvoidSchoolHolidays)
                             {
                                 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" Style="margin-left: 2rem;">
@@ -38,6 +39,21 @@
                                     <RadzenLabel Text="Schulferien aller Bundesländer berücksichtigen" Component="AvoidAllStatesSchoolHolidays" />
                                 </RadzenStack>
                             }
+
+                            <RadzenRow AlignItems="AlignItems.Center">
+                                <RadzenColumn Size="6">
+                                    <RadzenLabel Text="Notizen" Component="NoteHandling" />
+                                </RadzenColumn>
+                                <RadzenColumn Size="6">
+                                    <RadzenDropDown @bind-Value="Preferences.NoteHandling"
+                                                    Data="@(Enum.GetValues(typeof(NoteHandlingMode)).Cast<NoteHandlingMode>())"
+                                                    Name="NoteHandling" Style="width: 100%;">
+                                        <Template>
+                                            @(context is NoteHandlingMode.Prefer ? "Urlaub auf Notizen legen" : "Notizen vermeiden")
+                                        </Template>
+                                    </RadzenDropDown>
+                                </RadzenColumn>
+                            </RadzenRow>
 
                             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
                                 <RadzenCheckBox @bind-Value="Preferences.DistributeEvenly" Name="DistributeEvenly" />

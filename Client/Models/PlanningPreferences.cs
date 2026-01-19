@@ -10,9 +10,12 @@ namespace Urlaubsplaner.Client.Models
         public bool AvoidSchoolHolidays { get; set; }
         public bool AvoidAllStatesSchoolHolidays { get; set; }
         public bool DistributeEvenly { get; set; } = true;
+
+        public NoteHandlingMode NoteHandling { get; set; } = NoteHandlingMode.Avoid;
+
         public int MinDaysPerBlock { get; set; } = 1;
         public int? MaxDaysPerBlock { get; set; }
-        
+
         public List<PeriodPreference> PeriodPreferences { get; set; } = [];
     }
 
@@ -27,5 +30,11 @@ namespace Urlaubsplaner.Client.Models
     {
         MustHave,
         NiceToHave
+    }
+
+    public enum NoteHandlingMode
+    {
+        Avoid,
+        Prefer
     }
 }

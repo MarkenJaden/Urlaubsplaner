@@ -307,9 +307,9 @@
 
                 <RadzenText TextStyle="TextStyle.H6">Legende</RadzenText>
                 <RadzenStack Gap="0.5rem">
-                     <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: rgba(40, 167, 69, 0.3); border: 1px solid #28a745;"></div> Urlaub</div>
-                     <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: rgba(0, 123, 255, 0.3); border: 1px solid #007bff;"></div> Gleittag</div>
-                     <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: rgba(255, 193, 7, 0.35); border: 1px solid #ffc107;"></div> Notiz</div>
+                     <div class="holiday-legend-item"><RadzenIcon Icon="beach_access" Style="color: #1f8f3a;" /> Urlaub</div>
+                     <div class="holiday-legend-item"><RadzenIcon Icon="event_available" Style="color: #0a58ca;" /> Gleittag</div>
+                     <div class="holiday-legend-item"><RadzenIcon Icon="note_alt" Style="color: #ffc107;" /> Notiz</div>
                      <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: transparent; border: 3px solid #dc3545;"></div> Feiertag (Mein BL)</div>
                      <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: transparent; border: 3px solid #6f42c1;"></div> Schulferien (Mein BL)</div>
                      <div class="holiday-legend-item"><div class="holiday-legend-color" style="background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAxMCAxMCc+PHBvbHlnb24gcG9pbnRzPSc1LDAgMTAsNSA1LDEwJyBzdHlsZT0nZmlsbDpvcmFuZ2U7IG9wYWNpdHk6IDAuOScvPjwvc3ZnPg=='); background-repeat: no-repeat; background-position: center; background-size: contain; border: none;"></div> Brückentag</div>
@@ -905,7 +905,8 @@
             overwrite,
             planFromToday,
             _year,
-            _selectedSlots.ToList()
+            _selectedSlots.ToList(),
+            _notes.ToList()
         );
 
         if (suggestedBlocks.Any())

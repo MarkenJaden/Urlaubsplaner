@@ -138,7 +138,8 @@ namespace Urlaubsplaner.Client.Services
             bool overwriteExisting,
             bool planFromToday,
             int year,
-            List<Marking> currentSelectedSlots)
+            List<Marking> currentSelectedSlots,
+            List<Marking> notes)
         {
             decimal vacationDaysToPlan = overwriteExisting ? totalVacationDays : totalVacationDays - plannedDays;
             if (vacationDaysToPlan <= 0 && !overwriteExisting)
@@ -153,6 +154,11 @@ namespace Urlaubsplaner.Client.Services
             var phDates = publicHolidays
                 .Where(h => h.StartDate.HasValue && h.EndDate.HasValue)
                 .SelectMany(h => Enumerable.Range(0, (h.EndDate.Value.Date - h.StartDate.Value.Date).Days + 1).Select(offset => h.StartDate.Value.Date.AddDays(offset)))
+                .ToHashSet();
+
+            var noteDates = notes
+                .Where(n => n.Type == MarkingType.Note)
+                .Select(n => n.Start.Date)
                 .ToHashSet();
 
             var shDates = new HashSet<DateTime>();
@@ -237,20 +243,30 @@ namespace Urlaubsplaner.Client.Services
                             if (workDays.Count < prefs.MinDaysPerBlock) score = 0;
                             if (prefs.MaxDaysPerBlock.HasValue && workDays.Count > prefs.MaxDaysPerBlock.Value) score = 0;
 
-                            if (score > 0)
-                            {
-                                if (prefs.PreferSchoolHolidays)
+                                if (score > 0)
                                 {
-                                    bool overlaps = workDays.Any(d => shDates.Contains(d));
-                                    if (overlaps) score *= 1.5;
+                                    bool overlapsNotes = noteDates.Count > 0 && workDays.Any(d => noteDates.Contains(d));
+                                    if (overlapsNotes)
+                                    {
+                                        score = prefs.NoteHandling switch
+                                        {
+                                            NoteHandlingMode.Prefer => score * 1.35,
+                                            _ => score * 0.05
+                                        };
+                                    }
+
+                                    if (prefs.PreferSchoolHolidays)
+                                    {
+                                        bool overlaps = workDays.Any(d => shDates.Contains(d));
+                                        if (overlaps) score *= 1.5;
+                                    }
+
+                                    if (prefs.AvoidSchoolHolidays)
+                                    {
+                                        bool overlaps = workDays.Any(d => datesForAvoidance.Contains(d));
+                                        if (overlaps) score *= 0.5;
+                                    }
                                 }
-                                
-                                if (prefs.AvoidSchoolHolidays)
-                                {
-                                    bool overlaps = workDays.Any(d => datesForAvoidance.Contains(d));
-                                    if (overlaps) score *= 0.5;
-                                }
-                            }
 
                             bool currentBlockSatisfiesMustHave = false;
                             foreach (var periodPref in prefs.PeriodPreferences)
