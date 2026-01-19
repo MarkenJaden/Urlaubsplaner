@@ -80,9 +80,12 @@
         }
     }
 
-    /* Slot icon overlay (colored via CSS filter) */
+    /* Slot icons: allow multiple overlays by using background layers */
     .holiday-slot-icon {
         position: relative;
+        --holiday-icon-filter-vac: none;
+        --holiday-icon-filter-gleit: none;
+        --holiday-icon-filter-note: none;
     }
 
     .holiday-slot-icon::after {
@@ -91,11 +94,14 @@
         inset: 0;
         background-image: var(--holiday-icon-url);
         background-repeat: no-repeat;
-        background-position: center;
+        background-position: var(--holiday-icon-position, center);
         background-size: var(--holiday-icon-size, 62%);
-        filter: var(--holiday-icon-filter, none);
         pointer-events: none;
     }
+
+    .holiday-slot-icon.has-vacation::after { filter: var(--holiday-icon-filter-vac, none); }
+    .holiday-slot-icon.has-gleittag::after { filter: var(--holiday-icon-filter-gleit, none); }
+    .holiday-slot-icon.has-note::after { filter: var(--holiday-icon-filter-note, none); }
 
     .holiday-legend-icon {
         width: 1.1rem;
@@ -819,55 +825,59 @@
 
         info.AddRange(dayMarkings.Where(x => x.Type is MarkingType.PublicHolidayCompare or MarkingType.SchoolHolidayCompare).Select(m => $"{m.Name} ({m.SubdivisionName})"));
 
-         var selection = _selectedSlots.FirstOrDefault(s => s.Start.Date == date);
-         if (selection != null)
-         {
-             // Icon overlay (only icon gets color via CSS variable)
-             style.Append("--holiday-icon-url: url('/svg/beach_access_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=vac');");
-             style.Append("--holiday-icon-size: 62%;");
+        void AddIcon(string url, string size, string position)
+        {
+            bgImages.Add(url);
+            bgPositions.Add(position);
+            bgSizes.Add(size);
+        }
 
-             if (_overBudgetDates.Contains(date))
-             {
-                 // Red
-                 style.Append("--holiday-icon-filter: invert(27%) sepia(83%) saturate(1786%) hue-rotate(339deg) brightness(95%) contrast(92%);");
-                 info.Add("Geplanter Urlaub (Über Budget!)");
-             }
-             else
-             {
-                 // Green
-                 style.Append("--holiday-icon-filter: invert(48%) sepia(73%) saturate(448%) hue-rotate(86deg) brightness(92%) contrast(92%);");
-                 info.Add("Geplanter Urlaub");
-             }
+        var selection = _selectedSlots.FirstOrDefault(s => s.Start.Date == date);
+        if (selection != null)
+        {
+            AddIcon(
+                "url('/svg/beach_access_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=vac')",
+                "62%",
+                "center"
+            );
 
-             args.Attributes["class"] = AppendCssClass(args.Attributes, "holiday-slot-icon");
-         }
+            if (_overBudgetDates.Contains(date))
+            {
+                style.Append("--holiday-icon-filter-vac: invert(27%) sepia(83%) saturate(1786%) hue-rotate(339deg) brightness(95%) contrast(92%);");
+                info.Add("Geplanter Urlaub (Über Budget!)");
+            }
+            else
+            {
+                style.Append("--holiday-icon-filter-vac: invert(48%) sepia(73%) saturate(448%) hue-rotate(86deg) brightness(92%) contrast(92%);");
+                info.Add("Geplanter Urlaub");
+            }
+        }
 
-         var gleittag = _gleittage.FirstOrDefault(s => s.Start.Date == date);
-         if (gleittag != null)
-         {
-             style.Append("--holiday-icon-url: url('/svg/event_available_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=gleit');");
-             style.Append("--holiday-icon-size: 62%;");
-             // Blue
-             style.Append("--holiday-icon-filter: invert(35%) sepia(86%) saturate(2351%) hue-rotate(197deg) brightness(96%) contrast(101%);");
+        var gleittag = _gleittage.FirstOrDefault(s => s.Start.Date == date);
+        if (gleittag != null)
+        {
+            AddIcon(
+                "url('/svg/event_available_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=gleit')",
+                "62%",
+                "center"
+            );
 
-             info.Add("Gleittag");
-             args.Attributes["class"] = AppendCssClass(args.Attributes, "holiday-slot-icon");
-         }
+            style.Append("--holiday-icon-filter-gleit: invert(35%) sepia(86%) saturate(2351%) hue-rotate(197deg) brightness(96%) contrast(101%);");
+            info.Add("Gleittag");
+        }
 
+        var note = _notes.FirstOrDefault(s => s.Start.Date == date);
+        if (note != null)
+        {
+            AddIcon(
+                "url('/svg/note_alt_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=note')",
+                "62%",
+                "center"
+            );
 
-
-
-          var note = _notes.FirstOrDefault(s => s.Start.Date == date);
-          if (note != null)
-          {
-              style.Append("--holiday-icon-url: url('/svg/note_alt_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=note');");
-              style.Append("--holiday-icon-size: 62%;");
-              // Yellow
-              style.Append("--holiday-icon-filter: invert(83%) sepia(67%) saturate(1787%) hue-rotate(355deg) brightness(101%) contrast(102%);");
-
-              info.Add(string.IsNullOrWhiteSpace(note.Name) ? "Notiz" : $"Notiz: {note.Name}");
-              args.Attributes["class"] = AppendCssClass(args.Attributes, "holiday-slot-icon");
-          }
+            style.Append("--holiday-icon-filter-note: invert(83%) sepia(67%) saturate(1787%) hue-rotate(355deg) brightness(101%) contrast(102%);");
+            info.Add(string.IsNullOrWhiteSpace(note.Name) ? "Notiz" : $"Notiz: {note.Name}");
+        }
 
 
 
@@ -893,13 +903,28 @@
             style.Append("opacity: 0.5; filter: grayscale(0.5); ");
         }
 
-        if (bgImages.Any())
-        {
-            style.Append($"background-image: {string.Join(", ", bgImages)}; ");
-            style.Append($"background-position: {string.Join(", ", bgPositions)}; ");
-            style.Append($"background-size: {string.Join(", ", bgSizes)}; ");
-            style.Append("background-repeat: no-repeat; ");
-        }
+         if (bgImages.Any())
+         {
+             style.Append($"--holiday-icon-url: {string.Join(", ", bgImages)};");
+             style.Append($"--holiday-icon-position: {string.Join(", ", bgPositions)};");
+             style.Append($"--holiday-icon-size: {string.Join(", ", bgSizes)};");
+         }
+
+         if (selection != null)
+         {
+             args.Attributes["class"] = AppendCssClass(args.Attributes, "holiday-slot-icon");
+             args.Attributes["class"] = AppendCssClass(args.Attributes, "has-vacation");
+         }
+         if (gleittag != null)
+         {
+             args.Attributes["class"] = AppendCssClass(args.Attributes, "holiday-slot-icon");
+             args.Attributes["class"] = AppendCssClass(args.Attributes, "has-gleittag");
+         }
+         if (note != null)
+         {
+             args.Attributes["class"] = AppendCssClass(args.Attributes, "holiday-slot-icon");
+             args.Attributes["class"] = AppendCssClass(args.Attributes, "has-note");
+         }
 
         args.Attributes["style"] = style.ToString();
 
@@ -1189,35 +1214,35 @@
 
          if (options.ExportVacation)
          {
-             items.AddRange(_selectedSlots.Select(s => new ExportService.ExportItem
-             {
-                 Start = s.Start.Date,
-                 End = s.End.Date,
-                 Title = "Urlaub",
-                 Category = "Urlaub"
-             }));
+              items.AddRange(_selectedSlots.Select(s => new ExportService.ExportItem
+              {
+                  Start = s.Start.Date,
+                  End = s.Start.Date,
+                  Title = "Urlaub",
+                  Category = "Urlaub"
+              }));
          }
 
          if (options.ExportGleittage)
          {
-             items.AddRange(_gleittage.Select(s => new ExportService.ExportItem
-             {
-                 Start = s.Start.Date,
-                 End = s.End.Date,
-                 Title = "Gleittag",
-                 Category = "Gleittag"
-             }));
+              items.AddRange(_gleittage.Select(s => new ExportService.ExportItem
+              {
+                  Start = s.Start.Date,
+                  End = s.Start.Date,
+                  Title = "Gleittag",
+                  Category = "Gleittag"
+              }));
          }
 
          if (options.ExportNotes)
          {
-             items.AddRange(_notes.Select(s => new ExportService.ExportItem
-             {
-                 Start = s.Start.Date,
-                 End = s.End.Date,
-                 Title = string.IsNullOrWhiteSpace(s.Name) ? "Notiz" : s.Name,
-                 Category = "Notiz"
-             }));
+              items.AddRange(_notes.Select(s => new ExportService.ExportItem
+              {
+                  Start = s.Start.Date,
+                  End = s.Start.Date,
+                  Title = string.IsNullOrWhiteSpace(s.Name) ? "Notiz" : s.Name,
+                  Category = "Notiz"
+              }));
          }
 
          if (!items.Any())
