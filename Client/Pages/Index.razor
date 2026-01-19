@@ -80,28 +80,35 @@
         }
     }
 
-    /* Slot icons: allow multiple overlays by using background layers */
+    /* Slot icons: use multiple overlays to keep per-icon colors */
     .holiday-slot-icon {
         position: relative;
-        --holiday-icon-filter-vac: none;
-        --holiday-icon-filter-gleit: none;
-        --holiday-icon-filter-note: none;
     }
 
-    .holiday-slot-icon::after {
+    .holiday-slot-icon::after,
+    .holiday-slot-icon::before {
         content: "";
         position: absolute;
         inset: 0;
-        background-image: var(--holiday-icon-url);
         background-repeat: no-repeat;
-        background-position: var(--holiday-icon-position, center);
-        background-size: var(--holiday-icon-size, 62%);
         pointer-events: none;
     }
 
-    .holiday-slot-icon.has-vacation::after { filter: var(--holiday-icon-filter-vac, none); }
-    .holiday-slot-icon.has-gleittag::after { filter: var(--holiday-icon-filter-gleit, none); }
-    .holiday-slot-icon.has-note::after { filter: var(--holiday-icon-filter-note, none); }
+    /* Base (larger) icon layer (vacation/gleittag) */
+    .holiday-slot-icon::after {
+        background-image: var(--holiday-icon-url);
+        background-position: var(--holiday-icon-position, center);
+        background-size: var(--holiday-icon-size, 62%);
+        filter: var(--holiday-icon-filter, none);
+    }
+
+    /* Secondary (small) icon layer (note when combined) */
+    .holiday-slot-icon::before {
+        background-image: var(--holiday-icon-url-secondary);
+        background-position: var(--holiday-icon-position-secondary, center);
+        background-size: var(--holiday-icon-size-secondary, 48%);
+        filter: var(--holiday-icon-filter-secondary, none);
+    }
 
     .holiday-legend-icon {
         width: 1.1rem;
@@ -825,57 +832,54 @@
 
         info.AddRange(dayMarkings.Where(x => x.Type is MarkingType.PublicHolidayCompare or MarkingType.SchoolHolidayCompare).Select(m => $"{m.Name} ({m.SubdivisionName})"));
 
-        void AddIcon(string url, string size, string position)
-        {
-            bgImages.Add(url);
-            bgPositions.Add(position);
-            bgSizes.Add(size);
-        }
-
         var selection = _selectedSlots.FirstOrDefault(s => s.Start.Date == date);
+        var gleittag = _gleittage.FirstOrDefault(s => s.Start.Date == date);
+        var note = _notes.FirstOrDefault(s => s.Start.Date == date);
+
+        // Icon layout rules:
+        // - If note + vacation/gleittag exist: show vacation/gleittag as main icon (bigger, centered), note as small icon on top.
+        // - Bridge-day arrows are drawn as background of the cell (not via ::after), so they stay behind icons.
+        bool hasMain = selection != null || gleittag != null;
+        bool hasSecondary = note != null && hasMain;
+
         if (selection != null)
         {
-            AddIcon(
-                "url('/svg/beach_access_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=vac')",
-                "62%",
-                "center"
-            );
+            style.Append("--holiday-icon-url: url('/svg/beach_access_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=vac');");
+            style.Append("--holiday-icon-position: center;--holiday-icon-size: 66%;");
 
             if (_overBudgetDates.Contains(date))
             {
-                style.Append("--holiday-icon-filter-vac: invert(27%) sepia(83%) saturate(1786%) hue-rotate(339deg) brightness(95%) contrast(92%);");
+                style.Append("--holiday-icon-filter: invert(27%) sepia(83%) saturate(1786%) hue-rotate(339deg) brightness(95%) contrast(92%);");
                 info.Add("Geplanter Urlaub (Über Budget!)");
             }
             else
             {
-                style.Append("--holiday-icon-filter-vac: invert(48%) sepia(73%) saturate(448%) hue-rotate(86deg) brightness(92%) contrast(92%);");
+                style.Append("--holiday-icon-filter: invert(48%) sepia(73%) saturate(448%) hue-rotate(86deg) brightness(92%) contrast(92%);");
                 info.Add("Geplanter Urlaub");
             }
         }
-
-        var gleittag = _gleittage.FirstOrDefault(s => s.Start.Date == date);
-        if (gleittag != null)
+        else if (gleittag != null)
         {
-            AddIcon(
-                "url('/svg/event_available_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=gleit')",
-                "62%",
-                "center"
-            );
-
-            style.Append("--holiday-icon-filter-gleit: invert(35%) sepia(86%) saturate(2351%) hue-rotate(197deg) brightness(96%) contrast(101%);");
+            style.Append("--holiday-icon-url: url('/svg/event_available_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=gleit');");
+            style.Append("--holiday-icon-position: center;--holiday-icon-size: 66%;");
+            style.Append("--holiday-icon-filter: invert(35%) sepia(86%) saturate(2351%) hue-rotate(197deg) brightness(96%) contrast(101%);");
             info.Add("Gleittag");
         }
-
-        var note = _notes.FirstOrDefault(s => s.Start.Date == date);
-        if (note != null)
+        else if (note != null)
         {
-            AddIcon(
-                "url('/svg/note_alt_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=note')",
-                "62%",
-                "center"
-            );
+            // Note-only day
+            style.Append("--holiday-icon-url: url('/svg/note_alt_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=note');");
+            style.Append("--holiday-icon-position: center;--holiday-icon-size: 62%;");
+            style.Append("--holiday-icon-filter: invert(83%) sepia(67%) saturate(1787%) hue-rotate(355deg) brightness(101%) contrast(102%);");
+            info.Add(string.IsNullOrWhiteSpace(note.Name) ? "Notiz" : $"Notiz: {note.Name}");
+        }
 
-            style.Append("--holiday-icon-filter-note: invert(83%) sepia(67%) saturate(1787%) hue-rotate(355deg) brightness(101%) contrast(102%);");
+        if (hasSecondary && note != null)
+        {
+            style.Append("--holiday-icon-url-secondary: url('/svg/note_alt_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=note');");
+            style.Append("--holiday-icon-position-secondary: center 20%;");
+            style.Append("--holiday-icon-size-secondary: 44%;");
+            style.Append("--holiday-icon-filter-secondary: invert(83%) sepia(67%) saturate(1787%) hue-rotate(355deg) brightness(101%) contrast(102%);");
             info.Add(string.IsNullOrWhiteSpace(note.Name) ? "Notiz" : $"Notiz: {note.Name}");
         }
 
@@ -891,6 +895,7 @@
             };
             if (!string.IsNullOrEmpty(arrowSvg))
             {
+                // Arrow should be behind icons; keep it as a real background layer of the slot.
                 bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(arrowSvg))}')");
                 bgPositions.Add("center");
                 bgSizes.Add("contain");
@@ -903,27 +908,9 @@
             style.Append("opacity: 0.5; filter: grayscale(0.5); ");
         }
 
-         if (bgImages.Any())
-         {
-             style.Append($"--holiday-icon-url: {string.Join(", ", bgImages)};");
-             style.Append($"--holiday-icon-position: {string.Join(", ", bgPositions)};");
-             style.Append($"--holiday-icon-size: {string.Join(", ", bgSizes)};");
-         }
-
-         if (selection != null)
+         if (selection != null || gleittag != null || note != null)
          {
              args.Attributes["class"] = AppendCssClass(args.Attributes, "holiday-slot-icon");
-             args.Attributes["class"] = AppendCssClass(args.Attributes, "has-vacation");
-         }
-         if (gleittag != null)
-         {
-             args.Attributes["class"] = AppendCssClass(args.Attributes, "holiday-slot-icon");
-             args.Attributes["class"] = AppendCssClass(args.Attributes, "has-gleittag");
-         }
-         if (note != null)
-         {
-             args.Attributes["class"] = AppendCssClass(args.Attributes, "holiday-slot-icon");
-             args.Attributes["class"] = AppendCssClass(args.Attributes, "has-note");
          }
 
         args.Attributes["style"] = style.ToString();
