@@ -96,6 +96,18 @@
         filter: var(--holiday-icon-filter, none);
         pointer-events: none;
     }
+
+    .holiday-legend-icon {
+        width: 1.1rem;
+        height: 1.1rem;
+        display: inline-block;
+        vertical-align: text-bottom;
+        background-image: var(--holiday-icon-url);
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: contain;
+        filter: var(--holiday-icon-filter, none);
+    }
 </style>
 
 <RadzenRow Gap="1rem" RowGap="1rem">
@@ -321,11 +333,12 @@
 
                 <hr style="margin: 0.75rem 0;" />
 
-                <RadzenText TextStyle="TextStyle.H6">Legende</RadzenText>
-                <RadzenStack Gap="0.5rem">
-                     <div class="holiday-legend-item"><RadzenIcon Icon="beach_access" Style="color: #1f8f3a;" /> Urlaub</div>
-                     <div class="holiday-legend-item"><RadzenIcon Icon="event_available" Style="color: #0a58ca;" /> Gleittag</div>
-                     <div class="holiday-legend-item"><RadzenIcon Icon="note_alt" Style="color: #ffc107;" /> Notiz</div>
+                 <RadzenText TextStyle="TextStyle.H6">Legende</RadzenText>
+                 <RadzenStack Gap="0.5rem">
+                      <div class="holiday-legend-item"><RadzenIcon Icon="beach_access" Style="color: #1f8f3a;" /> Urlaub</div>
+                      <div class="holiday-legend-item"><RadzenIcon Icon="event_available" Style="color: #0a58ca;" /> Gleittag</div>
+                      <div class="holiday-legend-item"><span class="holiday-legend-icon" style="--holiday-icon-url: url('/svg/note_alt_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=note'); --holiday-icon-filter: invert(83%) sepia(67%) saturate(1787%) hue-rotate(355deg) brightness(101%) contrast(102%);"></span> Notiz</div>
+
                      <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: transparent; border: 3px solid #dc3545;"></div> Feiertag (Mein BL)</div>
                      <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: transparent; border: 3px solid #6f42c1;"></div> Schulferien (Mein BL)</div>
                      <div class="holiday-legend-item"><div class="holiday-legend-color" style="background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAxMCAxMCc+PHBvbHlnb24gcG9pbnRzPSc1LDAgMTAsNSA1LDEwJyBzdHlsZT0nZmlsbDpvcmFuZ2U7IG9wYWNpdHk6IDAuOScvPjwvc3ZnPg=='); background-repeat: no-repeat; background-position: center; background-size: contain; border: none;"></div> Brückentag</div>

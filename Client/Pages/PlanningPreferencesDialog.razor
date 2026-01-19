@@ -40,6 +40,11 @@
                                 </RadzenStack>
                             }
 
+                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                                <RadzenCheckBox @bind-Value="Preferences.DistributeEvenly" Name="DistributeEvenly" />
+                                <RadzenLabel Text="Gleichmäßig über das Jahr verteilen" Component="DistributeEvenly" />
+                            </RadzenStack>
+
                             <RadzenRow AlignItems="AlignItems.Center">
                                 <RadzenColumn Size="6">
                                     <RadzenLabel Text="Notizen" Component="NoteHandling" />
@@ -88,11 +93,6 @@
                                 </RadzenText>
                             }
 
-
-                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
-                                <RadzenCheckBox @bind-Value="Preferences.DistributeEvenly" Name="DistributeEvenly" />
-                                <RadzenLabel Text="Gleichmäßig über das Jahr verteilen" Component="DistributeEvenly" />
-                            </RadzenStack>
                         </RadzenStack>
                     </RadzenFieldset>
 
