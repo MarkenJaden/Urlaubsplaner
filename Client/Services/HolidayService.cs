@@ -5,18 +5,10 @@ using Urlaubsplaner.Client.Helpers;
 
 namespace Urlaubsplaner.Client.Services
 {
-    public class HolidayService
+    public class HolidayService(StateService stateService)
     {
-        private readonly StateService _stateService;
-        private readonly HolidaysApi _holidaysApi;
-        private readonly RegionalApi _regionalApi;
-
-        public HolidayService(StateService stateService)
-        {
-            _stateService = stateService;
-            _holidaysApi = new HolidaysApi();
-            _regionalApi = new RegionalApi();
-        }
+        private readonly HolidaysApi _holidaysApi = new();
+        private readonly RegionalApi _regionalApi = new();
 
         public async Task<List<Country>> LoadCountriesAsync()
         {
@@ -70,7 +62,7 @@ namespace Urlaubsplaner.Client.Services
         public async Task<List<HolidayResponse>> FetchHolidaysCached(string isoCode, DateTime start, DateTime end, string? subdivisionCode, bool isSchool)
         {
             string key = $"{isoCode}_{start:yyyy-MM-dd}_{end:yyyy-MM-dd}_{subdivisionCode}_{isSchool}";
-            var cached = await _stateService.GetCachedHolidaysAsync(key);
+            var cached = await stateService.GetCachedHolidaysAsync(key);
             if (cached != null) return cached.ToList();
 
             try
@@ -85,7 +77,7 @@ namespace Urlaubsplaner.Client.Services
                     result = await _holidaysApi.PublicHolidaysGetAsync(isoCode, start, end, "DE", subdivisionCode);
                 }
 
-                await _stateService.CacheHolidaysAsync(key, result);
+                await stateService.CacheHolidaysAsync(key, result);
                 return result;
             }
             catch

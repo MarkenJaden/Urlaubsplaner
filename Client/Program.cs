@@ -1,7 +1,5 @@
-using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Radzen;
-using Urlaubsplaner.Client;
 using Microsoft.JSInterop;
 using System.Globalization;
 using Blazored.LocalStorage;
@@ -22,8 +20,9 @@ builder.Services.AddBlazoredSessionStorage();
 builder.Services.AddScoped<Urlaubsplaner.Client.Services.StateService>();
 builder.Services.AddScoped<Urlaubsplaner.Client.Services.HolidayService>();
 builder.Services.AddScoped<Urlaubsplaner.Client.Services.VacationCalculationService>();
+builder.Services.AddScoped<Urlaubsplaner.Client.Services.OpenHolidaysBootstrapState>();
 var host = builder.Build();
-var jsRuntime = host.Services.GetRequiredService<Microsoft.JSInterop.IJSRuntime>();
+var jsRuntime = host.Services.GetRequiredService<IJSRuntime>();
 var culture = await jsRuntime.InvokeAsync<string>("Radzen.getCulture");
 if (!string.IsNullOrEmpty(culture))
 {

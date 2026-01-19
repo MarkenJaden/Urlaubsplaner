@@ -1,20 +1,9 @@
-using System;
-using System.IO;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Hosting;
 
 namespace Urlaubsplaner.Server.Controllers
 {
-    public partial class UploadController : Controller
+    public partial class UploadController(IWebHostEnvironment environment) : Controller
     {
-        private readonly IWebHostEnvironment environment;
-
-        public UploadController(IWebHostEnvironment environment)
-        {
-            this.environment = environment;
-        }
-
         // Single file upload
         [HttpPost("upload/single")]
         public async Task<IActionResult> Single(IFormFile file)

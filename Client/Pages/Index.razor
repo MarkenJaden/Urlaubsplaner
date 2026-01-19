@@ -5,7 +5,6 @@
 @using OpenHolidaysApi.Model
 @using Urlaubsplaner.Client.Services
 @using Urlaubsplaner.Client.Models
-@using Urlaubsplaner.Client.Helpers
 
 @inject IJSRuntime JSRuntime
 @inject NavigationManager NavigationManager
@@ -16,6 +15,7 @@
 @inject ExportService ExportService
 @inject StateService StateService
 @inject HolidayService HolidayService
+@inject OpenHolidaysBootstrapState OpenHolidaysBootstrapState
 @inject VacationCalculationService VacationCalculationService
 @inject Microsoft.Extensions.Localization.IStringLocalizer<Index> L
 @implements IDisposable
@@ -426,7 +426,23 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await RetryOpenHolidaysApi(showNotificationOnFailure: true);
+        var usedBootstrap = false;
+        if (OpenHolidaysBootstrapState.Subdivisions is { Count: > 0 } subdivisions && OpenHolidaysBootstrapState.Countries is { Count: > 0 } countries)
+        {
+            _allSubdivisions = subdivisions;
+            _filteredSubdivisions = _allSubdivisions;
+
+            _allAdditionalCountries = countries;
+            _filteredAdditionalCountries = _allAdditionalCountries;
+
+            _openHolidaysApiAvailable = true;
+            usedBootstrap = true;
+        }
+
+        if (!usedBootstrap)
+        {
+            await RetryOpenHolidaysApi(showNotificationOnFailure: true);
+        }
     }
 
     private async Task RetryOpenHolidaysApi()
@@ -444,6 +460,8 @@
         _openHolidaysApiRetryInProgress = true;
         try
         {
+            var wasOffline = !_openHolidaysApiAvailable;
+
             var countries = await HolidayService.LoadCountriesAsync();
             var subdivisions = await HolidayService.LoadSubdivisionsAsync();
 
@@ -457,13 +475,26 @@
 
             if (_openHolidaysApiAvailable)
             {
-                NotificationService.Notify(new NotificationMessage
+                OpenHolidaysBootstrapState.Subdivisions = _allSubdivisions;
+                OpenHolidaysBootstrapState.Countries = _allAdditionalCountries;
+                OpenHolidaysBootstrapState.LoadedAt = DateTimeOffset.Now;
+
+                if (_pendingConfig != null)
                 {
-                    Severity = NotificationSeverity.Success,
-                    Summary = "OpenHolidays API wieder online",
-                    Detail = "Daten wurden neu geladen.",
-                    Duration = 4000
-                });
+                    ApplyConfig(_pendingConfig, applySelections: true);
+                    _pendingConfig = null;
+                }
+
+                if (wasOffline)
+                {
+                    NotificationService.Notify(new NotificationMessage
+                    {
+                        Severity = NotificationSeverity.Success,
+                        Summary = "OpenHolidays API wieder online",
+                        Detail = "Daten wurden neu geladen.",
+                        Duration = 4000
+                    });
+                }
 
                 await GetAllMarkings();
             }
@@ -804,7 +835,7 @@
         return $"rgba({r}, {g}, {b}, {alpha.ToString(CultureInfo.InvariantCulture)})";
     }
 
-    private static string AppendCssClass(System.Collections.Generic.IDictionary<string, object> attributes, string cssClass)
+    private static string AppendCssClass(IDictionary<string, object> attributes, string cssClass)
     {
         if (attributes.TryGetValue("class", out var existing) && existing is string s && !string.IsNullOrWhiteSpace(s))
         {

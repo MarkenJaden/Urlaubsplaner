@@ -1,18 +1,10 @@
-using OpenHolidaysApi.Model; // For HolidayResponse properties
-using System.Globalization;
+// For HolidayResponse properties
 using Urlaubsplaner.Client.Models;
 
 namespace Urlaubsplaner.Client.Services
 {
-    public class VacationCalculationService
+    public class VacationCalculationService(HolidayService holidayService)
     {
-        private readonly HolidayService _holidayService;
-
-        public VacationCalculationService(HolidayService holidayService)
-        {
-            _holidayService = holidayService;
-        }
-
         public (decimal plannedDays, int gleittageCount) CalculatePlannedDays(
             IEnumerable<Marking> selectedSlots, 
             IEnumerable<Marking> gleittage,
@@ -150,7 +142,7 @@ namespace Urlaubsplaner.Client.Services
             var startDate = planFromToday ? DateTime.Today : new DateTime(year, 1, 1);
             var endDate = new DateTime(year, 12, 31);
 
-            var publicHolidays = await _holidayService.FetchHolidaysCached("DE", startDate, endDate, primarySubdivision.Code, false);
+            var publicHolidays = await holidayService.FetchHolidaysCached("DE", startDate, endDate, primarySubdivision.Code, false);
             var phDates = publicHolidays
                 .Where(h => h.StartDate.HasValue && h.EndDate.HasValue)
                 .SelectMany(h => Enumerable.Range(0, (h.EndDate.Value.Date - h.StartDate.Value.Date).Days + 1).Select(offset => h.StartDate.Value.Date.AddDays(offset)))
@@ -164,7 +156,7 @@ namespace Urlaubsplaner.Client.Services
             var shDates = new HashSet<DateTime>();
             if (prefs.PreferSchoolHolidays || prefs.AvoidSchoolHolidays)
             {
-                var schoolHolidays = await _holidayService.FetchHolidaysCached("DE", startDate, endDate, primarySubdivision.Code, true);
+                var schoolHolidays = await holidayService.FetchHolidaysCached("DE", startDate, endDate, primarySubdivision.Code, true);
                 shDates = schoolHolidays
                     .Where(h => h.StartDate.HasValue && h.EndDate.HasValue)
                     .SelectMany(h => Enumerable.Range(0, (h.EndDate.Value.Date - h.StartDate.Value.Date).Days + 1).Select(offset => h.StartDate.Value.Date.AddDays(offset)))
@@ -174,7 +166,7 @@ namespace Urlaubsplaner.Client.Services
             var datesForAvoidance = new HashSet<DateTime>();
             if (prefs.AvoidSchoolHolidays && prefs.AvoidAllStatesSchoolHolidays)
             {
-                var allStatesSchoolHolidays = await _holidayService.FetchHolidaysCached("DE", startDate, endDate, null, true);
+                var allStatesSchoolHolidays = await holidayService.FetchHolidaysCached("DE", startDate, endDate, null, true);
                 datesForAvoidance = allStatesSchoolHolidays
                     .Where(sh => sh.StartDate.HasValue && sh.EndDate.HasValue)
                     .SelectMany(h => Enumerable.Range(0, (h.EndDate.Value.Date - h.StartDate.Value.Date).Days + 1).Select(offset => h.StartDate.Value.Date.AddDays(offset)))

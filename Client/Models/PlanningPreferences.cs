@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-
 namespace Urlaubsplaner.Client.Models
 {
     public class PlanningPreferences

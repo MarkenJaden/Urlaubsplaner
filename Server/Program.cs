@@ -1,13 +1,22 @@
 using Blazored.LocalStorage;
 using Blazored.SessionStorage;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Radzen;
+using Urlaubsplaner.Client.Services;
 using Urlaubsplaner.Server.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
-builder.Services.AddRazorComponents().AddInteractiveServerComponents().AddHubOptions(options => options.MaximumReceiveMessageSize = 10 * 1024 * 1024).AddInteractiveWebAssemblyComponents();
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents()
+    .AddHubOptions(options => options.MaximumReceiveMessageSize = 10 * 1024 * 1024)
+    .AddInteractiveWebAssemblyComponents()
+    .RegisterPersistentService<OpenHolidaysBootstrapState>(RenderMode.InteractiveAuto);
+
+builder.Services.AddScoped<OpenHolidaysBootstrapState>();
+
 builder.Services.AddControllers();
 builder.Services.AddRadzenComponents();
 builder.Services.AddRadzenCookieThemeService(options =>
@@ -16,13 +25,13 @@ builder.Services.AddRadzenCookieThemeService(options =>
     options.Duration = TimeSpan.FromDays(365);
 });
 builder.Services.AddHttpClient();
-builder.Services.AddScoped<Urlaubsplaner.Client.Services.ExportService>();
+builder.Services.AddScoped<ExportService>();
 builder.Services.AddLocalization();
 builder.Services.AddBlazoredLocalStorage();
 builder.Services.AddBlazoredSessionStorage();
-builder.Services.AddScoped<Urlaubsplaner.Client.Services.StateService>();
-builder.Services.AddScoped<Urlaubsplaner.Client.Services.HolidayService>();
-builder.Services.AddScoped<Urlaubsplaner.Client.Services.VacationCalculationService>();
+builder.Services.AddScoped<StateService>();
+builder.Services.AddScoped<HolidayService>();
+builder.Services.AddScoped<VacationCalculationService>();
 
 var keysDirectory = builder.Environment.IsDevelopment()
     ? new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, ".keys"))

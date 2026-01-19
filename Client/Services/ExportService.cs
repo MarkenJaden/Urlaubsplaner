@@ -4,15 +4,8 @@ using Microsoft.JSInterop;
 
 namespace Urlaubsplaner.Client.Services;
 
-public class ExportService
+public class ExportService(IJSRuntime jsRuntime)
 {
-    private readonly IJSRuntime _jsRuntime;
-
-    public ExportService(IJSRuntime jsRuntime)
-    {
-        _jsRuntime = jsRuntime;
-    }
-
     public sealed class ExportItem
     {
         public required DateTime Start { get; init; }
@@ -23,7 +16,7 @@ public class ExportService
 
     public async Task DownloadFile(string fileName, string mimeType, byte[] content)
     {
-        await _jsRuntime.InvokeVoidAsync("downloadFileFromStream", fileName, mimeType, Convert.ToBase64String(content));
+        await jsRuntime.InvokeVoidAsync("downloadFileFromStream", fileName, mimeType, Convert.ToBase64String(content));
     }
 
     public async Task DownloadFile(string fileName, string mimeType, string content)
@@ -33,7 +26,7 @@ public class ExportService
 
     public async Task CopyToClipboard(string text)
     {
-        await _jsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        await jsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", text);
     }
 
     public string GenerateIcs(IReadOnlyList<ExportItem> items)
