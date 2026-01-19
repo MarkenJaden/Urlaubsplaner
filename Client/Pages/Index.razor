@@ -79,6 +79,23 @@
             zoom: 0.8;
         }
     }
+
+    /* Slot icon overlay (colored via CSS filter) */
+    .holiday-slot-icon {
+        position: relative;
+    }
+
+    .holiday-slot-icon::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: var(--holiday-icon-url);
+        background-repeat: no-repeat;
+        background-position: center;
+        background-size: var(--holiday-icon-size, 62%);
+        filter: var(--holiday-icon-filter, none);
+        pointer-events: none;
+    }
 </style>
 
 <RadzenRow Gap="1rem" RowGap="1rem">
@@ -634,6 +651,21 @@
         return $"rgba({r}, {g}, {b}, {alpha.ToString(CultureInfo.InvariantCulture)})";
     }
 
+    private static string AppendCssClass(System.Collections.Generic.IDictionary<string, object> attributes, string cssClass)
+    {
+        if (attributes.TryGetValue("class", out var existing) && existing is string s && !string.IsNullOrWhiteSpace(s))
+        {
+            if (s.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains(cssClass))
+            {
+                return s;
+            }
+
+            return $"{s} {cssClass}";
+        }
+
+        return cssClass;
+    }
+
     private void SlotRender(SchedulerSlotRenderEventArgs args)
     {
         var date = args.Start.Date;
@@ -651,27 +683,80 @@
         if (date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
         {
             bgImages.Add("linear-gradient(rgba(0,0,0,0.05), rgba(0,0,0,0.05))");
-             bgPositions.Add("center");
-             bgSizes.Add("62%");
+            bgPositions.Add("center");
+            bgSizes.Add("contain");
+        }
 
+        var dayMarkings = _markings.Where(m => m.Start.Date <= date && m.End.Date >= date).ToList();
+
+        var primaryPH = dayMarkings.FirstOrDefault(m => m.Type == MarkingType.PublicHoliday);
+        if (primaryPH != null)
+        {
+            style.Append("box-shadow: inset 0 0 0 3px #dc3545;");
+            info.Add($"★ {primaryPH.Name}");
+        }
+        else
+        {
+            var primarySH = dayMarkings.FirstOrDefault(m => m.Type == MarkingType.SchoolHoliday);
+            if (primarySH != null)
+            {
+                style.Append("box-shadow: inset 0 0 0 3px #6f42c1;");
+                info.Add($"Ferien: {primarySH.Name}");
+            }
+        }
+
+        info.AddRange(dayMarkings.Where(x => x.Type is MarkingType.PublicHolidayCompare or MarkingType.SchoolHolidayCompare).Select(m => $"{m.Name} ({m.SubdivisionName})"));
+
+         var selection = _selectedSlots.FirstOrDefault(s => s.Start.Date == date);
+         if (selection != null)
+         {
+             // Icon overlay (only icon gets color via CSS variable)
+             style.Append("--holiday-icon-url: url('/svg/beach_access_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=vac');");
+             style.Append("--holiday-icon-size: 62%;");
+
+             if (_overBudgetDates.Contains(date))
+             {
+                 // Red
+                 style.Append("--holiday-icon-filter: invert(27%) sepia(83%) saturate(1786%) hue-rotate(339deg) brightness(95%) contrast(92%);");
+                 info.Add("Geplanter Urlaub (Über Budget!)");
+             }
+             else
+             {
+                 // Green
+                 style.Append("--holiday-icon-filter: invert(48%) sepia(73%) saturate(448%) hue-rotate(86deg) brightness(92%) contrast(92%);");
+                 info.Add("Geplanter Urlaub");
+             }
+
+             args.Attributes["class"] = AppendCssClass(args.Attributes, "holiday-slot-icon");
+         }
+
+         var gleittag = _gleittage.FirstOrDefault(s => s.Start.Date == date);
+         if (gleittag != null)
+         {
+             style.Append("--holiday-icon-url: url('/svg/event_available_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=gleit');");
+             style.Append("--holiday-icon-size: 62%;");
+             // Blue
+             style.Append("--holiday-icon-filter: invert(35%) sepia(86%) saturate(2351%) hue-rotate(197deg) brightness(96%) contrast(101%);");
 
              info.Add("Gleittag");
+             args.Attributes["class"] = AppendCssClass(args.Attributes, "holiday-slot-icon");
          }
 
 
-         var note = _notes.FirstOrDefault(s => s.Start.Date == date);
-         if (note != null)
-         {
-             // Removed background color.
-             // Scaled up icon to match others (70%, center).
-             // Increased opacity.
-             const string noteSvg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%23ffc107' d='M3 5a2 2 0 0 1 2-2h10l6 6v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5zm12 0v5h5' opacity='0.95'/><path fill='%238a6d00' d='M6 13h12v2H6v-2zm0 4h10v2H6v-2z' opacity='0.9'/></svg>";
-             bgImages.Add($"url('data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(noteSvg))}')");
-             bgPositions.Add("center");
-             bgSizes.Add("62%");
 
-             info.Add(string.IsNullOrWhiteSpace(note.Name) ? "Notiz" : $"Notiz: {note.Name}");
-         }
+
+          var note = _notes.FirstOrDefault(s => s.Start.Date == date);
+          if (note != null)
+          {
+              style.Append("--holiday-icon-url: url('/svg/note_alt_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=note');");
+              style.Append("--holiday-icon-size: 62%;");
+              // Yellow
+              style.Append("--holiday-icon-filter: invert(83%) sepia(67%) saturate(1787%) hue-rotate(355deg) brightness(101%) contrast(102%);");
+
+              info.Add(string.IsNullOrWhiteSpace(note.Name) ? "Notiz" : $"Notiz: {note.Name}");
+              args.Attributes["class"] = AppendCssClass(args.Attributes, "holiday-slot-icon");
+          }
+
 
 
         if (_showBridgeDays && dayMarkings.Any(m => m.Type == MarkingType.BridgeDay))
