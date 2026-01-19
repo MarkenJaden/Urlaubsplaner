@@ -1224,8 +1224,11 @@
             var config = await StateService.LoadConfigAsync();
             if (config != null)
             {
+                var cfgExportDate = DateTime.Now;
+                var cfgExportStamp = cfgExportDate.ToString("yyyy-MM-dd_HHmm", CultureInfo.InvariantCulture);
+                var cfgYearStamp = _year.ToString(CultureInfo.InvariantCulture);
                 var json = StateService.ExportConfigToJson(config);
-                await ExportService.DownloadFile("urlaubsplaner_config.json", "application/json", json);
+                await ExportService.DownloadFile($"Urlaubsplaner_Config_{cfgYearStamp}_{cfgExportStamp}.json", "application/json", json);
             }
             return;
         }
@@ -1278,19 +1281,37 @@
             return;
         }
 
+        var exportDate = DateTime.Now;
+        var exportStamp = exportDate.ToString("yyyy-MM-dd_HHmm", CultureInfo.InvariantCulture);
+        var yearStamp = _year.ToString(CultureInfo.InvariantCulture);
+
+        var selectionStamp = options switch
+        {
+            { ExportVacation: true, ExportGleittage: false, ExportNotes: false } => "Urlaub",
+            { ExportVacation: true, ExportGleittage: true, ExportNotes: false } => "Urlaub+Gleittage",
+            { ExportVacation: true, ExportGleittage: true, ExportNotes: true } => "Urlaub+Gleittage+Notizen",
+            { ExportVacation: true, ExportGleittage: false, ExportNotes: true } => "Urlaub+Notizen",
+            { ExportVacation: false, ExportGleittage: true, ExportNotes: false } => "Gleittage",
+            { ExportVacation: false, ExportGleittage: true, ExportNotes: true } => "Gleittage+Notizen",
+            { ExportVacation: false, ExportGleittage: false, ExportNotes: true } => "Notizen",
+            _ => "Leer"
+        };
+
+        var baseFileName = $"Urlaubsplaner_{yearStamp}_{selectionStamp}_{exportStamp}";
+
         switch (args.Value)
         {
             case "ics":
                 var ics = ExportService.GenerateIcs(items);
-                await ExportService.DownloadFile("Urlaubsplaner.ics", "text/calendar", ics);
+                await ExportService.DownloadFile($"{baseFileName}.ics", "text/calendar", ics);
                 break;
             case "csv":
                 var csv = ExportService.GenerateCsv(items);
-                await ExportService.DownloadFile("Urlaubsplaner.csv", "text/csv", csv);
+                await ExportService.DownloadFile($"{baseFileName}.csv", "text/csv", csv);
                 break;
             case "json":
                 var json = ExportService.GenerateJson(items);
-                await ExportService.DownloadFile("Urlaubsplaner.json", "application/json", json);
+                await ExportService.DownloadFile($"{baseFileName}.json", "application/json", json);
                 break;
             case "clipboard":
                 var text = ExportService.GenerateSummaryText(items);
