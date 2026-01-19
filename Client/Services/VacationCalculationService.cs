@@ -35,7 +35,7 @@ namespace Urlaubsplaner.Client.Services
 
                 if (!isWeekend && !isHoliday)
                 {
-                    decimal cost = (halfDaysChristmas && IsBetweenChristmasAndNewYear(date)) ? 0.5m : 1.0m;
+                    decimal cost = (halfDaysChristmas && IsHalfDayChristmas(date)) ? 0.5m : 1.0m;
                     plannedDays += cost;
                 }
             }
@@ -233,7 +233,7 @@ namespace Urlaubsplaner.Client.Services
                                 checkDateAfter = checkDateAfter.AddDays(1);
                             }
 
-                            decimal cost = workDays.Sum(day => (halfDaysChristmas && IsBetweenChristmasAndNewYear(day)) ? 0.5m : 1.0m);
+                            decimal cost = workDays.Sum(day => (halfDaysChristmas && IsHalfDayChristmas(day)) ? 0.5m : 1.0m);
                             
                             double score = 0;
                             
@@ -417,6 +417,6 @@ namespace Urlaubsplaner.Client.Services
                 }).ToList();
         }
 
-        private static bool IsBetweenChristmasAndNewYear(DateTime date) => date.Month == 12 && date.Day >= 24 && date.Day <= 31;
+        private static bool IsHalfDayChristmas(DateTime date) => date.Month == 12 && (date.Day == 24 || date.Day == 31);
     }
 }

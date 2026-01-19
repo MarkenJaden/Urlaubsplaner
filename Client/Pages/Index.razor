@@ -677,7 +677,7 @@
 
             if (!isWeekend && !isHoliday)
             {
-                decimal cost = (_halfDaysChristmas && (date.Month == 12 && date.Day >= 24 && date.Day <= 31)) ? 0.5m : 1.0m;
+                decimal cost = (_halfDaysChristmas && (date.Month == 12 && (date.Day == 24 || date.Day == 31))) ? 0.5m : 1.0m;
                 currentCost += cost;
 
                 if (currentCost > _totalVacationDays)
