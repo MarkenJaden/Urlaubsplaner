@@ -146,19 +146,22 @@
                             <RadzenLabel Text="Mein Bundesland (Basis für Berechnungen)" Component="PrimaryState" Style="font-size: 0.8rem;" />
                             <RadzenDropDown @bind-Value="_primarySubdivision" Data="_filteredSubdivisions" LoadData="OnSubdivisionLoadData"
                                             AllowFiltering="true" Change="@(async (object args) => await OnPrimaryStateChanged())" TextProperty="@nameof(Subdivision.Name)"
-                                            Placeholder="Bitte wählen..." Name="PrimaryState" Style="width: 100%;"
+                                            Disabled="@(!_openHolidaysApiAvailable)"
+                                            Placeholder="@( _openHolidaysApiAvailable ? "Bitte wählen..." : "API offline" )" Name="PrimaryState" Style="width: 100%;"
                                             FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" />
 
                             <RadzenLabel Text="Vergleichs-Regionen (für Heatmap)" Component="CompareStates" Style="font-size: 0.8rem;" />
                             <RadzenDropDown @bind-Value="_compareSubdivisions" Data="_filteredSubdivisions" LoadData="OnSubdivisionLoadData"
                                             AllowFiltering="true" Change="@(async (object args) => await GetAllMarkings())" TextProperty="@nameof(Subdivision.Name)"
-                                            Multiple="true" Chips="true" Placeholder="Weitere wählen..." Name="CompareStates" Style="width: 100%;"
+                                            Disabled="@(!_openHolidaysApiAvailable)"
+                                            Multiple="true" Chips="true" Placeholder="@( _openHolidaysApiAvailable ? "Weitere wählen..." : "API offline" )" Name="CompareStates" Style="width: 100%;"
                                             FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" />
 
                             <RadzenLabel Text="Zusätzliche Länder" Component="Countries" Style="font-size: 0.8rem;" />
                             <RadzenDropDown @bind-Value="_selectedPublicHolidayCountries" Data="_filteredAdditionalCountries" LoadData="OnCountryLoadData"
                                             AllowFiltering="true" Change="@(async (object args) => await GetAllMarkings())" TextProperty="@nameof(Country.Name)"
-                                            Multiple="true" Chips="true" Placeholder="Länder wählen..." Name="Countries" Style="width: 100%;"
+                                            Disabled="@(!_openHolidaysApiAvailable)"
+                                            Multiple="true" Chips="true" Placeholder="@( _openHolidaysApiAvailable ? "Länder wählen..." : "API offline" )" Name="Countries" Style="width: 100%;"
                                             FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" />
                         </RadzenStack>
                     </RadzenColumn>
@@ -261,7 +264,20 @@
 
     <RadzenColumn Size="12" SizeLG="3" SizeXL="2">
         <RadzenCard Style="height: 100vh; max-height: 900px; overflow-y: auto;">
-            <RadzenStack Gap="1rem">
+                <RadzenStack Gap="1rem">
+                @if (!_openHolidaysApiAvailable)
+                {
+                    <RadzenAlert Severity="AlertSeverity.Warning">
+                        <div style="display:flex; gap: 0.75rem; align-items: center; justify-content: space-between;">
+                            <div>
+                                <div style="font-weight: 600;">OpenHolidays API offline</div>
+                                <div style="opacity: 0.9;">Feiertage/Ferien und Vorschlaege stehen temporaer nicht zur Verfuegung.</div>
+                            </div>
+                            <RadzenButton Text="Erneut versuchen" Icon="refresh" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Secondary" Click="RetryOpenHolidaysApi" Disabled="@_openHolidaysApiRetryInProgress" IsBusy="@_openHolidaysApiRetryInProgress" />
+                        </div>
+                    </RadzenAlert>
+                }
+
                 <RadzenText TextStyle="TextStyle.H6">Markieren</RadzenText>
                 <RadzenText TextStyle="TextStyle.Body2" Style="color: #666; font-size: 0.8rem;">
                     Wähle einen Modus und klicke dann im Kalender.
@@ -332,7 +348,10 @@
     List<Country> _allAdditionalCountries = [];
     IEnumerable<Country> _filteredAdditionalCountries = new List<Country>();
     IEnumerable<Country> _selectedPublicHolidayCountries = new List<Country>();
-    
+
+    bool _openHolidaysApiAvailable = true;
+    bool _openHolidaysApiRetryInProgress;
+
     List<Subdivision> _allSubdivisions = [];
     IEnumerable<Subdivision> _filteredSubdivisions = new List<Subdivision>();
     
@@ -381,11 +400,64 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _allAdditionalCountries = await HolidayService.LoadCountriesAsync();
-        _filteredAdditionalCountries = _allAdditionalCountries;
+        await RetryOpenHolidaysApi(showNotificationOnFailure: true);
+    }
 
-        _allSubdivisions = await HolidayService.LoadSubdivisionsAsync();
-        _filteredSubdivisions = _allSubdivisions;
+    private async Task RetryOpenHolidaysApi()
+    {
+        await RetryOpenHolidaysApi(showNotificationOnFailure: false);
+    }
+
+    private async Task RetryOpenHolidaysApi(bool showNotificationOnFailure)
+    {
+        if (_openHolidaysApiRetryInProgress)
+        {
+            return;
+        }
+
+        _openHolidaysApiRetryInProgress = true;
+        try
+        {
+            var countries = await HolidayService.LoadCountriesAsync();
+            var subdivisions = await HolidayService.LoadSubdivisionsAsync();
+
+            _openHolidaysApiAvailable = subdivisions.Any();
+
+            _allAdditionalCountries = countries;
+            _filteredAdditionalCountries = _allAdditionalCountries;
+
+            _allSubdivisions = subdivisions;
+            _filteredSubdivisions = _allSubdivisions;
+
+            if (_openHolidaysApiAvailable)
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Success,
+                    Summary = "OpenHolidays API wieder online",
+                    Detail = "Daten wurden neu geladen.",
+                    Duration = 4000
+                });
+
+                await GetAllMarkings();
+            }
+            else if (showNotificationOnFailure)
+            {
+                NotificationService.Notify(new NotificationMessage
+                {
+                    Severity = NotificationSeverity.Warning,
+                    Summary = "OpenHolidays API nicht verfuegbar",
+                    Detail = "Der OpenHolidays-Dienst ist aktuell nicht erreichbar (Wartung). Die App startet im Offline-Modus: keine Feiertage/Ferien-Liste, Planung eingeschraenkt.",
+                    Duration = 8000
+                });
+            }
+
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            _openHolidaysApiRetryInProgress = false;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -434,6 +506,12 @@
     async Task OnToggleChange(bool value)
     {
         await SaveConfigToStorage();
+
+        if (!_openHolidaysApiAvailable)
+        {
+            return;
+        }
+
         await GetAllMarkings();
     }
 
@@ -470,11 +548,24 @@
     {
         _filteredSubdivisions = _allSubdivisions;
         await SaveConfigToStorage();
+
+        if (!_openHolidaysApiAvailable)
+        {
+            return;
+        }
+
         await GetAllMarkings();
     }
 
     private async Task GetAllMarkings()
     {
+        if (!_openHolidaysApiAvailable)
+        {
+            UpdateAllCalculations();
+            await scheduler.Reload();
+            return;
+        }
+
         _markings.Clear();
         _dailyHeatScore.Clear();
         _maxDailyHeatScore = 1;
@@ -879,9 +970,21 @@
 
     async Task SuggestPerfectVacationWithOptions(RadzenSplitButtonItem? args)
     {
+        if (!_openHolidaysApiAvailable)
+        {
+            NotificationService.Notify(new NotificationMessage
+            {
+                Severity = NotificationSeverity.Warning,
+                Summary = "OpenHolidays API nicht verfuegbar",
+                Detail = "Der OpenHolidays-Dienst ist aktuell nicht erreichbar. Vorschlaege koennen erst nach Wiederverfuegbarkeit generiert werden.",
+                Duration = 6000
+            });
+            return;
+        }
+
         if (_primarySubdivision == null)
         {
-            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Fehler", Detail = "Bitte wählen Sie zuerst Ihr Bundesland aus." });
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Fehler", Detail = "Bitte waehlen Sie zuerst Ihr Bundesland aus." });
             return;
         }
 

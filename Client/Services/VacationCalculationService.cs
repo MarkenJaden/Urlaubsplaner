@@ -248,11 +248,15 @@ namespace Urlaubsplaner.Client.Services
                                     bool overlapsNotes = noteDates.Count > 0 && workDays.Any(d => noteDates.Contains(d));
                                     if (overlapsNotes)
                                     {
-                                        score = prefs.NoteHandling switch
+                                        double multiplier = prefs.NoteHandling switch
                                         {
-                                            NoteHandlingMode.Prefer => score * 1.35,
-                                            _ => score * 0.05
+                                            NoteHandlingMode.Prefer => prefs.NoteOverlapPreferMultiplier,
+                                            _ => prefs.NoteOverlapAvoidMultiplier
                                         };
+
+                                        // Guard against accidental zero/negative values.
+                                        multiplier = Math.Clamp(multiplier, 0.0, 100.0);
+                                        score *= multiplier;
                                     }
 
                                     if (prefs.PreferSchoolHolidays)

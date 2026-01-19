@@ -55,6 +55,40 @@
                                 </RadzenColumn>
                             </RadzenRow>
 
+                            @if (Preferences.NoteHandling == NoteHandlingMode.Avoid)
+                            {
+                                <RadzenRow AlignItems="AlignItems.Center">
+                                    <RadzenColumn Size="6">
+                                        <RadzenLabel Text="Notiz-Penalty" Component="NoteOverlapAvoidMultiplier" />
+                                    </RadzenColumn>
+                                    <RadzenColumn Size="6">
+                                        <RadzenNumeric @bind-Value="Preferences.NoteOverlapAvoidMultiplier"
+                                                      Name="NoteOverlapAvoidMultiplier"
+                                                      Step="0.05" Min="0" Max="1" Style="width: 100%;" />
+                                    </RadzenColumn>
+                                </RadzenRow>
+                                <RadzenText TextStyle="TextStyle.Body2" Style="margin-top: -0.5rem; color: #666;">
+                                    Je kleiner, desto stärker werden Vorschläge mit Notizen bestraft. 1.0 = keine Auswirkung.
+                                </RadzenText>
+                            }
+                            else
+                            {
+                                <RadzenRow AlignItems="AlignItems.Center">
+                                    <RadzenColumn Size="6">
+                                        <RadzenLabel Text="Notiz-Bonus" Component="NoteOverlapPreferMultiplier" />
+                                    </RadzenColumn>
+                                    <RadzenColumn Size="6">
+                                        <RadzenNumeric @bind-Value="Preferences.NoteOverlapPreferMultiplier"
+                                                      Name="NoteOverlapPreferMultiplier"
+                                                      Step="0.05" Min="1" Max="3" Style="width: 100%;" />
+                                    </RadzenColumn>
+                                </RadzenRow>
+                                <RadzenText TextStyle="TextStyle.Body2" Style="margin-top: -0.5rem; color: #666;">
+                                    Je größer, desto eher werden Vorschläge bevorzugt, die auf Notiz-Tage fallen. 1.0 = keine Auswirkung.
+                                </RadzenText>
+                            }
+
+
                             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
                                 <RadzenCheckBox @bind-Value="Preferences.DistributeEvenly" Name="DistributeEvenly" />
                                 <RadzenLabel Text="Gleichmäßig über das Jahr verteilen" Component="DistributeEvenly" />

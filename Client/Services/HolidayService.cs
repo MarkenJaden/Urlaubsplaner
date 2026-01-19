@@ -20,37 +20,51 @@ namespace Urlaubsplaner.Client.Services
 
         public async Task<List<Country>> LoadCountriesAsync()
         {
-            var allCountriesApi = await _regionalApi.CountriesGetAsync("DE");
-            return allCountriesApi.Select(country => 
+            try
             {
-                var searchTerms = new List<string> { country.Name.First().Text, country.IsoCode };
-                if (GeoConstants.CountryMappings.TryGetValue(country.IsoCode, out var aliases)) searchTerms.AddRange(aliases);
-                return new Country 
+                var allCountriesApi = await _regionalApi.CountriesGetAsync("DE");
+                return allCountriesApi.Select(country =>
                 {
-                    Name = country.Name.First().Text, 
-                    IsoCode = country.IsoCode,
-                    SearchKeywords = string.Join(" ", searchTerms).ToLower()
-                };
-            }).Where(c => c.IsoCode != "DE").ToList();
+                    var searchTerms = new List<string> { country.Name.First().Text, country.IsoCode };
+                    if (GeoConstants.CountryMappings.TryGetValue(country.IsoCode, out var aliases)) searchTerms.AddRange(aliases);
+                    return new Country
+                    {
+                        Name = country.Name.First().Text,
+                        IsoCode = country.IsoCode,
+                        SearchKeywords = string.Join(" ", searchTerms).ToLower()
+                    };
+                }).Where(c => c.IsoCode != "DE").ToList();
+            }
+            catch
+            {
+                return [];
+            }
         }
 
         public async Task<List<Subdivision>> LoadSubdivisionsAsync()
         {
-            var subdivisionsApi = await _regionalApi.SubdivisionsGetAsync("DE", "DE");
-            return subdivisionsApi.Select(sub => 
+            try
             {
-                var codePart = sub.Code.Split('-').LastOrDefault();
-                var searchTerms = new List<string> { sub.Name.First().Text, sub.Code, codePart ?? "" };
-                if (codePart != null && GeoConstants.SubdivisionAbbreviations.TryGetValue(codePart, out var aliases)) searchTerms.AddRange(aliases);
-                return new Subdivision 
+                var subdivisionsApi = await _regionalApi.SubdivisionsGetAsync("DE", "DE");
+                return subdivisionsApi.Select(sub =>
                 {
-                    Name = sub.Name.First().Text, 
-                    Category = sub.Category.First().Text, 
-                    Code = sub.Code, 
-                    IsoCode = sub.IsoCode,
-                    SearchKeywords = string.Join(" ", searchTerms).ToLower()
-                };
-            }).ToList();
+                    var codePart = sub.Code.Split('-').LastOrDefault();
+                    var searchTerms = new List<string> { sub.Name.First().Text, sub.Code, codePart ?? "" };
+                    if (codePart != null && GeoConstants.SubdivisionAbbreviations.TryGetValue(codePart, out var aliases)) searchTerms.AddRange(aliases);
+                    return new Subdivision
+                    {
+                        Name = sub.Name.First().Text,
+                        Category = sub.Category.First().Text,
+                        Code = sub.Code,
+                        IsoCode = sub.IsoCode,
+                        SearchKeywords = string.Join(" ", searchTerms).ToLower()
+                    };
+                }).ToList();
+            }
+            catch
+            {
+                return [];
+            }
         }
 
         public async Task<List<HolidayResponse>> FetchHolidaysCached(string isoCode, DateTime start, DateTime end, string? subdivisionCode, bool isSchool)
@@ -59,18 +73,25 @@ namespace Urlaubsplaner.Client.Services
             var cached = await _stateService.GetCachedHolidaysAsync(key);
             if (cached != null) return cached.ToList();
 
-            List<HolidayResponse> result;
-            if (isSchool)
+            try
             {
-                result = await _holidaysApi.SchoolHolidaysGetAsync(isoCode, start, end, "DE", subdivisionCode);
-            }
-            else
-            {
-                result = await _holidaysApi.PublicHolidaysGetAsync(isoCode, start, end, "DE", subdivisionCode);
-            }
+                List<HolidayResponse> result;
+                if (isSchool)
+                {
+                    result = await _holidaysApi.SchoolHolidaysGetAsync(isoCode, start, end, "DE", subdivisionCode);
+                }
+                else
+                {
+                    result = await _holidaysApi.PublicHolidaysGetAsync(isoCode, start, end, "DE", subdivisionCode);
+                }
 
-            await _stateService.CacheHolidaysAsync(key, result);
-            return result;
+                await _stateService.CacheHolidaysAsync(key, result);
+                return result;
+            }
+            catch
+            {
+                return [];
+            }
         }
     }
 }

@@ -13,6 +13,11 @@ namespace Urlaubsplaner.Client.Models
 
         public NoteHandlingMode NoteHandling { get; set; } = NoteHandlingMode.Avoid;
 
+        // How strongly notes affect suggestions.
+        // 1.0 = no effect, >1 prefers matching notes, <1 avoids matching notes.
+        public double NoteOverlapAvoidMultiplier { get; set; } = 0.20;
+        public double NoteOverlapPreferMultiplier { get; set; } = 1.35;
+
         public int MinDaysPerBlock { get; set; } = 1;
         public int? MaxDaysPerBlock { get; set; }
 
