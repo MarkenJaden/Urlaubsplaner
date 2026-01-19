@@ -85,30 +85,30 @@
         position: relative;
     }
 
-    .holiday-slot-icon::after,
-    .holiday-slot-icon::before {
-        content: "";
-        position: absolute;
-        inset: 0;
-        background-repeat: no-repeat;
-        pointer-events: none;
-    }
+        .holiday-slot-icon::after,
+        .holiday-slot-icon::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background-repeat: no-repeat;
+            pointer-events: none;
+        }
 
-    /* Base (larger) icon layer (vacation/gleittag) */
-    .holiday-slot-icon::after {
-        background-image: var(--holiday-icon-url);
-        background-position: var(--holiday-icon-position, center);
-        background-size: var(--holiday-icon-size, 62%);
-        filter: var(--holiday-icon-filter, none);
-    }
+        /* Base (larger) icon layer (vacation/gleittag) */
+        .holiday-slot-icon::after {
+            background-image: var(--holiday-icon-url);
+            background-position: var(--holiday-icon-position, center);
+            background-size: var(--holiday-icon-size, 62%);
+            filter: var(--holiday-icon-filter, none);
+        }
 
-    /* Secondary (small) icon layer (note when combined) */
-    .holiday-slot-icon::before {
-        background-image: var(--holiday-icon-url-secondary);
-        background-position: var(--holiday-icon-position-secondary, center);
-        background-size: var(--holiday-icon-size-secondary, 48%);
-        filter: var(--holiday-icon-filter-secondary, none);
-    }
+        /* Secondary (small) icon layer (note when combined) */
+        .holiday-slot-icon::before {
+            background-image: var(--holiday-icon-url-secondary);
+            background-position: var(--holiday-icon-position-secondary, center);
+            background-size: var(--holiday-icon-size-secondary, 48%);
+            filter: var(--holiday-icon-filter-secondary, none);
+        }
 
     .holiday-legend-icon {
         width: 1.1rem;
@@ -177,14 +177,14 @@
 
                             <RadzenLabel Text="Vergleichs-Regionen (für Heatmap)" Component="CompareStates" Style="font-size: 0.8rem;" />
                             <RadzenDropDown @bind-Value="_compareSubdivisions" Data="_filteredSubdivisions" LoadData="OnSubdivisionLoadData"
-                                            AllowFiltering="true" Change="@(async (object args) => await GetAllMarkings())" TextProperty="@nameof(Subdivision.Name)"
+                                            AllowFiltering="true" Change="@(async (object args) => await OnCompareStatesChanged())" TextProperty="@nameof(Subdivision.Name)"
                                             Disabled="@(!_openHolidaysApiAvailable)"
                                             Multiple="true" Chips="true" Placeholder="@( _openHolidaysApiAvailable ? "Weitere wählen..." : "API offline" )" Name="CompareStates" Style="width: 100%;"
                                             FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" />
 
                             <RadzenLabel Text="Zusätzliche Länder" Component="Countries" Style="font-size: 0.8rem;" />
                             <RadzenDropDown @bind-Value="_selectedPublicHolidayCountries" Data="_filteredAdditionalCountries" LoadData="OnCountryLoadData"
-                                            AllowFiltering="true" Change="@(async (object args) => await GetAllMarkings())" TextProperty="@nameof(Country.Name)"
+                                            AllowFiltering="true" Change="@(async (object args) => await OnCountriesChanged())" TextProperty="@nameof(Country.Name)"
                                             Disabled="@(!_openHolidaysApiAvailable)"
                                             Multiple="true" Chips="true" Placeholder="@( _openHolidaysApiAvailable ? "Länder wählen..." : "API offline" )" Name="Countries" Style="width: 100%;"
                                             FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" />
@@ -289,7 +289,7 @@
 
     <RadzenColumn Size="12" SizeLG="3" SizeXL="2">
         <RadzenCard Style="height: 100vh; max-height: 900px; overflow-y: auto;">
-                <RadzenStack Gap="1rem">
+            <RadzenStack Gap="1rem">
                 @if (!_openHolidaysApiAvailable)
                 {
                     <RadzenAlert Severity="AlertSeverity.Warning">
@@ -346,17 +346,17 @@
 
                 <hr style="margin: 0.75rem 0;" />
 
-                 <RadzenText TextStyle="TextStyle.H6">Legende</RadzenText>
-                 <RadzenStack Gap="0.5rem">
-                      <div class="holiday-legend-item"><RadzenIcon Icon="beach_access" Style="color: #1f8f3a;" /> Urlaub</div>
-                      <div class="holiday-legend-item"><RadzenIcon Icon="event_available" Style="color: #0a58ca;" /> Gleittag</div>
-                      <div class="holiday-legend-item"><span class="holiday-legend-icon" style="--holiday-icon-url: url('/svg/note_alt_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=note'); --holiday-icon-filter: invert(83%) sepia(67%) saturate(1787%) hue-rotate(355deg) brightness(101%) contrast(102%);"></span> Notiz</div>
+                <RadzenText TextStyle="TextStyle.H6">Legende</RadzenText>
+                <RadzenStack Gap="0.5rem">
+                    <div class="holiday-legend-item"><RadzenIcon Icon="beach_access" Style="color: #1f8f3a;" /> Urlaub</div>
+                    <div class="holiday-legend-item"><RadzenIcon Icon="event_available" Style="color: #0a58ca;" /> Gleittag</div>
+                    <div class="holiday-legend-item"><span class="holiday-legend-icon" style="--holiday-icon-url: url('/svg/note_alt_24dp_E3E3E3_FILL0_wght400_GRAD0_opsz24.svg?t=note'); --holiday-icon-filter: invert(83%) sepia(67%) saturate(1787%) hue-rotate(355deg) brightness(101%) contrast(102%);"></span> Notiz</div>
 
-                     <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: transparent; border: 3px solid #dc3545;"></div> Feiertag (Mein BL)</div>
-                     <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: transparent; border: 3px solid #6f42c1;"></div> Schulferien (Mein BL)</div>
-                     <div class="holiday-legend-item"><div class="holiday-legend-color" style="background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAxMCAxMCc+PHBvbHlnb24gcG9pbnRzPSc1LDAgMTAsNSA1LDEwJyBzdHlsZT0nZmlsbDpvcmFuZ2U7IG9wYWNpdHk6IDAuOScvPjwvc3ZnPg=='); background-repeat: no-repeat; background-position: center; background-size: contain; border: none;"></div> Brückentag</div>
-                     <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: linear-gradient(to right, rgba(0,255,0,0.3), rgba(255,255,0,0.3), rgba(255,165,0,0.4), rgba(255,0,0,0.5));"></div> Heatmap (Dichte)</div>
-                 </RadzenStack>
+                    <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: transparent; border: 3px solid #dc3545;"></div> Feiertag (Mein BL)</div>
+                    <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: transparent; border: 3px solid #6f42c1;"></div> Schulferien (Mein BL)</div>
+                    <div class="holiday-legend-item"><div class="holiday-legend-color" style="background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAxMCAxMCc+PHBvbHlnb24gcG9pbnRzPSc1LDAgMTAsNSA1LDEwJyBzdHlsZT0nZmlsbDpvcmFuZ2U7IG9wYWNpdHk6IDAuOScvPjwvc3ZnPg=='); background-repeat: no-repeat; background-position: center; background-size: contain; border: none;"></div> Brückentag</div>
+                    <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: linear-gradient(to right, rgba(0,255,0,0.3), rgba(255,255,0,0.3), rgba(255,165,0,0.4), rgba(255,0,0,0.5));"></div> Heatmap (Dichte)</div>
+                </RadzenStack>
 
             </RadzenStack>
         </RadzenCard>
@@ -380,7 +380,7 @@
 
     List<Subdivision> _allSubdivisions = [];
     IEnumerable<Subdivision> _filteredSubdivisions = new List<Subdivision>();
-    
+
     Subdivision? _primarySubdivision;
     IEnumerable<Subdivision> _compareSubdivisions = new List<Subdivision>();
 
@@ -399,8 +399,8 @@
     int _gleittageCount;
     int _year = DateTime.Now.Year;
 
-     string _hoveredInfo = "";
-     string _defaultNoteText = "";
+    string _hoveredInfo = "";
+    string _defaultNoteText = "";
 
 
     enum MarkingInputMode
@@ -486,6 +486,8 @@
         }
     }
 
+    PlanningConfig? _pendingConfig;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -501,17 +503,17 @@
             await JSRuntime.InvokeVoidAsync("setupSlotHover", _objRef);
 
             // Load Saved Config
-            var config = await StateService.LoadConfigAsync();
-            if (config != null)
+            _pendingConfig = await StateService.LoadConfigAsync();
+            if (_pendingConfig != null)
             {
-                ApplyConfig(config);
+                // Apply everything that doesn't depend on OpenHolidays data.
+                ApplyConfig(_pendingConfig, applySelections: false);
 
-                // Config applies selected subdivision(s) by looking them up in _allSubdivisions.
-                // In offline mode (OpenHolidays down) _allSubdivisions may be empty when ApplyConfig runs.
-                // Re-apply once data is (possibly) available so the dropdowns restore correctly.
+                // If data is already available, also apply dropdown selections.
                 if (_openHolidaysApiAvailable)
                 {
-                    ApplyConfig(config);
+                    ApplyConfig(_pendingConfig, applySelections: true);
+                    _pendingConfig = null;
                 }
             }
             else
@@ -581,6 +583,32 @@
     async Task OnPrimaryStateChanged()
     {
         _filteredSubdivisions = _allSubdivisions;
+        await SaveConfigToStorage();
+
+        if (!_openHolidaysApiAvailable)
+        {
+            return;
+        }
+
+        await GetAllMarkings();
+    }
+
+    async Task OnCompareStatesChanged()
+    {
+        _filteredSubdivisions = _allSubdivisions;
+        await SaveConfigToStorage();
+
+        if (!_openHolidaysApiAvailable)
+        {
+            return;
+        }
+
+        await GetAllMarkings();
+    }
+
+    async Task OnCountriesChanged()
+    {
+        _filteredAdditionalCountries = _allAdditionalCountries;
         await SaveConfigToStorage();
 
         if (!_openHolidaysApiAvailable)
@@ -669,9 +697,9 @@
     private void UpdateAllCalculations()
     {
         (_plannedDays, _gleittageCount) = VacationCalculationService.CalculatePlannedDays(
-            _selectedSlots, 
-            _gleittage, 
-            _markings, 
+            _selectedSlots,
+            _gleittage,
+            _markings,
             _halfDaysChristmas);
 
         _remainingWorkDays = VacationCalculationService.CalculateRemainingWorkDays(
@@ -737,7 +765,7 @@
         if (score == 0) return "transparent";
 
         double saturation = 12.0;
-        double denominator = Math.Min(Math.Max(_maxDailyHeatScore, 5), saturation); 
+        double denominator = Math.Min(Math.Max(_maxDailyHeatScore, 5), saturation);
         double percent = Math.Min(score / denominator, 1.0);
 
         int r, g, b;
@@ -908,10 +936,18 @@
             style.Append("opacity: 0.5; filter: grayscale(0.5); ");
         }
 
-         if (selection != null || gleittag != null || note != null)
-         {
-             args.Attributes["class"] = AppendCssClass(args.Attributes, "holiday-slot-icon");
-         }
+        if (bgImages.Count > 0)
+        {
+            style.Append($"background-image: {string.Join(", ", bgImages)};");
+            style.Append($"background-position: {string.Join(", ", bgPositions)};");
+            style.Append($"background-size: {string.Join(", ", bgSizes)};");
+            style.Append("background-repeat: no-repeat;");
+        }
+
+        if (selection != null || gleittag != null || note != null)
+        {
+            args.Attributes["class"] = AppendCssClass(args.Attributes, "holiday-slot-icon");
+        }
 
         args.Attributes["style"] = style.ToString();
 
@@ -956,17 +992,17 @@
                 }
                 break;
 
-             case MarkingInputMode.Note:
-                 if (existingNote != null)
-                 {
-                     _notes.Remove(existingNote);
-                 }
-                  else
-                  {
-                      var text = string.IsNullOrWhiteSpace(_defaultNoteText) ? "Notiz" : _defaultNoteText.Trim();
-                      _notes.Add(new Marking { Start = date, End = date.AddDays(1), Name = text, Type = MarkingType.Note });
-                  }
-                 break;
+            case MarkingInputMode.Note:
+                if (existingNote != null)
+                {
+                    _notes.Remove(existingNote);
+                }
+                else
+                {
+                    var text = string.IsNullOrWhiteSpace(_defaultNoteText) ? "Notiz" : _defaultNoteText.Trim();
+                    _notes.Add(new Marking { Start = date, End = date.AddDays(1), Name = text, Type = MarkingType.Note });
+                }
+                break;
         }
 
         await SaveConfigToStorage();
@@ -983,7 +1019,8 @@
             var config = StateService.ImportConfigFromJson(json);
             if (config != null)
             {
-                ApplyConfig(config);
+                ApplyConfig(config, applySelections: true);
+                _pendingConfig = null;
                 NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Import erfolgreich", Detail = "Konfiguration wurde geladen." });
             }
             else
@@ -1080,12 +1117,12 @@
         var result = await DialogService.Confirm("Möchten Sie wirklich alle Planungen löschen?", "Planung zurücksetzen", new ConfirmOptions() { OkButtonText = "Ja", CancelButtonText = "Nein" });
         if (result == true)
         {
-        _selectedSlots.Clear();
-        _gleittage.Clear();
-        _notes.Clear();
-        await SaveConfigToStorage();
-        UpdateAllCalculations();
-        await scheduler.Reload();
+            _selectedSlots.Clear();
+            _gleittage.Clear();
+            _notes.Clear();
+            await SaveConfigToStorage();
+            UpdateAllCalculations();
+            await scheduler.Reload();
 
         }
     }
@@ -1096,14 +1133,14 @@
         if (_year != middle)
         {
             _year = middle;
-            
+
             // Switch vacation days context
             if (!_vacationDaysPerYear.ContainsKey(_year))
             {
                 _vacationDaysPerYear[_year] = 30; // Default
             }
             _totalVacationDays = _vacationDaysPerYear[_year];
-            
+
             await GetAllMarkings();
             UpdateAllCalculations();
         }
@@ -1132,16 +1169,19 @@
         await StateService.SaveConfigAsync(config);
     }
 
-    void ApplyConfig(PlanningConfig config)
+    void ApplyConfig(PlanningConfig config, bool applySelections)
     {
-        if (config.PrimarySubdivisionCode != null)
-            _primarySubdivision = _allSubdivisions.FirstOrDefault(s => s.Code == config.PrimarySubdivisionCode);
+        if (applySelections)
+        {
+            if (config.PrimarySubdivisionCode != null)
+                _primarySubdivision = _allSubdivisions.FirstOrDefault(s => s.Code == config.PrimarySubdivisionCode);
 
-        if (config.CompareSubdivisionCodes != null)
-            _compareSubdivisions = _allSubdivisions.Where(s => config.CompareSubdivisionCodes.Contains(s.Code)).ToList();
+            if (config.CompareSubdivisionCodes != null)
+                _compareSubdivisions = _allSubdivisions.Where(s => config.CompareSubdivisionCodes.Contains(s.Code)).ToList();
 
-        if (config.CountryCodes != null)
-            _selectedPublicHolidayCountries = _allAdditionalCountries.Where(c => config.CountryCodes.Contains(c.IsoCode)).ToList();
+            if (config.CountryCodes != null)
+                _selectedPublicHolidayCountries = _allAdditionalCountries.Where(c => config.CountryCodes.Contains(c.IsoCode)).ToList();
+        }
 
         _showPublicHolidays = config.ShowPublicHolidays;
         _showSchoolHolidays = config.ShowSchoolHolidays;
@@ -1149,13 +1189,13 @@
         _showHeatmap = config.ShowHeatmap;
         _countWeekendsAndHolidays = config.CountWeekendsAndHolidays;
         _halfDaysChristmas = config.HalfDaysChristmas;
-        
+
         _vacationDaysPerYear = config.TotalVacationDaysPerYear ?? new Dictionary<int, decimal>();
-        
+
         // Fallback for migration
         if (!_vacationDaysPerYear.ContainsKey(_year))
         {
-             _vacationDaysPerYear[_year] = config.TotalVacationDays > 0 ? config.TotalVacationDays : 30;
+            _vacationDaysPerYear[_year] = config.TotalVacationDays > 0 ? config.TotalVacationDays : 30;
         }
         _totalVacationDays = _vacationDaysPerYear.GetValueOrDefault(_year, 30);
 
@@ -1174,94 +1214,94 @@
         _ = GetAllMarkings();
     }
 
-     async Task Export(RadzenSplitButtonItem? args)
-     {
-         if (args == null) return; // Do nothing if main button clicked without a specific value
+    async Task Export(RadzenSplitButtonItem? args)
+    {
+        if (args == null) return; // Do nothing if main button clicked without a specific value
 
-         if (args.Value == "config_json")
-         {
-             await SaveConfigToStorage(); // Ensure latest state
-             var config = await StateService.LoadConfigAsync();
-             if (config != null)
-             {
-                 var json = StateService.ExportConfigToJson(config);
-                 await ExportService.DownloadFile("urlaubsplaner_config.json", "application/json", json);
-             }
-             return;
-         }
+        if (args.Value == "config_json")
+        {
+            await SaveConfigToStorage(); // Ensure latest state
+            var config = await StateService.LoadConfigAsync();
+            if (config != null)
+            {
+                var json = StateService.ExportConfigToJson(config);
+                await ExportService.DownloadFile("urlaubsplaner_config.json", "application/json", json);
+            }
+            return;
+        }
 
-         var result = await DialogService.OpenAsync<ExportOptionsDialog>("Export-Optionen", null,
-             new DialogOptions { Width = "420px", Height = "auto", Resizable = false, Draggable = true });
+        var result = await DialogService.OpenAsync<ExportOptionsDialog>("Export-Optionen", null,
+            new DialogOptions { Width = "420px", Height = "auto", Resizable = false, Draggable = true });
 
-         if (result == null) return;
+        if (result == null) return;
 
-         var options = (ExportOptionsDialog.ExportOptions)result;
+        var options = (ExportOptionsDialog.ExportOptions)result;
 
-         var items = new List<ExportService.ExportItem>();
+        var items = new List<ExportService.ExportItem>();
 
-         if (options.ExportVacation)
-         {
-              items.AddRange(_selectedSlots.Select(s => new ExportService.ExportItem
-              {
-                  Start = s.Start.Date,
-                  End = s.Start.Date,
-                  Title = "Urlaub",
-                  Category = "Urlaub"
-              }));
-         }
+        if (options.ExportVacation)
+        {
+            items.AddRange(_selectedSlots.Select(s => new ExportService.ExportItem
+            {
+                Start = s.Start.Date,
+                End = s.Start.Date,
+                Title = "Urlaub",
+                Category = "Urlaub"
+            }));
+        }
 
-         if (options.ExportGleittage)
-         {
-              items.AddRange(_gleittage.Select(s => new ExportService.ExportItem
-              {
-                  Start = s.Start.Date,
-                  End = s.Start.Date,
-                  Title = "Gleittag",
-                  Category = "Gleittag"
-              }));
-         }
+        if (options.ExportGleittage)
+        {
+            items.AddRange(_gleittage.Select(s => new ExportService.ExportItem
+            {
+                Start = s.Start.Date,
+                End = s.Start.Date,
+                Title = "Gleittag",
+                Category = "Gleittag"
+            }));
+        }
 
-         if (options.ExportNotes)
-         {
-              items.AddRange(_notes.Select(s => new ExportService.ExportItem
-              {
-                  Start = s.Start.Date,
-                  End = s.Start.Date,
-                  Title = string.IsNullOrWhiteSpace(s.Name) ? "Notiz" : s.Name,
-                  Category = "Notiz"
-              }));
-         }
+        if (options.ExportNotes)
+        {
+            items.AddRange(_notes.Select(s => new ExportService.ExportItem
+            {
+                Start = s.Start.Date,
+                End = s.Start.Date,
+                Title = string.IsNullOrWhiteSpace(s.Name) ? "Notiz" : s.Name,
+                Category = "Notiz"
+            }));
+        }
 
-         if (!items.Any())
-         {
-             NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Nichts zu exportieren", Detail = "Bitte wählen Sie mindestens eine Kategorie mit Daten." });
-             return;
-         }
+        if (!items.Any())
+        {
+            NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Warning, Summary = "Nichts zu exportieren", Detail = "Bitte wählen Sie mindestens eine Kategorie mit Daten." });
+            return;
+        }
 
-         switch (args.Value)
-         {
-             case "ics":
-                 var ics = ExportService.GenerateIcs(items);
-                 await ExportService.DownloadFile("Urlaubsplaner.ics", "text/calendar", ics);
-                 break;
-             case "csv":
-                 var csv = ExportService.GenerateCsv(items);
-                 await ExportService.DownloadFile("Urlaubsplaner.csv", "text/csv", csv);
-                 break;
-             case "json":
-                 var json = ExportService.GenerateJson(items);
-                 await ExportService.DownloadFile("Urlaubsplaner.json", "application/json", json);
-                 break;
-             case "clipboard":
-                 var text = ExportService.GenerateSummaryText(items);
-                 await ExportService.CopyToClipboard(text);
-                 NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Kopiert", Detail = "Exportdaten in Zwischenablage kopiert." });
-                 break;
-             case "print":
-                 await JSRuntime.InvokeVoidAsync("print");
-                 break;
-         }
-     }
+        switch (args.Value)
+        {
+            case "ics":
+                var ics = ExportService.GenerateIcs(items);
+                await ExportService.DownloadFile("Urlaubsplaner.ics", "text/calendar", ics);
+                break;
+            case "csv":
+                var csv = ExportService.GenerateCsv(items);
+                await ExportService.DownloadFile("Urlaubsplaner.csv", "text/csv", csv);
+                break;
+            case "json":
+                var json = ExportService.GenerateJson(items);
+                await ExportService.DownloadFile("Urlaubsplaner.json", "application/json", json);
+                break;
+            case "clipboard":
+                var text = ExportService.GenerateSummaryText(items);
+                await ExportService.CopyToClipboard(text);
+                NotificationService.Notify(new NotificationMessage { Severity = NotificationSeverity.Success, Summary = "Kopiert", Detail = "Exportdaten in Zwischenablage kopiert." });
+                break;
+            case "print":
+                await JSRuntime.InvokeVoidAsync("print");
+                break;
+        }
+    }
 
 
 }
