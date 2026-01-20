@@ -199,7 +199,8 @@
 
                             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="10px">
                                 <RadzenSwitch @bind-Value="_showHeatmap" Change="@(async (bool args) => await OnToggleChange(args))" />
-                                <RadzenLabel Text="Heatmap anzeigen (Ferien-Dichte)" Style="cursor: pointer" @onclick="@(async () => { _showHeatmap = !_showHeatmap; await GetAllMarkings(); })" />
+                                <RadzenLabel Text="Heatmap anzeigen" Style="cursor: pointer" @onclick="@(async () => { _showHeatmap = !_showHeatmap; await GetAllMarkings(); })" />
+                                <RadzenIcon Icon="info" class="help-icon" MouseEnter="@(args => ShowTooltip(args, "Farbige Überlagerung zeigt, wie viele Vergleichs-Regionen an einem Tag Ferien/Feiertage haben. Grün = wenige, Rot = viele Regionen haben frei."))" />
                             </RadzenStack>
 
                             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="10px">
@@ -212,9 +213,11 @@
                                 <RadzenLabel Text="Schulferien anzeigen" Style="cursor: pointer" @onclick="@(async () => { _showSchoolHolidays = !_showSchoolHolidays; await GetAllMarkings(); })" />
                             </RadzenStack>
 
+
                             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="10px">
                                 <RadzenCheckBox @bind-Value="_showBridgeDays" Change="@(async (bool args) => await OnToggleChange(args))" />
                                 <RadzenLabel Text="Brückentage-Pfeile" Style="cursor: pointer" @onclick="@(async () => { _showBridgeDays = !_showBridgeDays; await GetAllMarkings(); })" />
+                                <RadzenIcon Icon="info" class="help-icon" MouseEnter="@(args => ShowTooltip(args, "Brückentage sind einzelne Arbeitstage zwischen Feiertagen und Wochenenden. Mit einem Urlaubstag können Sie mehrere freie Tage am Stück erreichen."))" />
                             </RadzenStack>
                         </RadzenStack>
                     </RadzenColumn>
@@ -238,13 +241,18 @@
                                 </div>
                             </div>
 
+
                             <div class="stat-box stat-box-success">
-                                <RadzenIcon Icon="check_circle" class="stat-icon" Style="color: @((_totalVacationDays - _plannedDays) < 0 ? "#d32f2f" : "#4caf50");" />
+                                @{
+                                    var remainingColor = (_totalVacationDays - _plannedDays) < 0 ? "#d32f2f" : "#4caf50";
+                                }
+                                <RadzenIcon Icon="check_circle" class="stat-icon" Style="@($"color: {remainingColor};")" />
                                 <div class="stat-content">
                                     <div class="stat-label">Verbleibende Urlaubstage</div>
-                                    <div class="stat-value" style="color: @((_totalVacationDays - _plannedDays) < 0 ? "#d32f2f" : "#4caf50");">@(_totalVacationDays - _plannedDays)</div>
+                                    <div class="stat-value" style="@($"color: {remainingColor};")">@(_totalVacationDays - _plannedDays)</div>
                                 </div>
                             </div>
+
 
                             <RadzenRow>
                                 <RadzenColumn Size="6">
@@ -337,7 +345,8 @@
                                   Variant="Variant.Flat" Click="@(() => _inputMode = MarkingInputMode.Vacation)" />
                     <RadzenButton Text="Gleittag" Icon="event_available" Size="ButtonSize.Small"
                                   ButtonStyle="@(_inputMode == MarkingInputMode.Gleittag ? ButtonStyle.Primary : ButtonStyle.Light)"
-                                  Variant="Variant.Flat" Click="@(() => _inputMode = MarkingInputMode.Gleittag)" />
+                                  Variant="Variant.Flat" Click="@(() => _inputMode = MarkingInputMode.Gleittag)"
+                                  MouseEnter="@(args => ShowTooltip(args, "Gleittage: Freie Tage durch Arbeitszeitausgleich"))" />
                     <RadzenButton Text="Notiz" Icon="note_alt" Size="ButtonSize.Small"
                                   ButtonStyle="@(_inputMode == MarkingInputMode.Note ? ButtonStyle.Primary : ButtonStyle.Light)"
                                   Variant="Variant.Flat" Click="@(() => _inputMode = MarkingInputMode.Note)" />
@@ -432,6 +441,14 @@
     string _hoveredInfo = "";
     string _defaultNoteText = "";
 
+    string GetModeText() => _inputMode switch
+    {
+        MarkingInputMode.Gleittag => "Aktiv: Gleittag",
+        MarkingInputMode.Note => "Aktiv: Notiz",
+        _ => "Aktiv: Urlaub"
+    };
+
+    void ShowTooltip(ElementReference elementReference, string message) => TooltipService.Open(elementReference, message, new TooltipOptions { Duration = 3000, Position = TooltipPosition.Top });
 
     enum MarkingInputMode
     {
@@ -1115,6 +1132,7 @@
 
         var preferences = await DialogService.OpenAsync<PlanningPreferencesDialog>("Planungs-Einstellungen", null,
             new DialogOptions { Width = "500px", Height = "auto", Resizable = false, Draggable = true });
+        if (preferences == null) return;
         var prefs = (PlanningPreferences)preferences;
 
         var suggestedBlocks = await VacationCalculationService.SuggestPerfectVacation(
