@@ -18,6 +18,7 @@
 @inject OpenHolidaysBootstrapState OpenHolidaysBootstrapState
 @inject VacationCalculationService VacationCalculationService
 @inject Microsoft.Extensions.Localization.IStringLocalizer<Index> L
+@inject TooltipService tooltipService
 @implements IDisposable
 
 <PageTitle>Urlaubsplaner</PageTitle>
@@ -221,40 +222,63 @@
                     <!-- Stats & Automation -->
                     <RadzenColumn Size="12" SizeMD="4">
                         <RadzenStack Gap="0.5rem">
-                            <RadzenText Text="Statistik & Planung" TextStyle="TextStyle.Subtitle2" Style="color: #666;" />
-
                             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
-                                <RadzenLabel Text="Urlaubsanspruch:" />
-                                <RadzenNumeric @bind-Value="_totalVacationDays" Change="@((decimal args) => OnNumericChange(args))" Step="1" Style="width: 70px; text-align: right;" />
+                                <RadzenText Text="Statistik & Planung" TextStyle="TextStyle.Subtitle2" Style="color: #666;" />
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="5px">
+                                    <RadzenLabel Text="Urlaubsanspruch:" Style="font-size: 0.8rem;" />
+                                    <RadzenNumeric @bind-Value="_totalVacationDays" Change="@((decimal args) => OnNumericChange(args))" Step="1" Style="width: 60px; text-align: right;" />
+                                </RadzenStack>
                             </RadzenStack>
 
-                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
-                                <RadzenLabel Text="Verplant / Rest:" />
-                                <div>
-                                    <span style="font-weight: bold; color: #1976d2;">@_plannedDays</span> /
-                                    <span style="font-weight: bold; color: @((_totalVacationDays - _plannedDays) < 0 ? "red" : "green");">@(_totalVacationDays - _plannedDays)</span>
+                            <div class="stat-box stat-box-primary">
+                                <RadzenIcon Icon="event" class="stat-icon" Style="color: #1976d2;" />
+                                <div class="stat-content">
+                                    <div class="stat-label">Verplante Urlaubstage</div>
+                                    <div class="stat-value" style="color: #1976d2;">@_plannedDays</div>
                                 </div>
-                            </RadzenStack>
+                            </div>
 
-                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
-                                <RadzenLabel Text="Gleittage geplant:" />
-                                <span style="font-weight: bold; color: #7b1fa2;">@_gleittageCount</span>
-                            </RadzenStack>
+                            <div class="stat-box stat-box-success">
+                                <RadzenIcon Icon="check_circle" class="stat-icon" Style="color: @((_totalVacationDays - _plannedDays) < 0 ? "#d32f2f" : "#4caf50");" />
+                                <div class="stat-content">
+                                    <div class="stat-label">Verbleibende Urlaubstage</div>
+                                    <div class="stat-value" style="color: @((_totalVacationDays - _plannedDays) < 0 ? "#d32f2f" : "#4caf50");">@(_totalVacationDays - _plannedDays)</div>
+                                </div>
+                            </div>
 
-                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
-                                <RadzenLabel Text="@($"Arbeitstage {_year}:")" />
-                                <span style="font-weight: bold;">@_remainingWorkDays</span>
-                            </RadzenStack>
+                            <RadzenRow>
+                                <RadzenColumn Size="6">
+                                    <div class="stat-box stat-box-purple" style="padding: 8px;">
+                                        <div class="stat-content">
+                                            <div class="stat-label" style="display: flex; align-items: center; gap: 4px;">
+                                                Gleittage
+                                                <RadzenIcon Icon="info" class="help-icon" Style="font-size: 0.9rem;" MouseEnter="@(args => ShowTooltip(args, "Gleittage sind flexible Arbeitszeitausgleichstage, die Sie durch Überstunden ansammeln können."))" />
+                                            </div>
+                                            <div class="stat-value" style="color: #7b1fa2; font-size: 1.3rem;">@_gleittageCount</div>
+                                        </div>
+                                    </div>
+                                </RadzenColumn>
+                                <RadzenColumn Size="6">
+                                    <div class="stat-box stat-box-warning" style="padding: 8px;">
+                                        <div class="stat-content">
+                                            <div class="stat-label">Arbeitstage @_year</div>
+                                            <div class="stat-value" style="color: #ff9800; font-size: 1.3rem;">@_remainingWorkDays</div>
+                                        </div>
+                                    </div>
+                                </RadzenColumn>
+                            </RadzenRow>
 
                             <hr style="border: 0; border-top: 1px solid #eee; margin: 5px 0;" />
 
                             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="10px">
                                 <RadzenCheckBox @bind-Value="_countWeekendsAndHolidays" Change="@((bool args) => OnToggleCalcChange(args))" />
-                                <RadzenLabel Text="Wochenende zählen" Style="cursor: pointer; font-size: 0.8rem;" @onclick="@(() => { _countWeekendsAndHolidays = !_countWeekendsAndHolidays; UpdateAllCalculations(); })" />
+                                <RadzenLabel Text="Wochenende als Urlaubstage zählen" Style="cursor: pointer; font-size: 0.8rem;" @onclick="@(() => { _countWeekendsAndHolidays = !_countWeekendsAndHolidays; UpdateAllCalculations(); })" />
                             </RadzenStack>
                             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="10px">
                                 <RadzenCheckBox @bind-Value="_halfDaysChristmas" Change="@((bool args) => OnToggleCalcChange(args))" />
-                                <RadzenLabel Text="24./31.12. halbe Tage" Style="cursor: pointer; font-size: 0.8rem;" @onclick="@(() => { _halfDaysChristmas = !_halfDaysChristmas; UpdateAllCalculations(); })" />
+                                <RadzenLabel Style="cursor: pointer; font-size: 0.8rem; display: flex; align-items: center; gap: 4px;" @onclick="@(() => { _halfDaysChristmas = !_halfDaysChristmas; UpdateAllCalculations(); })">
+                                    24./31.12. als halbe Tage zählen (0,5 Urlaubstage)
+                                </RadzenLabel>
                             </RadzenStack>
 
                             <RadzenSplitButton Text="Vorschlag generieren" Icon="auto_awesome" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Medium" Click="@(args => SuggestPerfectVacationWithOptions(args))" Style="width: 100%; margin-top: 5px;">
@@ -355,7 +379,13 @@
                     <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: transparent; border: 3px solid #dc3545;"></div> Feiertag (Mein BL)</div>
                     <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: transparent; border: 3px solid #6f42c1;"></div> Schulferien (Mein BL)</div>
                     <div class="holiday-legend-item"><div class="holiday-legend-color" style="background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAxMCAxMCc+PHBvbHlnb24gcG9pbnRzPSc1LDAgMTAsNSA1LDEwJyBzdHlsZT0nZmlsbDpvcmFuZ2U7IG9wYWNpdHk6IDAuOScvPjwvc3ZnPg=='); background-repeat: no-repeat; background-position: center; background-size: contain; border: none;"></div> Brückentag</div>
-                    <div class="holiday-legend-item"><div class="holiday-legend-color" style="background: linear-gradient(to right, rgba(0,255,0,0.3), rgba(255,255,0,0.3), rgba(255,165,0,0.4), rgba(255,0,0,0.5));"></div> Heatmap (Dichte)</div>
+                    <div class="holiday-legend-item" style="flex-direction: column; align-items: flex-start; gap: 2px;">
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <div class="holiday-legend-color" style="background: linear-gradient(to right, rgba(0,255,0,0.3), rgba(255,255,0,0.3), rgba(255,165,0,0.4), rgba(255,0,0,0.5));"></div>
+                            <span>Heatmap</span>
+                        </div>
+                        <span style="font-size: 0.75rem; color: #666; padding-left: 21px;">Zeigt, wie viele Vergleichs-Regionen an diesem Tag Ferien/Feiertage haben (grün = wenige, rot = viele)</span>
+                    </div>
                 </RadzenStack>
 
             </RadzenStack>
@@ -418,7 +448,7 @@
     readonly List<Marking> _gleittage = [];
     readonly List<Marking> _notes = [];
     readonly Dictionary<DateTime, int> _dailyHeatScore = new();
-    readonly HashSet<DateTime> _overBudgetDates = new();
+    readonly HashSet<DateTime> _overBudgetDates = [];
 
     int _maxDailyHeatScore = 1;
     Dictionary<int, decimal> _vacationDaysPerYear = new();
@@ -752,12 +782,12 @@
         foreach (var slot in _selectedSlots)
         {
             var date = slot.Start.Date;
-            bool isWeekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
-            bool isHoliday = primaryHolidays.Contains(date);
+            var isWeekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+            var isHoliday = primaryHolidays.Contains(date);
 
             if (!isWeekend && !isHoliday)
             {
-                decimal cost = (_halfDaysChristmas && (date.Month == 12 && (date.Day == 24 || date.Day == 31))) ? 0.5m : 1.0m;
+                var cost = (_halfDaysChristmas && (date.Month == 12 && (date.Day == 24 || date.Day == 31))) ? 0.5m : 1.0m;
                 currentCost += cost;
 
                 if (currentCost > _totalVacationDays)
@@ -795,60 +825,52 @@
     {
         if (score == 0) return "transparent";
 
-        double saturation = 12.0;
-        double denominator = Math.Min(Math.Max(_maxDailyHeatScore, 5), saturation);
-        double percent = Math.Min(score / denominator, 1.0);
+        const double saturation = 12.0;
+        var denominator = Math.Min(Math.Max(_maxDailyHeatScore, 5), saturation);
+        var percent = Math.Min(score / denominator, 1.0);
 
-        int r, g, b;
-        double alpha = 0.3 + (percent * 0.2); // Less opacity overall (0.3 to 0.5)
+        int r, g;
+        var alpha = 0.3 + (percent * 0.2); // Less opacity overall (0.3 to 0.5)
 
         // Multi-stop gradient: Green -> Yellow -> Orange -> Red
         // 0.00 - 0.33: Green (0,255,0) -> Yellow (255,255,0)
         // 0.33 - 0.66: Yellow (255,255,0) -> Orange (255,165,0)
         // 0.66 - 1.00: Orange (255,165,0) -> Red (255,0,0)
 
-        if (percent < 0.33)
+        switch (percent)
         {
-            // Green to Yellow
-            var p = percent / 0.33;
-            r = (int)(p * 255);
-            g = 255;
-            b = 0;
+            case < 0.33:
+            {
+                // Green to Yellow
+                var p = percent / 0.33;
+                r = (int)(p * 255);
+                g = 255;
+                break;
+            }
+            case < 0.66:
+            {
+                // Yellow to Orange
+                var p = (percent - 0.33) / 0.33;
+                r = 255;
+                g = (int)(255 - (p * (255 - 165))); // G goes 255 -> 165
+                break;
+            }
+            default:
+            {
+                // Orange to Red
+                var p = (percent - 0.66) / 0.34;
+                r = 255;
+                g = (int)(165 - (p * 165)); // G goes 165 -> 0
+                break;
+            }
         }
-        else if (percent < 0.66)
-        {
-            // Yellow to Orange
-            var p = (percent - 0.33) / 0.33;
-            r = 255;
-            g = (int)(255 - (p * (255 - 165))); // G goes 255 -> 165
-            b = 0;
-        }
-        else
-        {
-            // Orange to Red
-            var p = (percent - 0.66) / 0.34;
-            r = 255;
-            g = (int)(165 - (p * 165)); // G goes 165 -> 0
-            b = 0;
-        }
+
+        var b = 0;
 
         return $"rgba({r}, {g}, {b}, {alpha.ToString(CultureInfo.InvariantCulture)})";
     }
 
-    private static string AppendCssClass(IDictionary<string, object> attributes, string cssClass)
-    {
-        if (attributes.TryGetValue("class", out var existing) && existing is string s && !string.IsNullOrWhiteSpace(s))
-        {
-            if (s.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains(cssClass))
-            {
-                return s;
-            }
-
-            return $"{s} {cssClass}";
-        }
-
-        return cssClass;
-    }
+    private static string AppendCssClass(IDictionary<string, object> attributes, string cssClass) => attributes.TryGetValue("class", out var existing) && existing is string s && !string.IsNullOrWhiteSpace(s) ? s.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains(cssClass) ? s : $"{s} {cssClass}" : cssClass;
 
     private void SlotRender(SchedulerSlotRenderEventArgs args)
     {
@@ -859,7 +881,7 @@
         var bgSizes = new List<string>();
         var info = new List<string>();
 
-        if (_showHeatmap && _dailyHeatScore.TryGetValue(date, out int score))
+        if (_showHeatmap && _dailyHeatScore.TryGetValue(date, out var score))
         {
             style.Append($"background-color: {GetHeatmapColor(score)};");
         }
@@ -898,8 +920,8 @@
         // Icon layout rules:
         // - If note + vacation/gleittag exist: show vacation/gleittag as main icon (bigger, centered), note as small icon on top.
         // - Bridge-day arrows are drawn as background of the cell (not via ::after), so they stay behind icons.
-        bool hasMain = selection != null || gleittag != null;
-        bool hasSecondary = note != null && hasMain;
+        var hasMain = selection != null || gleittag != null;
+        var hasSecondary = note != null && hasMain;
 
         if (selection != null)
         {
@@ -1086,14 +1108,13 @@
         }
 
         // Default to "extend" if main button clicked (args is null)
-        string value = args?.Value ?? "extend";
+        var value = args?.Value ?? "extend";
 
-        bool overwrite = value == "overwrite";
-        bool planFromToday = value == "rest_of_year";
+        var overwrite = value == "overwrite";
+        var planFromToday = value == "rest_of_year";
 
         var preferences = await DialogService.OpenAsync<PlanningPreferencesDialog>("Planungs-Einstellungen", null,
             new DialogOptions { Width = "500px", Height = "auto", Resizable = false, Draggable = true });
-        if (preferences == null) return;
         var prefs = (PlanningPreferences)preferences;
 
         var suggestedBlocks = await VacationCalculationService.SuggestPerfectVacation(
@@ -1166,10 +1187,8 @@
             _year = middle;
 
             // Switch vacation days context
-            if (!_vacationDaysPerYear.ContainsKey(_year))
-            {
-                _vacationDaysPerYear[_year] = 30; // Default
-            }
+            _vacationDaysPerYear.TryAdd(_year, 30);
+            // Default
             _totalVacationDays = _vacationDaysPerYear[_year];
 
             await GetAllMarkings();
@@ -1267,8 +1286,6 @@
         var result = await DialogService.OpenAsync<ExportOptionsDialog>("Export-Optionen", null,
             new DialogOptions { Width = "420px", Height = "auto", Resizable = false, Draggable = true });
 
-        if (result == null) return;
-
         var options = (ExportOptionsDialog.ExportOptions)result;
 
         var items = new List<ExportService.ExportItem>();
@@ -1355,5 +1372,5 @@
         }
     }
 
-
+    void ShowTooltip(ElementReference elementReference, string text, TooltipOptions options = null) => tooltipService.Open(elementReference, text, options);
 }
