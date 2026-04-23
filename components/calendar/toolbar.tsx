@@ -1,6 +1,6 @@
 'use client'
 
-import { ChevronLeft, ChevronRight, Sun, Palmtree, FileText } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +19,7 @@ interface ToolbarProps {
   onToggleSchoolHolidays: (val: boolean) => void
   vacationDaysUsed: number
   vacationDaysTotal: number
+  onOpenSuggestions: () => void
 }
 
 export function Toolbar({
@@ -34,6 +35,7 @@ export function Toolbar({
   onToggleSchoolHolidays,
   vacationDaysUsed,
   vacationDaysTotal,
+  onOpenSuggestions,
 }: ToolbarProps) {
   const remaining = vacationDaysTotal - vacationDaysUsed
 
@@ -92,6 +94,12 @@ export function Toolbar({
           <span className="text-muted-foreground">Schulferien</span>
         </label>
       </div>
+
+      {/* Suggestions */}
+      <Button size="sm" variant="outline" onClick={onOpenSuggestions}>
+        <Sparkles className="h-4 w-4 mr-1" />
+        Urlaub planen
+      </Button>
 
       {/* Vacation Counter */}
       <div className="flex items-center gap-2">

@@ -6,8 +6,9 @@ import { Toolbar } from '@/components/calendar/toolbar'
 import { YearView } from '@/components/calendar/year-view'
 import { useVacations, useToggleVacation } from '@/hooks/use-vacations'
 import { useHolidays } from '@/hooks/use-holidays'
-import { parseISO, isSameDay, format } from 'date-fns'
+import { parseISO, isSameDay, format, getYear } from 'date-fns'
 import type { EntryType, VacationEntry } from '@/types'
+import { SuggestionsPanel } from '@/components/calendar/suggestions-panel'
 
 interface CalendarClientProps {
   userId?: string
@@ -118,11 +119,33 @@ export function CalendarClient({ userId, preferences, isLoggedIn }: CalendarClie
     }
   }, [isLoggedIn, serverEntries, localEntries, addMutation, removeMutation])
 
+  const [showSuggestions, setShowSuggestions] = useState(false)
   const vacationDaysUsed = entries.filter(e => e.type === 'vacation').length
+
+  const handleApplySuggestions = (dates: string[], type: EntryType) => {
+    for (const dateStr of dates) {
+      const date = parseISO(dateStr)
+      handleToggle(date, type)
+    }
+  }
+
+  const existingVacationDates = entries.filter(e => e.type === 'vacation').map(e => e.date.split('T')[0])
+  const existingNoteDates = entries.filter(e => e.type === 'note').map(e => e.date.split('T')[0])
 
   return (
     <div className="min-h-screen bg-background">
       <Header isLoggedIn={isLoggedIn} />
+      <SuggestionsPanel
+        open={showSuggestions}
+        onClose={() => setShowSuggestions(false)}
+        year={year}
+        country={country}
+        subdivision={subdivision}
+        remainingDays={vacationDaysTotal - vacationDaysUsed}
+        existingVacationDates={existingVacationDates}
+        noteDates={existingNoteDates}
+        onApply={handleApplySuggestions}
+      />
       <main className="container py-4 space-y-4">
         {!isLoggedIn && (
           <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-900/20 p-3 text-sm text-blue-800 dark:text-blue-200">
@@ -145,6 +168,7 @@ export function CalendarClient({ userId, preferences, isLoggedIn }: CalendarClie
           onToggleSchoolHolidays={setShowSchoolHolidays}
           vacationDaysUsed={vacationDaysUsed}
           vacationDaysTotal={vacationDaysTotal}
+          onOpenSuggestions={() => setShowSuggestions(true)}
         />
 
         {entriesLoading ? (
