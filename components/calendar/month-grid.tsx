@@ -8,6 +8,8 @@ import {
   eachDayOfInterval,
   isSameMonth,
   isToday,
+  isBefore,
+  startOfDay,
   isWeekend,
   format,
 } from 'date-fns'
@@ -27,6 +29,7 @@ interface MonthGridProps {
   showHeatmap: boolean
   bridgeDaySet: Set<string>
   showBridgeDays: boolean
+  overBudgetDates: Set<string>
   onToggle: (date: Date, type: EntryType) => void
   selectedType: EntryType
   onHover?: (info: DayInfo | null) => void
@@ -41,10 +44,12 @@ export function MonthGrid({
   showHeatmap,
   bridgeDaySet,
   showBridgeDays,
+  overBudgetDates,
   onToggle,
   selectedType,
   onHover,
 }: MonthGridProps) {
+  const today = startOfDay(new Date())
   const monthStart = startOfMonth(date)
   const monthEnd = endOfMonth(date)
   const calStart = startOfWeek(monthStart, { weekStartsOn: 1 })
@@ -76,6 +81,8 @@ export function MonthGrid({
             isOtherMonth={!isSameMonth(day, date)}
             heatmapValue={heatmapData?.get(format(day, 'yyyy-MM-dd'))}
             showHeatmap={showHeatmap}
+            isPast={isBefore(day, today)}
+            isOverBudget={overBudgetDates.has(format(day, 'yyyy-MM-dd'))}
             isBridgeDay={bridgeDaySet.has(format(day, 'yyyy-MM-dd'))}
             showBridgeDays={showBridgeDays}
             onToggle={onToggle}

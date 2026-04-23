@@ -17,6 +17,7 @@ interface YearViewProps {
   showSchoolHolidays: boolean
   bridgeDaySet: Set<string>
   showBridgeDays: boolean
+  overBudgetDates: Set<string>
   onToggle: (date: Date, type: EntryType) => void
   selectedType: EntryType
   onHover?: (info: DayInfo | null) => void
@@ -33,6 +34,7 @@ export function YearView({
   showSchoolHolidays,
   bridgeDaySet,
   showBridgeDays,
+  overBudgetDates,
   onToggle,
   selectedType,
   onHover,
@@ -74,6 +76,7 @@ export function YearView({
           showHeatmap={showHeatmap}
           bridgeDaySet={bridgeDaySet}
           showBridgeDays={showBridgeDays}
+          overBudgetDates={overBudgetDates}
           onToggle={onToggle}
           selectedType={selectedType}
           onHover={onHover}

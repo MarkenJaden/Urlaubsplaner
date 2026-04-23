@@ -20,6 +20,8 @@ interface DayCellProps {
   isWeekend: boolean
   isToday: boolean
   isOtherMonth: boolean
+  isPast: boolean
+  isOverBudget: boolean
   heatmapValue?: number
   showHeatmap: boolean
   isBridgeDay: boolean
@@ -49,6 +51,8 @@ export function DayCell({
   isWeekend,
   isToday,
   isOtherMonth,
+  isPast,
+  isOverBudget,
   heatmapValue,
   showHeatmap,
   isBridgeDay,
@@ -93,7 +97,9 @@ export function DayCell({
         isOtherMonth && 'opacity-30',
         isWeekend && !hasEntry && !publicHoliday && 'bg-muted/50',
         isToday && 'ring-2 ring-primary',
-        vacation && 'bg-blue-500 text-white hover:bg-blue-600',
+        isPast && !hasEntry && 'opacity-50 grayscale',
+        vacation && !isOverBudget && 'bg-blue-500 text-white hover:bg-blue-600',
+        vacation && isOverBudget && 'bg-red-500 text-white hover:bg-red-600',
         gleittag && !vacation && 'bg-purple-500 text-white hover:bg-purple-600',
         note && !vacation && !gleittag && 'bg-gray-400 text-white hover:bg-gray-500',
         publicHoliday && !hasEntry && 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',

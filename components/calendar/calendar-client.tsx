@@ -4,12 +4,14 @@ import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Header } from '@/components/layout/header'
 import { Toolbar } from '@/components/calendar/toolbar'
 import { YearView } from '@/components/calendar/year-view'
+import { SettingsPanel } from '@/components/calendar/settings-panel'
 import { SuggestionsPanel } from '@/components/calendar/suggestions-panel'
 import { useVacations, useToggleVacation } from '@/hooks/use-vacations'
-import { useHolidays, useCompareHolidays } from '@/hooks/use-holidays'
+import { useHolidays, useCompareHolidays, useSubdivisions } from '@/hooks/use-holidays'
 import { detectBridgeDays } from '@/lib/bridge-days'
+import { loadConfig, saveConfig, configToEntries } from '@/lib/config'
 import { parseISO, isSameDay, format, eachDayOfInterval, isWeekend } from 'date-fns'
-import type { EntryType, VacationEntry, Holiday } from '@/types'
+import type { EntryType, VacationEntry, Holiday, LocalConfig } from '@/types'
 import type { DayInfo } from '@/components/calendar/day-cell'
 import type { ImportData } from '@/lib/export'
 
@@ -17,20 +19,6 @@ interface CalendarClientProps {
   userId?: string
   preferences: Record<string, unknown>
   isLoggedIn: boolean
-}
-
-const LOCAL_STORAGE_KEY = 'urlaubsplaner_local_entries'
-
-function loadLocalEntries(): VacationEntry[] {
-  if (typeof window === 'undefined') return []
-  try {
-    return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) ?? '[]')
-  } catch { return [] }
-}
-
-function saveLocalEntries(entries: VacationEntry[]) {
-  if (typeof window !== 'undefined')
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(entries))
 }
 
 function countWorkDays(year: number, entries: VacationEntry[], publicHolidays: Holiday[]): number {
@@ -59,33 +47,72 @@ function countWorkDays(year: number, entries: VacationEntry[], publicHolidays: H
   return count
 }
 
-export function CalendarClient({ userId, preferences, isLoggedIn }: CalendarClientProps) {
+function computeOverBudget(
+  entries: VacationEntry[],
+  publicHolidays: Holiday[],
+  totalDays: number,
+  halfDaysChristmas: boolean,
+): Set<string> {
+  const result = new Set<string>()
+  const holidaySet = new Set<string>()
+  for (const h of publicHolidays) {
+    try {
+      const days = eachDayOfInterval({ start: parseISO(h.startDate), end: parseISO(h.endDate) })
+      for (const d of days) holidaySet.add(format(d, 'yyyy-MM-dd'))
+    } catch {}
+  }
+
+  const vacDays = entries
+    .filter(e => e.type === 'vacation')
+    .sort((a, b) => a.date.localeCompare(b.date))
+
+  let cost = 0
+  for (const e of vacDays) {
+    const dateStr = e.date.split('T')[0]
+    const d = parseISO(e.date)
+    if (isWeekend(d) || holidaySet.has(dateStr)) continue
+    const isHalf = halfDaysChristmas && d.getMonth() === 11 && (d.getDate() === 24 || d.getDate() === 31)
+    cost += isHalf ? 0.5 : 1
+    if (cost > totalDays) result.add(dateStr)
+  }
+  return result
+}
+
+export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }: CalendarClientProps) {
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
   const [selectedType, setSelectedType] = useState<EntryType>('vacation')
-  const [showHeatmap, setShowHeatmap] = useState((preferences?.showHeatmap as boolean) ?? false)
-  const [showPublicHolidays, setShowPublicHolidays] = useState((preferences?.showPublicHolidays as boolean) ?? true)
-  const [showSchoolHolidays, setShowSchoolHolidays] = useState((preferences?.showSchoolHolidays as boolean) ?? true)
-  const [showBridgeDays, setShowBridgeDays] = useState(true)
+  const [config, setConfig] = useState<LocalConfig | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [hoveredDay, setHoveredDay] = useState<DayInfo | null>(null)
-  const [localEntries, setLocalEntries] = useState<VacationEntry[]>([])
 
-  useEffect(() => { if (!isLoggedIn) setLocalEntries(loadLocalEntries()) }, [isLoggedIn])
+  // Load config on mount
+  useEffect(() => { if (!isLoggedIn) setConfig(loadConfig()) }, [isLoggedIn])
 
-  const subdivision = preferences?.subdivision as string | undefined
-  const country = (preferences?.country as string) ?? 'DE'
-  const vacationDaysTotal = (preferences?.vacationDays as number) ?? 30
-  const compareSubdivisions = (preferences?.compareSubdivisions as string[]) ?? []
+  // Derive state from config or server prefs
+  const subdivision = isLoggedIn ? (serverPrefs?.subdivision as string) : config?.subdivision
+  const country = 'DE'
+  const compareSubdivisions = isLoggedIn
+    ? ((serverPrefs?.compareSubdivisions as string[]) ?? [])
+    : (config?.compareSubdivisions ?? [])
+  const showHeatmap = isLoggedIn ? ((serverPrefs?.showHeatmap as boolean) ?? false) : (config?.showHeatmap ?? false)
+  const showPublicHolidays = isLoggedIn ? ((serverPrefs?.showPublicHolidays as boolean) ?? true) : (config?.showPublicHolidays ?? true)
+  const showSchoolHolidays = isLoggedIn ? ((serverPrefs?.showSchoolHolidays as boolean) ?? true) : (config?.showSchoolHolidays ?? true)
+  const showBridgeDays = config?.showBridgeDays ?? true
+  const halfDaysChristmas = config?.halfDaysChristmas ?? true
+  const countWeekendsAsVacation = config?.countWeekendsAsVacation ?? false
+  const vacationDaysTotal = isLoggedIn
+    ? ((serverPrefs?.vacationDays as number) ?? 30)
+    : (config?.vacationDaysPerYear?.[year] ?? 30)
 
+  const { data: subdivisionsData = [] } = useSubdivisions(country)
   const { data: serverEntries = [], isLoading: entriesLoading } = useVacations(year, isLoggedIn)
   const { addMutation, removeMutation } = useToggleVacation(year, isLoggedIn)
 
-  const entries = isLoggedIn ? serverEntries : localEntries.filter(e => new Date(e.date).getFullYear() === year)
+  const entries = isLoggedIn ? serverEntries : (config ? configToEntries(config, year) : [])
 
-  const { data: publicHolidays = [] } = useHolidays({ country, subdivision, year, type: 'public', enabled: showPublicHolidays })
-  const { data: schoolHolidays = [] } = useHolidays({ country, subdivision, year, type: 'school', enabled: showSchoolHolidays })
-
+  const { data: publicHolidays = [] } = useHolidays({ country, subdivision, year, type: 'public', enabled: showPublicHolidays && !!subdivision })
+  const { data: schoolHolidays = [] } = useHolidays({ country, subdivision, year, type: 'school', enabled: showSchoolHolidays && !!subdivision })
   const compareHolidays = useCompareHolidays(country, compareSubdivisions, year, showHeatmap)
 
   const bridgeDaySet = useMemo(() => {
@@ -94,9 +121,24 @@ export function CalendarClient({ userId, preferences, isLoggedIn }: CalendarClie
     return new Set(bdays.map(b => b.date))
   }, [year, publicHolidays, showBridgeDays])
 
+  const overBudgetDates = useMemo(
+    () => computeOverBudget(entries, publicHolidays, vacationDaysTotal, halfDaysChristmas),
+    [entries, publicHolidays, vacationDaysTotal, halfDaysChristmas]
+  )
+
   const vacationDaysUsed = entries.filter(e => e.type === 'vacation').length
   const gleittageCount = entries.filter(e => e.type === 'gleittag').length
   const remainingWorkDays = countWorkDays(year, entries, publicHolidays)
+
+  // Config updater
+  const updateConfig = useCallback((patch: Partial<LocalConfig>) => {
+    if (isLoggedIn) return
+    setConfig(prev => {
+      const next = { ...(prev ?? loadConfig()), ...patch } as LocalConfig
+      saveConfig(next)
+      return next
+    })
+  }, [isLoggedIn])
 
   const handleToggle = useCallback((date: Date, type: EntryType) => {
     if (isLoggedIn) {
@@ -109,24 +151,20 @@ export function CalendarClient({ userId, preferences, isLoggedIn }: CalendarClie
         addMutation.mutate({ date: dateStr, type, title })
       }
     } else {
-      const dateStr = format(date, 'yyyy-MM-dd') + 'T00:00:00.000Z'
-      const existing = localEntries.find(e => e.type === type && isSameDay(parseISO(e.date), date))
-      let updated: VacationEntry[]
-      if (existing) {
-        updated = localEntries.filter(e => e.id !== existing.id)
+      if (!config) return
+      const dateStr = format(date, 'yyyy-MM-dd')
+      const existing = config.entries.findIndex(e => e.type === type && e.date === dateStr)
+      let newEntries: LocalConfig['entries']
+      if (existing >= 0) {
+        newEntries = config.entries.filter((_, i) => i !== existing)
       } else {
         let title: string | undefined
         if (type === 'note') { title = prompt('Notiz-Text (optional):') ?? undefined }
-        updated = [...localEntries, {
-          id: `local_${Date.now()}`, date: dateStr, type, title,
-          userId: 'local', year: date.getFullYear(),
-          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-        }]
+        newEntries = [...config.entries, { date: dateStr, type, title }]
       }
-      setLocalEntries(updated)
-      saveLocalEntries(updated)
+      updateConfig({ entries: newEntries })
     }
-  }, [isLoggedIn, serverEntries, localEntries, addMutation, removeMutation])
+  }, [isLoggedIn, serverEntries, config, addMutation, removeMutation, updateConfig])
 
   const handleApplySuggestions = (dates: string[], type: EntryType) => {
     for (const dateStr of dates) handleToggle(parseISO(dateStr), type)
@@ -137,6 +175,14 @@ export function CalendarClient({ userId, preferences, isLoggedIn }: CalendarClie
       const date = parseISO(v.date.includes('T') ? v.date : v.date + 'T00:00:00.000Z')
       const type = (['vacation', 'gleittag', 'note'].includes(v.type) ? v.type : 'vacation') as EntryType
       handleToggle(date, type)
+    }
+  }
+
+  const handleReset = () => {
+    if (isLoggedIn) {
+      for (const e of serverEntries) removeMutation.mutate(e.id)
+    } else {
+      updateConfig({ entries: [] })
     }
   }
 
@@ -157,23 +203,41 @@ export function CalendarClient({ userId, preferences, isLoggedIn }: CalendarClie
       <main className="container py-4 space-y-4">
         {!isLoggedIn && (
           <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-900/20 p-3 text-sm text-blue-800 dark:text-blue-200">
-            💡 Du planst gerade lokal.{' '}
+            \ud83d\udca1 Du planst gerade lokal.{' '}
             <a href="/login" className="underline font-medium">Anmelden</a> um zu speichern und synchronisieren.
           </div>
         )}
 
+        <SettingsPanel
+          subdivisions={subdivisionsData}
+          subdivision={subdivision}
+          onSubdivisionChange={(code) => updateConfig({ subdivision: code })}
+          compareSubdivisions={compareSubdivisions}
+          onCompareChange={(codes) => updateConfig({ compareSubdivisions: codes })}
+          vacationDaysTotal={vacationDaysTotal}
+          onVacationDaysChange={(n) => updateConfig({ vacationDaysPerYear: { ...(config?.vacationDaysPerYear ?? {}), [year]: n } })}
+          countWeekendsAsVacation={countWeekendsAsVacation}
+          onCountWeekendsChange={(v) => updateConfig({ countWeekendsAsVacation: v })}
+          halfDaysChristmas={halfDaysChristmas}
+          onHalfDaysChange={(v) => updateConfig({ halfDaysChristmas: v })}
+          vacationDaysUsed={vacationDaysUsed}
+          gleittageCount={gleittageCount}
+          remainingWorkDays={remainingWorkDays}
+        />
+
         <Toolbar
           year={year} onYearChange={setYear}
           selectedType={selectedType} onTypeChange={setSelectedType}
-          showHeatmap={showHeatmap} onToggleHeatmap={setShowHeatmap}
-          showPublicHolidays={showPublicHolidays} onTogglePublicHolidays={setShowPublicHolidays}
-          showSchoolHolidays={showSchoolHolidays} onToggleSchoolHolidays={setShowSchoolHolidays}
-          showBridgeDays={showBridgeDays} onToggleBridgeDays={setShowBridgeDays}
+          showHeatmap={showHeatmap} onToggleHeatmap={(v) => updateConfig({ showHeatmap: v })}
+          showPublicHolidays={showPublicHolidays} onTogglePublicHolidays={(v) => updateConfig({ showPublicHolidays: v })}
+          showSchoolHolidays={showSchoolHolidays} onToggleSchoolHolidays={(v) => updateConfig({ showSchoolHolidays: v })}
+          showBridgeDays={showBridgeDays} onToggleBridgeDays={(v) => updateConfig({ showBridgeDays: v })}
           vacationDaysUsed={vacationDaysUsed} vacationDaysTotal={vacationDaysTotal}
           gleittageCount={gleittageCount} remainingWorkDays={remainingWorkDays}
-          entries={entries} preferences={preferences}
+          entries={entries} preferences={isLoggedIn ? serverPrefs : ((config ?? {}) as unknown as Record<string, unknown>)}
           onOpenSuggestions={() => setShowSuggestions(true)}
           onImport={handleImport}
+          onReset={handleReset}
         />
 
         {entriesLoading ? (
@@ -189,6 +253,7 @@ export function CalendarClient({ userId, preferences, isLoggedIn }: CalendarClie
             compareHolidays={compareHolidays}
             showHeatmap={showHeatmap} showPublicHolidays={showPublicHolidays} showSchoolHolidays={showSchoolHolidays}
             bridgeDaySet={bridgeDaySet} showBridgeDays={showBridgeDays}
+            overBudgetDates={overBudgetDates}
             onToggle={handleToggle} selectedType={selectedType}
             onHover={setHoveredDay}
           />
@@ -198,14 +263,14 @@ export function CalendarClient({ userId, preferences, isLoggedIn }: CalendarClie
         {hoveredDay && (
           <div className="fixed bottom-4 right-4 z-50 bg-card border rounded-lg shadow-lg p-3 text-sm max-w-xs">
             <p className="font-medium">{format(hoveredDay.date, 'dd.MM.yyyy (EEEE)')}</p>
-            {hoveredDay.publicHoliday && <p className="text-green-600">🎉 {hoveredDay.publicHoliday}</p>}
-            {hoveredDay.schoolHoliday && <p className="text-yellow-600">🏫 {hoveredDay.schoolHoliday}</p>}
-            {hoveredDay.isBridgeDay && <p className="text-orange-500">🌉 Brückentag</p>}
+            {hoveredDay.publicHoliday && <p className="text-green-600">\ud83c\udf89 {hoveredDay.publicHoliday}</p>}
+            {hoveredDay.schoolHoliday && <p className="text-yellow-600">\ud83c\udfeb {hoveredDay.schoolHoliday}</p>}
+            {hoveredDay.isBridgeDay && <p className="text-orange-500">\ud83c\udf09 Br\u00fcckentag</p>}
             {hoveredDay.entry && (
               <p className="text-blue-500">
-                {hoveredDay.entry.type === 'vacation' ? '🏖️ Urlaub' :
-                 hoveredDay.entry.type === 'gleittag' ? '⏰ Gleittag' :
-                 `📝 ${hoveredDay.entry.title ?? 'Notiz'}`}
+                {hoveredDay.entry.type === 'vacation' ? '\ud83c\udfd6\ufe0f Urlaub' :
+                 hoveredDay.entry.type === 'gleittag' ? '\u23f0 Gleittag' :
+                 `\ud83d\udcdd ${hoveredDay.entry.title ?? 'Notiz'}`}
               </p>
             )}
           </div>
@@ -214,10 +279,11 @@ export function CalendarClient({ userId, preferences, isLoggedIn }: CalendarClie
         {/* Legend */}
         <div className="flex flex-wrap gap-4 text-xs text-muted-foreground pt-2">
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-blue-500" /> Urlaub</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-500" /> \u00dcber Budget</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-purple-500" /> Gleittag</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-100 border border-green-300" /> Feiertag</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-yellow-100 border border-yellow-300" /> Schulferien</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-orange-50 ring-2 ring-orange-400" /> Brückentag</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-orange-50 ring-2 ring-orange-400" /> Br\u00fcckentag</span>
         </div>
       </main>
     </div>

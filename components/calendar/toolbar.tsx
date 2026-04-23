@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import type { EntryType, VacationEntry } from '@/types'
-import { exportToCSV, exportToClipboardText, downloadFile, exportToJSON, parseImportFile } from '@/lib/export'
+import { exportToCSV, exportToClipboardText, downloadFile, exportToJSON, exportToICS, parseImportFile } from '@/lib/export'
 
 interface ToolbarProps {
   year: number
@@ -29,6 +29,7 @@ interface ToolbarProps {
   preferences: Record<string, unknown>
   onOpenSuggestions: () => void
   onImport: (data: { vacations: Array<{ date: string; type: string; title?: string }>; preferences?: Record<string, unknown> }) => void
+  onReset: () => void
 }
 
 export function Toolbar({
@@ -52,6 +53,7 @@ export function Toolbar({
   preferences,
   onOpenSuggestions,
   onImport,
+  onReset,
 }: ToolbarProps) {
   const remaining = vacationDaysTotal - vacationDaysUsed
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -69,6 +71,15 @@ export function Toolbar({
   const handleExportJSON = () => {
     const json = exportToJSON(entries, preferences)
     downloadFile(json, `urlaubsplaner-${year}.json`, 'application/json')
+  }
+
+  const handleExportICS = () => {
+    const ics = exportToICS(entries)
+    downloadFile(ics, `urlaubsplaner-${year}.ics`, 'text/calendar')
+  }
+
+  const handleReset = () => {
+    if (confirm('Möchtest du wirklich alle Planungen löschen?')) onReset()
   }
 
   const handleImportClick = () => fileInputRef.current?.click()
@@ -152,10 +163,16 @@ export function Toolbar({
         <Button size="sm" variant="ghost" onClick={handleExportJSON} title="JSON Export">
           {'{}'}
         </Button>
+        <Button size="sm" variant="ghost" onClick={handleExportICS} title="ICS Kalender Export">
+          📅
+        </Button>
         <Button size="sm" variant="ghost" onClick={handleImportClick} title="Importieren">
           <Upload className="h-4 w-4" />
         </Button>
         <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
+        <Button size="sm" variant="ghost" onClick={handleReset} title="Planung zurücksetzen" className="text-red-500 hover:text-red-600">
+          🗑️
+        </Button>
       </div>
 
       {/* Stats */}
