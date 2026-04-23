@@ -43,19 +43,3 @@ export async function GET(request: Request) {
   return NextResponse.json(data)
 }
 
-export async function GET_SUBDIVISIONS(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const country = searchParams.get('country') ?? 'DE'
-
-  const response = await fetch(
-    `${OPENHOLIDAYS_BASE}/Subdivisions?countryIsoCode=${country}&languageIsoCode=DE`,
-    { next: { revalidate: 86400 } }
-  )
-
-  if (!response.ok) {
-    return NextResponse.json({ error: 'OpenHolidays API error' }, { status: 502 })
-  }
-
-  const data = await response.json()
-  return NextResponse.json(data)
-}
