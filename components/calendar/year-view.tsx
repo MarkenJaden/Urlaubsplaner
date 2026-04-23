@@ -2,20 +2,24 @@
 
 import { useMemo } from 'react'
 import { MonthGrid } from './month-grid'
+import type { DayInfo } from './day-cell'
 import type { VacationEntry, Holiday, EntryType } from '@/types'
-import { format } from 'date-fns'
+import { format, parseISO, eachDayOfInterval } from 'date-fns'
 
 interface YearViewProps {
   year: number
   entries: VacationEntry[]
   publicHolidays: Holiday[]
   schoolHolidays: Holiday[]
-  compareHolidays?: Holiday[][] // per compare region
+  compareHolidays?: Holiday[][]
   showHeatmap: boolean
   showPublicHolidays: boolean
   showSchoolHolidays: boolean
+  bridgeDaySet: Set<string>
+  showBridgeDays: boolean
   onToggle: (date: Date, type: EntryType) => void
   selectedType: EntryType
+  onHover?: (info: DayInfo | null) => void
 }
 
 export function YearView({
@@ -27,28 +31,29 @@ export function YearView({
   showHeatmap,
   showPublicHolidays,
   showSchoolHolidays,
+  bridgeDaySet,
+  showBridgeDays,
   onToggle,
   selectedType,
+  onHover,
 }: YearViewProps) {
-  // Build heatmap: for each day, count how many compare-regions have a holiday
   const heatmapData = useMemo(() => {
     if (!showHeatmap || compareHolidays.length === 0) return undefined
     const map = new Map<string, number>()
     for (const regionHolidays of compareHolidays) {
       for (const h of regionHolidays) {
-        const start = new Date(h.startDate)
-        const end = new Date(h.endDate)
-        const cur = new Date(start)
-        while (cur <= end) {
-          const key = format(cur, 'yyyy-MM-dd')
-          map.set(key, (map.get(key) ?? 0) + 1)
-          cur.setDate(cur.getDate() + 1)
-        }
+        try {
+          const start = parseISO(h.startDate)
+          const end = parseISO(h.endDate)
+          const days = eachDayOfInterval({ start, end })
+          for (const d of days) {
+            const key = format(d, 'yyyy-MM-dd')
+            map.set(key, (map.get(key) ?? 0) + 1)
+          }
+        } catch { /* skip invalid dates */ }
       }
     }
-    // Normalize to 0-1
-    const max = Math.max(...Array.from(map.values()))
-    if (max === 0) return undefined
+    const max = Math.max(...Array.from(map.values()), 1)
     const normalized = new Map<string, number>()
     map.forEach((v, k) => normalized.set(k, v / max))
     return normalized
@@ -67,8 +72,11 @@ export function YearView({
           schoolHolidays={showSchoolHolidays ? schoolHolidays : []}
           heatmapData={heatmapData}
           showHeatmap={showHeatmap}
+          bridgeDaySet={bridgeDaySet}
+          showBridgeDays={showBridgeDays}
           onToggle={onToggle}
           selectedType={selectedType}
+          onHover={onHover}
         />
       ))}
     </div>

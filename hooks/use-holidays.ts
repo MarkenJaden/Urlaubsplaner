@@ -30,6 +30,32 @@ export function useHolidays({
   })
 }
 
+export function useCompareHolidays(
+  country: string,
+  subdivisions: string[],
+  year: number,
+  enabled: boolean,
+): Holiday[][] {
+  // Fetch holidays for each compare subdivision
+  const results = subdivisions.map(sub => {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const { data } = useQuery<Holiday[]>({
+      queryKey: ['holidays', country, sub, year, 'school'],
+      queryFn: async () => {
+        const params = new URLSearchParams({ country, year: String(year), type: 'school' })
+        params.set('subdivision', sub)
+        const res = await fetch(`/api/holidays?${params}`)
+        if (!res.ok) return []
+        return res.json()
+      },
+      enabled: enabled && subdivisions.length > 0,
+      staleTime: 24 * 60 * 60 * 1000,
+    })
+    return data ?? []
+  })
+  return results
+}
+
 export function useSubdivisions(country = 'DE') {
   return useQuery({
     queryKey: ['subdivisions', country],

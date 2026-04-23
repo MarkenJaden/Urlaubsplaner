@@ -19,11 +19,11 @@ export function useToggleVacation(year: number, enabled = true) {
   const queryClient = useQueryClient()
 
   const addMutation = useMutation({
-    mutationFn: async ({ date, type }: { date: string; type: EntryType }) => {
+    mutationFn: async ({ date, type, title }: { date: string; type: EntryType; title?: string }) => {
       const res = await fetch('/api/vacations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date, type }),
+        body: JSON.stringify({ date, type, title }),
       })
       if (!res.ok) throw new Error('Failed to add vacation')
       return res.json()

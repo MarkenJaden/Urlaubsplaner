@@ -1,10 +1,12 @@
 'use client'
 
-import { ChevronLeft, ChevronRight, Sparkles } from 'lucide-react'
+import { useRef } from 'react'
+import { ChevronLeft, ChevronRight, Sparkles, Download, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import type { EntryType, UserPreferences } from '@/types'
+import type { EntryType, VacationEntry } from '@/types'
+import { exportToCSV, exportToClipboardText, downloadFile, exportToJSON, parseImportFile } from '@/lib/export'
 
 interface ToolbarProps {
   year: number
@@ -17,9 +19,16 @@ interface ToolbarProps {
   onTogglePublicHolidays: (val: boolean) => void
   showSchoolHolidays: boolean
   onToggleSchoolHolidays: (val: boolean) => void
+  showBridgeDays: boolean
+  onToggleBridgeDays: (val: boolean) => void
   vacationDaysUsed: number
   vacationDaysTotal: number
+  gleittageCount: number
+  remainingWorkDays: number
+  entries: VacationEntry[]
+  preferences: Record<string, unknown>
   onOpenSuggestions: () => void
+  onImport: (data: { vacations: Array<{ date: string; type: string; title?: string }>; preferences?: Record<string, unknown> }) => void
 }
 
 export function Toolbar({
@@ -33,11 +42,49 @@ export function Toolbar({
   onTogglePublicHolidays,
   showSchoolHolidays,
   onToggleSchoolHolidays,
+  showBridgeDays,
+  onToggleBridgeDays,
   vacationDaysUsed,
   vacationDaysTotal,
+  gleittageCount,
+  remainingWorkDays,
+  entries,
+  preferences,
   onOpenSuggestions,
+  onImport,
 }: ToolbarProps) {
   const remaining = vacationDaysTotal - vacationDaysUsed
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleExportCSV = () => {
+    const csv = exportToCSV(entries)
+    downloadFile(csv, `urlaubsplaner-${year}.csv`)
+  }
+
+  const handleExportClipboard = async () => {
+    const text = exportToClipboardText(entries)
+    await navigator.clipboard.writeText(text)
+  }
+
+  const handleExportJSON = () => {
+    const json = exportToJSON(entries, preferences)
+    downloadFile(json, `urlaubsplaner-${year}.json`, 'application/json')
+  }
+
+  const handleImportClick = () => fileInputRef.current?.click()
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const content = ev.target?.result as string
+      const data = parseImportFile(content)
+      if (data) onImport(data)
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+  }
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border border-border bg-card">
@@ -54,62 +101,82 @@ export function Toolbar({
 
       {/* Entry Type Selector */}
       <div className="flex gap-1">
-        <Button
-          size="sm"
-          variant={selectedType === 'vacation' ? 'default' : 'outline'}
+        <Button size="sm" variant={selectedType === 'vacation' ? 'default' : 'outline'}
           onClick={() => onTypeChange('vacation')}
-          className={selectedType === 'vacation' ? 'bg-blue-500 hover:bg-blue-600' : ''}
-        >
+          className={selectedType === 'vacation' ? 'bg-blue-500 hover:bg-blue-600' : ''}>
           Urlaub
         </Button>
-        <Button
-          size="sm"
-          variant={selectedType === 'gleittag' ? 'default' : 'outline'}
+        <Button size="sm" variant={selectedType === 'gleittag' ? 'default' : 'outline'}
           onClick={() => onTypeChange('gleittag')}
-          className={selectedType === 'gleittag' ? 'bg-purple-500 hover:bg-purple-600' : ''}
-        >
+          className={selectedType === 'gleittag' ? 'bg-purple-500 hover:bg-purple-600' : ''}>
           Gleittag
         </Button>
-        <Button
-          size="sm"
-          variant={selectedType === 'note' ? 'default' : 'outline'}
-          onClick={() => onTypeChange('note')}
-        >
+        <Button size="sm" variant={selectedType === 'note' ? 'default' : 'outline'}
+          onClick={() => onTypeChange('note')}>
           Notiz
         </Button>
       </div>
 
       {/* Toggles */}
-      <div className="flex flex-wrap items-center gap-4 text-sm">
-        <label className="flex items-center gap-2 cursor-pointer">
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <label className="flex items-center gap-1.5 cursor-pointer">
           <Switch checked={showHeatmap} onCheckedChange={onToggleHeatmap} />
           <span className="text-muted-foreground">Heatmap</span>
         </label>
-        <label className="flex items-center gap-2 cursor-pointer">
+        <label className="flex items-center gap-1.5 cursor-pointer">
           <Switch checked={showPublicHolidays} onCheckedChange={onTogglePublicHolidays} />
           <span className="text-muted-foreground">Feiertage</span>
         </label>
-        <label className="flex items-center gap-2 cursor-pointer">
+        <label className="flex items-center gap-1.5 cursor-pointer">
           <Switch checked={showSchoolHolidays} onCheckedChange={onToggleSchoolHolidays} />
           <span className="text-muted-foreground">Schulferien</span>
         </label>
+        <label className="flex items-center gap-1.5 cursor-pointer">
+          <Switch checked={showBridgeDays} onCheckedChange={onToggleBridgeDays} />
+          <span className="text-muted-foreground">Brückentage</span>
+        </label>
       </div>
 
-      {/* Suggestions */}
-      <Button size="sm" variant="outline" onClick={onOpenSuggestions}>
-        <Sparkles className="h-4 w-4 mr-1" />
-        Urlaub planen
-      </Button>
+      {/* Actions */}
+      <div className="flex items-center gap-1">
+        <Button size="sm" variant="outline" onClick={onOpenSuggestions}>
+          <Sparkles className="h-4 w-4 mr-1" />
+          Planen
+        </Button>
+        <Button size="sm" variant="ghost" onClick={handleExportCSV} title="CSV Export">
+          <Download className="h-4 w-4" />
+        </Button>
+        <Button size="sm" variant="ghost" onClick={handleExportClipboard} title="In Zwischenablage">
+          📋
+        </Button>
+        <Button size="sm" variant="ghost" onClick={handleExportJSON} title="JSON Export">
+          {'{}'}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={handleImportClick} title="Importieren">
+          <Upload className="h-4 w-4" />
+        </Button>
+        <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
+      </div>
 
-      {/* Vacation Counter */}
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">Urlaubstage:</span>
-        <Badge variant={remaining < 5 ? 'destructive' : 'default'}>
-          {vacationDaysUsed} / {vacationDaysTotal}
-        </Badge>
-        {remaining >= 0 && (
+      {/* Stats */}
+      <div className="flex items-center gap-3 text-sm">
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">Urlaub:</span>
+          <Badge variant={remaining < 5 ? 'destructive' : 'default'}>
+            {vacationDaysUsed}/{vacationDaysTotal}
+          </Badge>
           <span className="text-xs text-muted-foreground">({remaining} übrig)</span>
+        </div>
+        {gleittageCount > 0 && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground">Gleittage:</span>
+            <Badge variant="secondary">{gleittageCount}</Badge>
+          </div>
         )}
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">Arbeitstage:</span>
+          <Badge variant="secondary">{remainingWorkDays}</Badge>
+        </div>
       </div>
     </div>
   )
