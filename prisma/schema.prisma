@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String          @id @default(cuid())
+  keycloakId    String          @unique
+  email         String?
+  name          String?
+  calendarToken String          @unique @default(cuid())
+  preferences   Json            @default("{}")
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  vacations     VacationEntry[]
+}
+
+model VacationEntry {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime
+  type      String
+  title     String?
+  year      Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date, type])
+  @@index([userId, year])
+}
