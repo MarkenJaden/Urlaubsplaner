@@ -15,6 +15,7 @@ declare module 'next-auth' {
 }
 
 export const authConfig: NextAuthConfig = {
+  trustHost: true,
   providers: [
     Keycloak({
       clientId: process.env.AUTH_KEYCLOAK_ID!,
