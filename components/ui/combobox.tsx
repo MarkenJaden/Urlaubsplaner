@@ -275,7 +275,29 @@ export function MultiCombobox({
             {filtered.length === 0 ? (
               <div className="px-2 py-3 text-sm text-muted-foreground text-center">{emptyText}</div>
             ) : (
-              filtered.map(option => (
+              <>
+              <button
+                type="button"
+                onClick={() => {
+                  const allFilteredValues = filtered.map(o => o.value)
+                  const allSelected = allFilteredValues.every(v => value.includes(v))
+                  if (allSelected) {
+                    onChange(value.filter(v => !allFilteredValues.includes(v)))
+                  } else {
+                    const merged = [...new Set([...value, ...allFilteredValues])]
+                    onChange(merged)
+                  }
+                }}
+                className="w-full flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer hover:bg-muted/50 transition-colors border-b border-input mb-1 font-medium"
+              >
+                <div className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                  filtered.every(o => value.includes(o.value)) ? 'bg-primary border-primary text-primary-foreground' : 'border-input'
+                }`}>
+                  {filtered.every(o => value.includes(o.value)) && <Check className="h-3 w-3" />}
+                </div>
+                <span>Alles auswählen</span>
+              </button>
+              {filtered.map(option => (
                 <button
                   key={option.value}
                   type="button"
@@ -291,7 +313,8 @@ export function MultiCombobox({
                   </div>
                   <span className="truncate">{option.label}</span>
                 </button>
-              ))
+              ))}
+              </>
             )}
           </div>
         </div>
