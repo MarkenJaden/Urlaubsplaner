@@ -172,13 +172,13 @@ export function Toolbar({
           <Download className="h-4 w-4" />
         </Button></TooltipTrigger><TooltipContent>CSV Export</TooltipContent></Tooltip>
         <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportClipboard}>
-          \ud83d\udccb
+          📋
         </Button></TooltipTrigger><TooltipContent>In Zwischenablage</TooltipContent></Tooltip>
         <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportJSON}>
-          {'\u007b\u007d'}
+          {'{}'}
         </Button></TooltipTrigger><TooltipContent>JSON Export</TooltipContent></Tooltip>
         <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportICS}>
-          \ud83d\udcc5
+          📅
         </Button></TooltipTrigger><TooltipContent>ICS Kalender Export</TooltipContent></Tooltip>
         <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportConfig}>
           <Settings2 className="h-4 w-4" />
@@ -190,12 +190,12 @@ export function Toolbar({
           <Upload className="h-4 w-4" />
         </Button></TooltipTrigger><TooltipContent>Daten importieren</TooltipContent></Tooltip>
         <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleConfigImportClick}>
-          \u2699\ufe0f
+          ⚙️
         </Button></TooltipTrigger><TooltipContent>Konfiguration importieren</TooltipContent></Tooltip>
         <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
         <input ref={configInputRef} type="file" accept=".json" className="hidden" onChange={handleConfigImportFile} />
         <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleReset} className="text-red-500 hover:text-red-600">
-          \ud83d\uddd1\ufe0f
+          🗑️
         </Button></TooltipTrigger><TooltipContent>Planung zurücksetzen</TooltipContent></Tooltip>
       </div>
 

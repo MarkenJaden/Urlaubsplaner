@@ -227,7 +227,7 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
       <main className="container py-4 space-y-4">
         {!isLoggedIn && (
           <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-900/20 p-3 text-sm text-blue-800 dark:text-blue-200">
-            \ud83d\udca1 Du planst gerade lokal.{' '}
+            💡 Du planst gerade lokal.{' '}
             <a href="/login" className="underline font-medium">Anmelden</a> um zu speichern und synchronisieren.
           </div>
         )}
@@ -295,14 +295,14 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
         {hoveredDay && (
           <div className="fixed bottom-4 right-4 z-50 bg-card border rounded-lg shadow-lg p-3 text-sm max-w-xs">
             <p className="font-medium">{format(hoveredDay.date, 'dd.MM.yyyy (EEEE)')}</p>
-            {hoveredDay.publicHoliday && <p className="text-green-600">\ud83c\udf89 {hoveredDay.publicHoliday}</p>}
-            {hoveredDay.schoolHoliday && <p className="text-yellow-600">\ud83c\udfeb {hoveredDay.schoolHoliday}</p>}
-            {hoveredDay.isBridgeDay && <p className="text-orange-500">\ud83c\udf09 Brückentag</p>}
+            {hoveredDay.publicHoliday && <p className="text-green-600">🎉 {hoveredDay.publicHoliday}</p>}
+            {hoveredDay.schoolHoliday && <p className="text-yellow-600">🏫 {hoveredDay.schoolHoliday}</p>}
+            {hoveredDay.isBridgeDay && <p className="text-orange-500">🌉 Brückentag</p>}
             {hoveredDay.entry && (
               <p className="text-blue-500">
-                {hoveredDay.entry.type === 'vacation' ? '\ud83c\udfd6\ufe0f Urlaub' :
-                 hoveredDay.entry.type === 'gleittag' ? '\u23f0 Gleittag' :
-                 `\ud83d\udcdd ${hoveredDay.entry.title ?? 'Notiz'}`}
+                {hoveredDay.entry.type === 'vacation' ? '🏖️ Urlaub' :
+                 hoveredDay.entry.type === 'gleittag' ? '⏰ Gleittag' :
+                 `📝 ${hoveredDay.entry.title ?? 'Notiz'}`}
               </p>
             )}
           </div>

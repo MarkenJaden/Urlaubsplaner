@@ -86,7 +86,7 @@ export function SettingsPanel({
         className="w-full flex items-center justify-between p-3 text-sm font-medium hover:bg-muted/50 transition-colors"
         onClick={() => setOpen(!open)}
       >
-        <span>\u2699\ufe0f Einstellungen & Statistik</span>
+        <span>⚙️ Einstellungen & Statistik</span>
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </button>
 
