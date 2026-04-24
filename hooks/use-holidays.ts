@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueries } from '@tanstack/react-query'
 import type { Holiday, Country } from '@/types'
 
 export function useHolidays({
@@ -36,11 +36,10 @@ export function useCountryHolidays(
   year: number,
   enabled: boolean,
 ): Holiday[][] {
-  const results = countries.map(countryCode => {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const { data } = useQuery<Holiday[]>({
-      queryKey: ['holidays', countryCode, null, year, 'public'],
-      queryFn: async () => {
+  const results = useQueries({
+    queries: countries.map(countryCode => ({
+      queryKey: ['holidays', countryCode, null, year, 'public'] as const,
+      queryFn: async (): Promise<Holiday[]> => {
         const params = new URLSearchParams({
           country: countryCode,
           year: String(year),
@@ -52,10 +51,9 @@ export function useCountryHolidays(
       },
       enabled: enabled && countries.length > 0,
       staleTime: 24 * 60 * 60 * 1000,
-    })
-    return data ?? []
+    })),
   })
-  return results
+  return results.map(r => r.data ?? [])
 }
 
 export function useCompareHolidays(
@@ -64,11 +62,10 @@ export function useCompareHolidays(
   year: number,
   enabled: boolean,
 ): Holiday[][] {
-  const results = subdivisions.map(sub => {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    const { data } = useQuery<Holiday[]>({
-      queryKey: ['holidays', country, sub, year, 'school'],
-      queryFn: async () => {
+  const results = useQueries({
+    queries: subdivisions.map(sub => ({
+      queryKey: ['holidays', country, sub, year, 'school'] as const,
+      queryFn: async (): Promise<Holiday[]> => {
         const params = new URLSearchParams({ country, year: String(year), type: 'school' })
         params.set('subdivision', sub)
         const res = await fetch(`/api/holidays?${params}`)
@@ -77,10 +74,9 @@ export function useCompareHolidays(
       },
       enabled: enabled && subdivisions.length > 0,
       staleTime: 24 * 60 * 60 * 1000,
-    })
-    return data ?? []
+    })),
   })
-  return results
+  return results.map(r => r.data ?? [])
 }
 
 export function useSubdivisions(country = 'DE') {
