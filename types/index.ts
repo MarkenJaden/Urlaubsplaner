@@ -45,9 +45,16 @@ export interface Subdivision {
   isoCode?: string
 }
 
+export interface Country {
+  isoCode: string
+  name: Array<{ language: string; text: string }>
+  officialLanguages: string[]
+}
+
 export interface LocalConfig {
   subdivision?: string
   compareSubdivisions?: string[]
+  selectedCountries?: string[]
   showPublicHolidays: boolean
   showSchoolHolidays: boolean
   showBridgeDays: boolean

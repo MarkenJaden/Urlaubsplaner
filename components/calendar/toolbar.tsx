@@ -1,12 +1,16 @@
 'use client'
 
 import { useRef } from 'react'
-import { ChevronLeft, ChevronRight, Sparkles, Download, Upload } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Sparkles, Download, Upload, Printer, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import type { EntryType, VacationEntry } from '@/types'
-import { exportToCSV, exportToClipboardText, downloadFile, exportToJSON, exportToICS, parseImportFile } from '@/lib/export'
+import type { EntryType, VacationEntry, LocalConfig } from '@/types'
+import {
+  exportToCSV, exportToClipboardText, downloadFile,
+  exportToJSON, exportToICS, parseImportFile,
+  exportConfigJSON, parseConfigJSON,
+} from '@/lib/export'
 
 interface ToolbarProps {
   year: number
@@ -27,62 +31,57 @@ interface ToolbarProps {
   remainingWorkDays: number
   entries: VacationEntry[]
   preferences: Record<string, unknown>
+  localConfig?: LocalConfig | null
   onOpenSuggestions: () => void
   onImport: (data: { vacations: Array<{ date: string; type: string; title?: string }>; preferences?: Record<string, unknown> }) => void
+  onImportConfig?: (config: Record<string, unknown>) => void
   onReset: () => void
 }
 
 export function Toolbar({
-  year,
-  onYearChange,
-  selectedType,
-  onTypeChange,
-  showHeatmap,
-  onToggleHeatmap,
-  showPublicHolidays,
-  onTogglePublicHolidays,
-  showSchoolHolidays,
-  onToggleSchoolHolidays,
-  showBridgeDays,
-  onToggleBridgeDays,
-  vacationDaysUsed,
-  vacationDaysTotal,
-  gleittageCount,
-  remainingWorkDays,
-  entries,
-  preferences,
-  onOpenSuggestions,
-  onImport,
-  onReset,
+  year, onYearChange, selectedType, onTypeChange,
+  showHeatmap, onToggleHeatmap,
+  showPublicHolidays, onTogglePublicHolidays,
+  showSchoolHolidays, onToggleSchoolHolidays,
+  showBridgeDays, onToggleBridgeDays,
+  vacationDaysUsed, vacationDaysTotal,
+  gleittageCount, remainingWorkDays,
+  entries, preferences, localConfig,
+  onOpenSuggestions, onImport, onImportConfig, onReset,
 }: ToolbarProps) {
   const remaining = vacationDaysTotal - vacationDaysUsed
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const configInputRef = useRef<HTMLInputElement>(null)
 
   const handleExportCSV = () => {
-    const csv = exportToCSV(entries)
-    downloadFile(csv, `urlaubsplaner-${year}.csv`)
+    downloadFile(exportToCSV(entries), `urlaubsplaner-${year}.csv`)
   }
 
   const handleExportClipboard = async () => {
-    const text = exportToClipboardText(entries)
-    await navigator.clipboard.writeText(text)
+    await navigator.clipboard.writeText(exportToClipboardText(entries))
   }
 
   const handleExportJSON = () => {
-    const json = exportToJSON(entries, preferences)
-    downloadFile(json, `urlaubsplaner-${year}.json`, 'application/json')
+    downloadFile(exportToJSON(entries, preferences), `urlaubsplaner-${year}.json`, 'application/json')
   }
 
   const handleExportICS = () => {
-    const ics = exportToICS(entries)
-    downloadFile(ics, `urlaubsplaner-${year}.ics`, 'text/calendar')
+    downloadFile(exportToICS(entries), `urlaubsplaner-${year}.ics`, 'text/calendar')
   }
 
+  const handleExportConfig = () => {
+    const configData = localConfig ?? preferences
+    downloadFile(exportConfigJSON(configData as Record<string, unknown>), 'urlaubsplaner_config.json', 'application/json')
+  }
+
+  const handlePrint = () => window.print()
+
   const handleReset = () => {
-    if (confirm('Möchtest du wirklich alle Planungen löschen?')) onReset()
+    if (confirm('M\u00f6chtest du wirklich alle Planungen l\u00f6schen?')) onReset()
   }
 
   const handleImportClick = () => fileInputRef.current?.click()
+  const handleConfigImportClick = () => configInputRef.current?.click()
 
   const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -92,6 +91,19 @@ export function Toolbar({
       const content = ev.target?.result as string
       const data = parseImportFile(content)
       if (data) onImport(data)
+    }
+    reader.readAsText(file)
+    e.target.value = ''
+  }
+
+  const handleConfigImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const content = ev.target?.result as string
+      const data = parseConfigJSON(content)
+      if (data && onImportConfig) onImportConfig(data)
     }
     reader.readAsText(file)
     e.target.value = ''
@@ -144,7 +156,7 @@ export function Toolbar({
         </label>
         <label className="flex items-center gap-1.5 cursor-pointer">
           <Switch checked={showBridgeDays} onCheckedChange={onToggleBridgeDays} />
-          <span className="text-muted-foreground">Brückentage</span>
+          <span className="text-muted-foreground">Br\u00fcckentage</span>
         </label>
       </div>
 
@@ -158,20 +170,30 @@ export function Toolbar({
           <Download className="h-4 w-4" />
         </Button>
         <Button size="sm" variant="ghost" onClick={handleExportClipboard} title="In Zwischenablage">
-          📋
+          \ud83d\udccb
         </Button>
         <Button size="sm" variant="ghost" onClick={handleExportJSON} title="JSON Export">
-          {'{}'}
+          {'\u007b\u007d'}
         </Button>
         <Button size="sm" variant="ghost" onClick={handleExportICS} title="ICS Kalender Export">
-          📅
+          \ud83d\udcc5
         </Button>
-        <Button size="sm" variant="ghost" onClick={handleImportClick} title="Importieren">
+        <Button size="sm" variant="ghost" onClick={handleExportConfig} title="Konfiguration exportieren">
+          <Settings2 className="h-4 w-4" />
+        </Button>
+        <Button size="sm" variant="ghost" onClick={handlePrint} title="Drucken / PDF">
+          <Printer className="h-4 w-4" />
+        </Button>
+        <Button size="sm" variant="ghost" onClick={handleImportClick} title="Daten importieren">
           <Upload className="h-4 w-4" />
         </Button>
+        <Button size="sm" variant="ghost" onClick={handleConfigImportClick} title="Konfiguration importieren">
+          \u2699\ufe0f
+        </Button>
         <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
-        <Button size="sm" variant="ghost" onClick={handleReset} title="Planung zurücksetzen" className="text-red-500 hover:text-red-600">
-          🗑️
+        <input ref={configInputRef} type="file" accept=".json" className="hidden" onChange={handleConfigImportFile} />
+        <Button size="sm" variant="ghost" onClick={handleReset} title="Planung zur\u00fccksetzen" className="text-red-500 hover:text-red-600">
+          \ud83d\uddd1\ufe0f
         </Button>
       </div>
 
@@ -182,7 +204,7 @@ export function Toolbar({
           <Badge variant={remaining < 5 ? 'destructive' : 'default'}>
             {vacationDaysUsed}/{vacationDaysTotal}
           </Badge>
-          <span className="text-xs text-muted-foreground">({remaining} übrig)</span>
+          <span className="text-xs text-muted-foreground">({remaining} \u00fcbrig)</span>
         </div>
         {gleittageCount > 0 && (
           <div className="flex items-center gap-1.5">

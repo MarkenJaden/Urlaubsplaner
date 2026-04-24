@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import type { Holiday } from '@/types'
+import type { Holiday, Country } from '@/types'
 
 export function useHolidays({
   country = 'DE',
@@ -26,8 +26,36 @@ export function useHolidays({
       return res.json()
     },
     enabled,
-    staleTime: 24 * 60 * 60 * 1000, // 24h
+    staleTime: 24 * 60 * 60 * 1000,
+    retry: 2,
   })
+}
+
+export function useCountryHolidays(
+  countries: string[],
+  year: number,
+  enabled: boolean,
+): Holiday[][] {
+  const results = countries.map(countryCode => {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const { data } = useQuery<Holiday[]>({
+      queryKey: ['holidays', countryCode, null, year, 'public'],
+      queryFn: async () => {
+        const params = new URLSearchParams({
+          country: countryCode,
+          year: String(year),
+          type: 'public',
+        })
+        const res = await fetch(`/api/holidays?${params}`)
+        if (!res.ok) return []
+        return res.json()
+      },
+      enabled: enabled && countries.length > 0,
+      staleTime: 24 * 60 * 60 * 1000,
+    })
+    return data ?? []
+  })
+  return results
 }
 
 export function useCompareHolidays(
@@ -36,7 +64,6 @@ export function useCompareHolidays(
   year: number,
   enabled: boolean,
 ): Holiday[][] {
-  // Fetch holidays for each compare subdivision
   const results = subdivisions.map(sub => {
     // eslint-disable-next-line react-hooks/rules-of-hooks
     const { data } = useQuery<Holiday[]>({
@@ -65,5 +92,19 @@ export function useSubdivisions(country = 'DE') {
       return res.json()
     },
     staleTime: 24 * 60 * 60 * 1000,
+    retry: 2,
+  })
+}
+
+export function useCountries() {
+  return useQuery<Country[]>({
+    queryKey: ['countries'],
+    queryFn: async () => {
+      const res = await fetch('/api/countries')
+      if (!res.ok) throw new Error('Failed to fetch countries')
+      return res.json()
+    },
+    staleTime: 24 * 60 * 60 * 1000,
+    retry: 2,
   })
 }

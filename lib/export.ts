@@ -94,3 +94,17 @@ export function parseImportFile(content: string): ImportData | null {
     return null
   }
 }
+
+export function exportConfigJSON(config: Record<string, unknown>): string {
+  return JSON.stringify(config, null, 2)
+}
+
+export function parseConfigJSON(content: string): Record<string, unknown> | null {
+  try {
+    const data = JSON.parse(content)
+    if (typeof data !== 'object' || data === null) return null
+    return data as Record<string, unknown>
+  } catch {
+    return null
+  }
+}

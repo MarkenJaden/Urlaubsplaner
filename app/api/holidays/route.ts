@@ -1,14 +1,8 @@
-import { auth } from '@/auth'
 import { NextResponse } from 'next/server'
 
 const OPENHOLIDAYS_BASE = 'https://openholidaysapi.org'
 
 export async function GET(request: Request) {
-  const session = await auth()
-  if (!session?.user?.keycloakId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
   const { searchParams } = new URL(request.url)
   const country = searchParams.get('country') ?? 'DE'
   const subdivision = searchParams.get('subdivision')
@@ -32,7 +26,7 @@ export async function GET(request: Request) {
   const url = `${OPENHOLIDAYS_BASE}/${endpoint}?${params}`
 
   const response = await fetch(url, {
-    next: { revalidate: 86400 } // Cache 1 Tag
+    next: { revalidate: 86400 }
   })
 
   if (!response.ok) {
@@ -42,4 +36,3 @@ export async function GET(request: Request) {
   const data = await response.json()
   return NextResponse.json(data)
 }
-

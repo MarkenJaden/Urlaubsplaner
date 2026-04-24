@@ -1,14 +1,8 @@
-import { auth } from '@/auth'
 import { NextResponse } from 'next/server'
 
 const OPENHOLIDAYS_BASE = 'https://openholidaysapi.org'
 
 export async function GET(request: Request) {
-  const session = await auth()
-  if (!session?.user?.keycloakId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
   const { searchParams } = new URL(request.url)
   const country = searchParams.get('country') ?? 'DE'
 
