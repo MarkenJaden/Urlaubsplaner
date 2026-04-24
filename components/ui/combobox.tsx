@@ -118,7 +118,7 @@ export function Combobox({
         type="button"
         onClick={() => setOpen(!open)}
         onKeyDown={handleKeyDown}
-        className="w-full flex items-center justify-between rounded-md border border-input bg-background px-2 py-1.5 text-sm hover:bg-muted/50 transition-colors text-left"
+        className="w-full flex items-center justify-between rounded-md border border-input bg-white dark:bg-zinc-900 px-2 py-1.5 text-sm hover:bg-muted/50 transition-colors text-left"
         aria-expanded={open}
         aria-haspopup="listbox"
       >
@@ -129,7 +129,7 @@ export function Combobox({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border border-input bg-popover shadow-md animate-in fade-in-0 zoom-in-95">
+        <div className="absolute z-50 mt-1 w-full rounded-md border border-input bg-white dark:bg-zinc-900 shadow-md animate-in fade-in-0 zoom-in-95">
           <div className="flex items-center border-b px-2 py-1.5">
             <Search className="h-3.5 w-3.5 shrink-0 opacity-50 mr-1.5" />
             <input
@@ -226,7 +226,7 @@ export function MultiCombobox({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between rounded-md border border-input bg-background px-2 py-1.5 text-sm hover:bg-muted/50 transition-colors text-left min-h-[34px]"
+        className="w-full flex items-center justify-between rounded-md border border-input bg-white dark:bg-zinc-900 px-2 py-1.5 text-sm hover:bg-muted/50 transition-colors text-left min-h-[34px]"
         aria-expanded={open}
         aria-haspopup="listbox"
       >
@@ -254,7 +254,7 @@ export function MultiCombobox({
       )}
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border border-input bg-popover shadow-md animate-in fade-in-0 zoom-in-95">
+        <div className="absolute z-50 mt-1 w-full rounded-md border border-input bg-white dark:bg-zinc-900 shadow-md animate-in fade-in-0 zoom-in-95">
           <div className="flex items-center border-b px-2 py-1.5">
             <Search className="h-3.5 w-3.5 shrink-0 opacity-50 mr-1.5" />
             <input

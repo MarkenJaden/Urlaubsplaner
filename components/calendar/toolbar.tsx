@@ -3,6 +3,7 @@
 import { useRef } from 'react'
 import { ChevronLeft, ChevronRight, Sparkles, Download, Upload, Printer, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import type { EntryType, VacationEntry, LocalConfig } from '@/types'
@@ -161,41 +162,44 @@ export function Toolbar({
       </div>
 
       {/* Actions */}
+      <TooltipProvider delayDuration={0}>
       <div className="flex items-center gap-1">
         <Button size="sm" variant="outline" onClick={onOpenSuggestions}>
           <Sparkles className="h-4 w-4 mr-1" />
           Planen
         </Button>
-        <Button size="sm" variant="ghost" onClick={handleExportCSV} title="CSV Export">
+        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportCSV}>
           <Download className="h-4 w-4" />
-        </Button>
-        <Button size="sm" variant="ghost" onClick={handleExportClipboard} title="In Zwischenablage">
+        </Button></TooltipTrigger><TooltipContent>CSV Export</TooltipContent></Tooltip>
+        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportClipboard}>
           \ud83d\udccb
-        </Button>
-        <Button size="sm" variant="ghost" onClick={handleExportJSON} title="JSON Export">
+        </Button></TooltipTrigger><TooltipContent>In Zwischenablage</TooltipContent></Tooltip>
+        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportJSON}>
           {'\u007b\u007d'}
-        </Button>
-        <Button size="sm" variant="ghost" onClick={handleExportICS} title="ICS Kalender Export">
+        </Button></TooltipTrigger><TooltipContent>JSON Export</TooltipContent></Tooltip>
+        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportICS}>
           \ud83d\udcc5
-        </Button>
-        <Button size="sm" variant="ghost" onClick={handleExportConfig} title="Konfiguration exportieren">
+        </Button></TooltipTrigger><TooltipContent>ICS Kalender Export</TooltipContent></Tooltip>
+        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportConfig}>
           <Settings2 className="h-4 w-4" />
-        </Button>
-        <Button size="sm" variant="ghost" onClick={handlePrint} title="Drucken / PDF">
+        </Button></TooltipTrigger><TooltipContent>Konfiguration exportieren</TooltipContent></Tooltip>
+        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handlePrint}>
           <Printer className="h-4 w-4" />
-        </Button>
-        <Button size="sm" variant="ghost" onClick={handleImportClick} title="Daten importieren">
+        </Button></TooltipTrigger><TooltipContent>Drucken / PDF</TooltipContent></Tooltip>
+        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleImportClick}>
           <Upload className="h-4 w-4" />
-        </Button>
-        <Button size="sm" variant="ghost" onClick={handleConfigImportClick} title="Konfiguration importieren">
+        </Button></TooltipTrigger><TooltipContent>Daten importieren</TooltipContent></Tooltip>
+        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleConfigImportClick}>
           \u2699\ufe0f
-        </Button>
+        </Button></TooltipTrigger><TooltipContent>Konfiguration importieren</TooltipContent></Tooltip>
         <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
         <input ref={configInputRef} type="file" accept=".json" className="hidden" onChange={handleConfigImportFile} />
-        <Button size="sm" variant="ghost" onClick={handleReset} title="Planung zur\u00fccksetzen" className="text-red-500 hover:text-red-600">
+        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleReset} className="text-red-500 hover:text-red-600">
           \ud83d\uddd1\ufe0f
-        </Button>
+        </Button></TooltipTrigger><TooltipContent>Planung zur\u00fccksetzen</TooltipContent></Tooltip>
       </div>
+
+      </TooltipProvider>
 
       {/* Stats */}
       <div className="flex items-center gap-3 text-sm">
