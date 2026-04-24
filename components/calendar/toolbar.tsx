@@ -78,7 +78,7 @@ export function Toolbar({
   const handlePrint = () => window.print()
 
   const handleReset = () => {
-    if (confirm('M\u00f6chtest du wirklich alle Planungen l\u00f6schen?')) onReset()
+    if (confirm('Möchtest du wirklich alle Planungen löschen?')) onReset()
   }
 
   const handleImportClick = () => fileInputRef.current?.click()
@@ -157,7 +157,7 @@ export function Toolbar({
         </label>
         <label className="flex items-center gap-1.5 cursor-pointer">
           <Switch checked={showBridgeDays} onCheckedChange={onToggleBridgeDays} />
-          <span className="text-muted-foreground">Br\u00fcckentage</span>
+          <span className="text-muted-foreground">Brückentage</span>
         </label>
       </div>
 
@@ -196,7 +196,7 @@ export function Toolbar({
         <input ref={configInputRef} type="file" accept=".json" className="hidden" onChange={handleConfigImportFile} />
         <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleReset} className="text-red-500 hover:text-red-600">
           \ud83d\uddd1\ufe0f
-        </Button></TooltipTrigger><TooltipContent>Planung zur\u00fccksetzen</TooltipContent></Tooltip>
+        </Button></TooltipTrigger><TooltipContent>Planung zurücksetzen</TooltipContent></Tooltip>
       </div>
 
       </TooltipProvider>
@@ -208,7 +208,7 @@ export function Toolbar({
           <Badge variant={remaining < 5 ? 'destructive' : 'default'}>
             {vacationDaysUsed}/{vacationDaysTotal}
           </Badge>
-          <span className="text-xs text-muted-foreground">({remaining} \u00fcbrig)</span>
+          <span className="text-xs text-muted-foreground">({remaining} übrig)</span>
         </div>
         {gleittageCount > 0 && (
           <div className="flex items-center gap-1.5">

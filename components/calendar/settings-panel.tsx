@@ -95,7 +95,7 @@ export function SettingsPanel({
           {apiError && (
             <div className="flex items-center gap-2 rounded-md border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 p-2 text-yellow-800 dark:text-yellow-200">
               <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-              <span className="flex-1">OpenHolidays API nicht erreichbar. Feiertage/Ferien nicht verf\u00fcgbar.</span>
+              <span className="flex-1">OpenHolidays API nicht erreichbar. Feiertage/Ferien nicht verfügbar.</span>
               {onRetryApi && (
                 <Button size="sm" variant="outline" onClick={onRetryApi}>
                   <RefreshCw className="h-3 w-3 mr-1" /> Erneut versuchen
@@ -115,7 +115,7 @@ export function SettingsPanel({
                   options={subdivisionOptions}
                   value={subdivision}
                   onChange={onSubdivisionChange}
-                  placeholder="Bundesland w\u00e4hlen..."
+                  placeholder="Bundesland wählen..."
                   searchPlaceholder="z.B. NRW, Bayern..."
                   emptyText="Kein Bundesland gefunden"
                 />
@@ -135,13 +135,13 @@ export function SettingsPanel({
 
               {countryOptions.length > 0 && (
                 <div>
-                  <label className="text-xs text-muted-foreground mb-1 block">Zus\u00e4tzliche L\u00e4nder</label>
+                  <label className="text-xs text-muted-foreground mb-1 block">Zusätzliche Länder</label>
                   <MultiCombobox
                     options={countryOptions}
                     value={selectedCountries}
                     onChange={onCountriesChange}
-                    placeholder="L\u00e4nder hinzuf\u00fcgen..."
-                    searchPlaceholder="z.B. \u00d6sterreich, AT..."
+                    placeholder="Länder hinzufügen..."
+                    searchPlaceholder="z.B. Österreich, AT..."
                     emptyText="Kein Land gefunden"
                   />
                 </div>
@@ -155,13 +155,13 @@ export function SettingsPanel({
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={countWeekendsAsVacation}
                   onChange={e => onCountWeekendsChange(e.target.checked)} className="rounded" />
-                <span className="text-xs">Wochenende als Urlaubstage z\u00e4hlen</span>
+                <span className="text-xs">Wochenende als Urlaubstage zählen</span>
               </label>
 
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={halfDaysChristmas}
                   onChange={e => onHalfDaysChange(e.target.checked)} className="rounded" />
-                <span className="text-xs">24./31.12. als halbe Tage z\u00e4hlen (0,5)</span>
+                <span className="text-xs">24./31.12. als halbe Tage zählen (0,5)</span>
               </label>
 
               <div className="mt-3">

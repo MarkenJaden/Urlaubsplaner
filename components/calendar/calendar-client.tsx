@@ -297,7 +297,7 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
             <p className="font-medium">{format(hoveredDay.date, 'dd.MM.yyyy (EEEE)')}</p>
             {hoveredDay.publicHoliday && <p className="text-green-600">\ud83c\udf89 {hoveredDay.publicHoliday}</p>}
             {hoveredDay.schoolHoliday && <p className="text-yellow-600">\ud83c\udfeb {hoveredDay.schoolHoliday}</p>}
-            {hoveredDay.isBridgeDay && <p className="text-orange-500">\ud83c\udf09 Br\u00fcckentag</p>}
+            {hoveredDay.isBridgeDay && <p className="text-orange-500">\ud83c\udf09 Brückentag</p>}
             {hoveredDay.entry && (
               <p className="text-blue-500">
                 {hoveredDay.entry.type === 'vacation' ? '\ud83c\udfd6\ufe0f Urlaub' :
@@ -310,11 +310,11 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
 
         <div className="flex flex-wrap gap-4 text-xs text-muted-foreground pt-2">
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-blue-500" /> Urlaub</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-500" /> \u00dcber Budget</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-500" /> Über Budget</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-purple-500" /> Gleittag</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-100 border border-green-300" /> Feiertag</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-yellow-100 border border-yellow-300" /> Schulferien</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-orange-50 ring-2 ring-orange-400" /> Br\u00fcckentag</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-orange-50 ring-2 ring-orange-400" /> Brückentag</span>
         </div>
       </main>
     </div>
