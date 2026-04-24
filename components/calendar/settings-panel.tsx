@@ -3,7 +3,9 @@
 import { useState, useMemo } from 'react'
 import { ChevronDown, ChevronUp, AlertTriangle, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
+import { Combobox, MultiCombobox } from '@/components/ui/combobox'
+import type { ComboboxOption } from '@/components/ui/combobox'
+import { getSubdivisionAliases } from '@/lib/subdivision-aliases'
 import type { Subdivision, Country } from '@/types'
 
 interface SettingsPanelProps {
@@ -50,32 +52,33 @@ export function SettingsPanel({
   apiError, onRetryApi,
 }: SettingsPanelProps) {
   const [open, setOpen] = useState(true)
-  const [search, setSearch] = useState('')
   const remaining = vacationDaysTotal - vacationDaysUsed
 
-  const filtered = useMemo(() => {
-    if (!search) return subdivisions
-    const term = search.toLowerCase()
-    return subdivisions.filter(s =>
-      getSubName(s).toLowerCase().includes(term) || s.code.toLowerCase().includes(term)
-    )
-  }, [subdivisions, search])
+  const subdivisionOptions: ComboboxOption[] = useMemo(() =>
+    subdivisions.map(s => ({
+      value: s.code,
+      label: getSubName(s),
+      aliases: getSubdivisionAliases(s.code),
+    })),
+  [subdivisions])
 
-  const toggleCompare = (code: string) => {
-    if (compareSubdivisions.includes(code)) {
-      onCompareChange(compareSubdivisions.filter(c => c !== code))
-    } else {
-      onCompareChange([...compareSubdivisions, code])
-    }
-  }
+  const compareOptions: ComboboxOption[] = useMemo(() =>
+    subdivisions.map(s => ({
+      value: s.code,
+      label: getSubName(s),
+      aliases: getSubdivisionAliases(s.code),
+    })),
+  [subdivisions])
 
-  const toggleCountry = (code: string) => {
-    if (selectedCountries.includes(code)) {
-      onCountriesChange(selectedCountries.filter(c => c !== code))
-    } else {
-      onCountriesChange([...selectedCountries, code])
-    }
-  }
+  const countryOptions: ComboboxOption[] = useMemo(() =>
+    countries
+      .filter(c => c.isoCode !== 'DE')
+      .map(c => ({
+        value: c.isoCode,
+        label: getCountryName(c),
+        aliases: [c.isoCode],
+      })),
+  [countries])
 
   return (
     <div className="rounded-lg border border-border bg-card">
@@ -103,74 +106,45 @@ export function SettingsPanel({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Spalte 1: Standort */}
-            <div className="space-y-2">
+            <div className="space-y-3">
               <h4 className="font-medium text-muted-foreground">Standort & Regionen</h4>
 
-              <label className="text-xs text-muted-foreground">Mein Bundesland</label>
-              <input
-                type="text" placeholder="Suchen..." value={search}
-                onChange={e => setSearch(e.target.value)}
-                className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm"
-              />
-              <select
-                value={subdivision ?? ''}
-                onChange={e => { onSubdivisionChange(e.target.value); setSearch('') }}
-                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-              >
-                <option value="">Bitte w\u00e4hlen...</option>
-                {filtered.map(s => (
-                  <option key={s.code} value={s.code}>{getSubName(s)}</option>
-                ))}
-              </select>
-
-              <label className="text-xs text-muted-foreground">Vergleichs-Regionen (Heatmap)</label>
-              <div className="max-h-28 overflow-y-auto border rounded-md p-1 space-y-0.5">
-                {subdivisions.map(s => (
-                  <label key={s.code} className="flex items-center gap-1.5 px-1 py-0.5 rounded hover:bg-muted/50 cursor-pointer">
-                    <input type="checkbox" checked={compareSubdivisions.includes(s.code)}
-                      onChange={() => toggleCompare(s.code)} className="rounded" />
-                    <span className="text-xs">{getSubName(s)}</span>
-                  </label>
-                ))}
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Mein Bundesland</label>
+                <Combobox
+                  options={subdivisionOptions}
+                  value={subdivision}
+                  onChange={onSubdivisionChange}
+                  placeholder="Bundesland w\u00e4hlen..."
+                  searchPlaceholder="z.B. NRW, Bayern..."
+                  emptyText="Kein Bundesland gefunden"
+                />
               </div>
-              {compareSubdivisions.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {compareSubdivisions.map(code => {
-                    const s = subdivisions.find(x => x.code === code)
-                    return s ? (
-                      <Badge key={code} variant="secondary" className="text-xs cursor-pointer" onClick={() => toggleCompare(code)}>
-                        {getSubName(s)} \u00d7
-                      </Badge>
-                    ) : null
-                  })}
-                </div>
-              )}
 
-              {countries.length > 0 && (
-                <>
-                  <label className="text-xs text-muted-foreground">Zus\u00e4tzliche L\u00e4nder</label>
-                  <div className="max-h-28 overflow-y-auto border rounded-md p-1 space-y-0.5">
-                    {countries.filter(c => c.isoCode !== 'DE').map(c => (
-                      <label key={c.isoCode} className="flex items-center gap-1.5 px-1 py-0.5 rounded hover:bg-muted/50 cursor-pointer">
-                        <input type="checkbox" checked={selectedCountries.includes(c.isoCode)}
-                          onChange={() => toggleCountry(c.isoCode)} className="rounded" />
-                        <span className="text-xs">{getCountryName(c)}</span>
-                      </label>
-                    ))}
-                  </div>
-                  {selectedCountries.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {selectedCountries.map(code => {
-                        const c = countries.find(x => x.isoCode === code)
-                        return c ? (
-                          <Badge key={code} variant="secondary" className="text-xs cursor-pointer" onClick={() => toggleCountry(code)}>
-                            {getCountryName(c)} \u00d7
-                          </Badge>
-                        ) : null
-                      })}
-                    </div>
-                  )}
-                </>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Vergleichs-Regionen (Heatmap)</label>
+                <MultiCombobox
+                  options={compareOptions}
+                  value={compareSubdivisions}
+                  onChange={onCompareChange}
+                  placeholder="Regionen vergleichen..."
+                  searchPlaceholder="z.B. NRW, Bayern..."
+                  emptyText="Kein Bundesland gefunden"
+                />
+              </div>
+
+              {countryOptions.length > 0 && (
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Zus\u00e4tzliche L\u00e4nder</label>
+                  <MultiCombobox
+                    options={countryOptions}
+                    value={selectedCountries}
+                    onChange={onCountriesChange}
+                    placeholder="L\u00e4nder hinzuf\u00fcgen..."
+                    searchPlaceholder="z.B. \u00d6sterreich, AT..."
+                    emptyText="Kein Land gefunden"
+                  />
+                </div>
               )}
             </div>
 
