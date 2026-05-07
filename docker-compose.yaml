@@ -1,16 +1,21 @@
+# Standalone: Alles inklusive (PostgreSQL + Keycloak)
+# Für Coolify: Einfach als Docker Compose deployen, alle Services sind enthalten.
+
 services:
   urlaubsplaner:
     build: .
     environment:
       - NEXTAUTH_URL=${SERVICE_URL_URLAUBSPLANER}
       - NEXTAUTH_SECRET=${SERVICE_BASE64_URLAUBSPLANER}
-      - AUTH_KEYCLOAK_ID=${AUTH_KEYCLOAK_ID:?}
-      - AUTH_KEYCLOAK_SECRET=${AUTH_KEYCLOAK_SECRET:?}
-      - AUTH_KEYCLOAK_ISSUER=${AUTH_KEYCLOAK_ISSUER:-https://auth.samt-con.de/realms/culture-fusion}
+      - AUTH_KEYCLOAK_ID=${AUTH_KEYCLOAK_ID:-urlaubsplaner}
+      - AUTH_KEYCLOAK_SECRET=${SERVICE_PASSWORD_KEYCLOAK-CLIENT}
+      - AUTH_KEYCLOAK_ISSUER=http://keycloak:8080/realms/${KEYCLOAK_REALM:-urlaubsplaner}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - DATABASE_URL=postgres://${SERVICE_USER_POSTGRES}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-urlaubsplaner}
     depends_on:
       postgres:
+        condition: service_healthy
+      keycloak:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
@@ -34,5 +39,44 @@ services:
       retries: 5
       start_period: 20s
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    command: start-dev
+    environment:
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://keycloak-db:5432/${KEYCLOAK_DB:-keycloak}
+      - KC_DB_USERNAME=${SERVICE_USER_KEYCLOAK-DB}
+      - KC_DB_PASSWORD=${SERVICE_PASSWORD_KEYCLOAK-DB}
+      - KC_HOSTNAME_STRICT=false
+      - KC_PROXY_HEADERS=xforwarded
+      - KC_HTTP_ENABLED=true
+      - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
+      - KEYCLOAK_ADMIN_PASSWORD=${SERVICE_PASSWORD_KEYCLOAK-ADMIN}
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-ARGS", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  keycloak-db:
+    image: postgres:17-alpine
+    environment:
+      - POSTGRES_USER=${SERVICE_USER_KEYCLOAK-DB}
+      - POSTGRES_PASSWORD=${SERVICE_PASSWORD_KEYCLOAK-DB}
+      - POSTGRES_DB=${KEYCLOAK_DB:-keycloak}
+    volumes:
+      - keycloak-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-ARGS", "pg_isready", "-U", "$${POSTGRES_USER}", "-d", "$${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
 volumes:
   urlaubsplaner-db:
+  keycloak-db:
