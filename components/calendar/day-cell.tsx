@@ -2,6 +2,7 @@
 
 import { cn } from '@/lib/utils'
 import type { VacationEntry, Holiday, EntryType } from '@/types'
+import type { BridgeDay } from '@/lib/bridge-days'
 import { format, isSameDay, parseISO } from 'date-fns'
 
 export interface DayInfo {
@@ -9,6 +10,7 @@ export interface DayInfo {
   publicHoliday?: string
   schoolHoliday?: string
   isBridgeDay: boolean
+  bridgeDayInfo?: BridgeDay
   entry?: VacationEntry
 }
 
@@ -25,7 +27,9 @@ interface DayCellProps {
   heatmapValue?: number
   showHeatmap: boolean
   isBridgeDay: boolean
+  bridgeDayInfo?: BridgeDay
   showBridgeDays: boolean
+  showOtherMonthDays: boolean
   onToggle: (date: Date, type: EntryType) => void
   selectedType: EntryType
   onHover?: (info: DayInfo | null) => void
@@ -44,23 +48,15 @@ function getHolidayName(h: Holiday): string {
 }
 
 export function DayCell({
-  date,
-  entries,
-  publicHolidays,
-  schoolHolidays,
-  isWeekend,
-  isToday,
-  isOtherMonth,
-  isPast,
-  isOverBudget,
-  heatmapValue,
-  showHeatmap,
-  isBridgeDay,
-  showBridgeDays,
-  onToggle,
-  selectedType,
-  onHover,
+  date, entries, publicHolidays, schoolHolidays,
+  isWeekend, isToday, isOtherMonth, isPast, isOverBudget,
+  heatmapValue, showHeatmap, isBridgeDay, bridgeDayInfo,
+  showBridgeDays, showOtherMonthDays, onToggle, selectedType, onHover,
 }: DayCellProps) {
+  if (isOtherMonth && !showOtherMonthDays) {
+    return <div className="aspect-square" />
+  }
+
   const vacation = entries.find(e => e.type === 'vacation' && isSameDay(parseISO(e.date), date))
   const gleittag = entries.find(e => e.type === 'gleittag' && isSameDay(parseISO(e.date), date))
   const note = entries.find(e => e.type === 'note' && isSameDay(parseISO(e.date), date))
@@ -76,12 +72,31 @@ export function DayCell({
     }
   }
 
+  const buildTitle = (): string => {
+    const parts: string[] = []
+    if (publicHoliday) parts.push(getHolidayName(publicHoliday))
+    if (schoolHoliday) parts.push(getHolidayName(schoolHoliday))
+    if (showBridgeDays && isBridgeDay && bridgeDayInfo) {
+      const before = bridgeDayInfo.connectsBeforeName
+      const after = bridgeDayInfo.connectsAfterName
+      parts.push(`Brückentag → verbindet ${before} mit ${after}`)
+      parts.push(`1 Tag Urlaub → ${bridgeDayInfo.freeDaysGained} Tage frei`)
+    } else if (showBridgeDays && isBridgeDay) {
+      parts.push('Brückentag')
+    }
+    if (vacation) parts.push('Urlaub')
+    if (gleittag) parts.push('Gleittag')
+    if (note) parts.push(note.title ?? 'Notiz')
+    return parts.join('\n')
+  }
+
   const handleMouseEnter = () => {
     onHover?.({
       date,
       publicHoliday: publicHoliday ? getHolidayName(publicHoliday) : undefined,
       schoolHoliday: schoolHoliday ? getHolidayName(schoolHoliday) : undefined,
       isBridgeDay,
+      bridgeDayInfo,
       entry: vacation ?? gleittag ?? note ?? undefined,
     })
   }
@@ -91,8 +106,11 @@ export function DayCell({
   return (
     <button
       className={cn(
-        'day-cell relative w-full aspect-square flex flex-col items-center justify-center rounded-md text-xs font-medium transition-all duration-150',
-        'hover:ring-2 hover:ring-primary/50 hover:z-10',
+        'day-cell relative w-full aspect-square flex flex-col items-center justify-center',
+        'rounded-md text-xs font-medium transition-all duration-150',
+        'min-h-[2.25rem] sm:min-h-0',
+        'hover:ring-2 hover:ring-primary/50 hover:z-10 hover:scale-105',
+        'active:scale-95',
         'focus:outline-none focus:ring-2 focus:ring-primary',
         isOtherMonth && 'opacity-30',
         isWeekend && !hasEntry && !publicHoliday && 'bg-muted/50',
@@ -110,14 +128,7 @@ export function DayCell({
       onClick={() => onToggle(date, selectedType)}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      title={[
-        publicHoliday ? getHolidayName(publicHoliday) : null,
-        schoolHoliday ? getHolidayName(schoolHoliday) : null,
-        showBridgeDays && isBridgeDay ? 'Brückentag' : null,
-        vacation ? 'Urlaub' : null,
-        gleittag ? 'Gleittag' : null,
-        note ? (note.title ?? 'Notiz') : null,
-      ].filter(Boolean).join(' | ')}
+      title={buildTitle()}
     >
       <span className={cn('leading-none', isToday && !hasEntry && 'text-primary font-bold')}>
         {format(date, 'd')}

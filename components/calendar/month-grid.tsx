@@ -1,22 +1,15 @@
 'use client'
 
 import {
-  startOfMonth,
-  endOfMonth,
-  startOfWeek,
-  endOfWeek,
-  eachDayOfInterval,
-  isSameMonth,
-  isToday,
-  isBefore,
-  startOfDay,
-  isWeekend,
-  format,
+  startOfMonth, endOfMonth, startOfWeek, endOfWeek,
+  eachDayOfInterval, isSameMonth, isToday, isBefore,
+  startOfDay, isWeekend, format,
 } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { DayCell } from './day-cell'
 import type { DayInfo } from './day-cell'
 import type { VacationEntry, Holiday, EntryType } from '@/types'
+import type { BridgeDay } from '@/lib/bridge-days'
 
 const WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 
@@ -28,7 +21,9 @@ interface MonthGridProps {
   heatmapData?: Map<string, number>
   showHeatmap: boolean
   bridgeDaySet: Set<string>
+  bridgeDayMap: Map<string, BridgeDay>
   showBridgeDays: boolean
+  showOtherMonthDays: boolean
   overBudgetDates: Set<string>
   onToggle: (date: Date, type: EntryType) => void
   selectedType: EntryType
@@ -36,18 +31,10 @@ interface MonthGridProps {
 }
 
 export function MonthGrid({
-  date,
-  entries,
-  publicHolidays,
-  schoolHolidays,
-  heatmapData,
-  showHeatmap,
-  bridgeDaySet,
-  showBridgeDays,
-  overBudgetDates,
-  onToggle,
-  selectedType,
-  onHover,
+  date, entries, publicHolidays, schoolHolidays,
+  heatmapData, showHeatmap, bridgeDaySet, bridgeDayMap,
+  showBridgeDays, showOtherMonthDays, overBudgetDates,
+  onToggle, selectedType, onHover,
 }: MonthGridProps) {
   const today = startOfDay(new Date())
   const monthStart = startOfMonth(date)
@@ -55,7 +42,6 @@ export function MonthGrid({
   const calStart = startOfWeek(monthStart, { weekStartsOn: 1 })
   const calEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
   const days = eachDayOfInterval({ start: calStart, end: calEnd })
-
   const monthName = format(date, 'MMMM yyyy', { locale: de })
 
   return (
@@ -69,27 +55,32 @@ export function MonthGrid({
             {d}
           </div>
         ))}
-        {days.map(day => (
-          <DayCell
-            key={day.toISOString()}
-            date={day}
-            entries={entries}
-            publicHolidays={publicHolidays}
-            schoolHolidays={schoolHolidays}
-            isWeekend={isWeekend(day)}
-            isToday={isToday(day)}
-            isOtherMonth={!isSameMonth(day, date)}
-            heatmapValue={heatmapData?.get(format(day, 'yyyy-MM-dd'))}
-            showHeatmap={showHeatmap}
-            isPast={isBefore(day, today)}
-            isOverBudget={overBudgetDates.has(format(day, 'yyyy-MM-dd'))}
-            isBridgeDay={bridgeDaySet.has(format(day, 'yyyy-MM-dd'))}
-            showBridgeDays={showBridgeDays}
-            onToggle={onToggle}
-            selectedType={selectedType}
-            onHover={onHover}
-          />
-        ))}
+        {days.map(day => {
+          const key = format(day, 'yyyy-MM-dd')
+          return (
+            <DayCell
+              key={day.toISOString()}
+              date={day}
+              entries={entries}
+              publicHolidays={publicHolidays}
+              schoolHolidays={schoolHolidays}
+              isWeekend={isWeekend(day)}
+              isToday={isToday(day)}
+              isOtherMonth={!isSameMonth(day, date)}
+              heatmapValue={heatmapData?.get(key)}
+              showHeatmap={showHeatmap}
+              isPast={isBefore(day, today)}
+              isOverBudget={overBudgetDates.has(key)}
+              isBridgeDay={bridgeDaySet.has(key)}
+              bridgeDayInfo={bridgeDayMap.get(key)}
+              showBridgeDays={showBridgeDays}
+              showOtherMonthDays={showOtherMonthDays}
+              onToggle={onToggle}
+              selectedType={selectedType}
+              onHover={onHover}
+            />
+          )
+        })}
       </div>
     </div>
   )

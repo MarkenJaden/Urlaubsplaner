@@ -59,6 +59,7 @@ export interface LocalConfig {
   showSchoolHolidays: boolean
   showBridgeDays: boolean
   showHeatmap: boolean
+  showOtherMonthDays: boolean
   countWeekendsAsVacation: boolean
   halfDaysChristmas: boolean
   vacationDaysPerYear: Record<number, number>

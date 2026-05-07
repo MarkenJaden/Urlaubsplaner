@@ -46,6 +46,7 @@ export function defaultConfig(): LocalConfig {
     showSchoolHolidays: true,
     showBridgeDays: true,
     showHeatmap: false,
+    showOtherMonthDays: false,
     countWeekendsAsVacation: false,
     halfDaysChristmas: true,
     vacationDaysPerYear: {},

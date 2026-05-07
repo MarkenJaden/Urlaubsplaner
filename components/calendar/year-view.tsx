@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { MonthGrid } from './month-grid'
 import type { DayInfo } from './day-cell'
 import type { VacationEntry, Holiday, EntryType } from '@/types'
+import type { BridgeDay } from '@/lib/bridge-days'
 import { format, parseISO, eachDayOfInterval } from 'date-fns'
 
 interface YearViewProps {
@@ -16,7 +17,9 @@ interface YearViewProps {
   showPublicHolidays: boolean
   showSchoolHolidays: boolean
   bridgeDaySet: Set<string>
+  bridgeDayMap: Map<string, BridgeDay>
   showBridgeDays: boolean
+  showOtherMonthDays: boolean
   overBudgetDates: Set<string>
   onToggle: (date: Date, type: EntryType) => void
   selectedType: EntryType
@@ -24,20 +27,11 @@ interface YearViewProps {
 }
 
 export function YearView({
-  year,
-  entries,
-  publicHolidays,
-  schoolHolidays,
-  compareHolidays = [],
-  showHeatmap,
-  showPublicHolidays,
-  showSchoolHolidays,
-  bridgeDaySet,
-  showBridgeDays,
-  overBudgetDates,
-  onToggle,
-  selectedType,
-  onHover,
+  year, entries, publicHolidays, schoolHolidays,
+  compareHolidays = [], showHeatmap, showPublicHolidays,
+  showSchoolHolidays, bridgeDaySet, bridgeDayMap,
+  showBridgeDays, showOtherMonthDays, overBudgetDates,
+  onToggle, selectedType, onHover,
 }: YearViewProps) {
   const heatmapData = useMemo(() => {
     if (!showHeatmap || compareHolidays.length === 0) return undefined
@@ -52,7 +46,7 @@ export function YearView({
             const key = format(d, 'yyyy-MM-dd')
             map.set(key, (map.get(key) ?? 0) + 1)
           }
-        } catch { /* skip invalid dates */ }
+        } catch { /* skip */ }
       }
     }
     const max = Math.max(...Array.from(map.values()), 1)
@@ -64,7 +58,7 @@ export function YearView({
   const months = Array.from({ length: 12 }, (_, i) => new Date(year, i, 1))
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
       {months.map(monthDate => (
         <MonthGrid
           key={monthDate.toISOString()}
@@ -75,7 +69,9 @@ export function YearView({
           heatmapData={heatmapData}
           showHeatmap={showHeatmap}
           bridgeDaySet={bridgeDaySet}
+          bridgeDayMap={bridgeDayMap}
           showBridgeDays={showBridgeDays}
+          showOtherMonthDays={showOtherMonthDays}
           overBudgetDates={overBudgetDates}
           onToggle={onToggle}
           selectedType={selectedType}
