@@ -123,11 +123,20 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
 
   const allCountryHolidays = useMemo(() => countryHolidayArrays.flat(), [countryHolidayArrays])
 
-  const bridgeDaySet = useMemo(() => {
-    if (!showBridgeDays || publicHolidays.length === 0) return new Set<string>()
-    const bdays = detectBridgeDays(year, publicHolidays)
-    return new Set(bdays.map(b => b.date))
+  const bridgeDays = useMemo(() => {
+    if (!showBridgeDays || publicHolidays.length === 0) return []
+    return detectBridgeDays(year, publicHolidays)
   }, [year, publicHolidays, showBridgeDays])
+
+  const bridgeDaySet = useMemo(() => new Set(bridgeDays.map(b => b.date)), [bridgeDays])
+
+  const bridgeDayMap = useMemo(() => {
+    const map = new Map<string, (typeof bridgeDays)[0]>()
+    for (const b of bridgeDays) map.set(b.date, b)
+    return map
+  }, [bridgeDays])
+
+  const showOtherMonthDays = config?.showOtherMonthDays ?? false
 
   const overBudgetDates = useMemo(
     () => computeOverBudget(entries, publicHolidays, vacationDaysTotal, halfDaysChristmas),
@@ -285,7 +294,8 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
             publicHolidays={combinedPublicHolidays} schoolHolidays={schoolHolidays}
             compareHolidays={compareHolidays}
             showHeatmap={showHeatmap} showPublicHolidays={showPublicHolidays} showSchoolHolidays={showSchoolHolidays}
-            bridgeDaySet={bridgeDaySet} showBridgeDays={showBridgeDays}
+            bridgeDaySet={bridgeDaySet} bridgeDayMap={bridgeDayMap}
+            showBridgeDays={showBridgeDays} showOtherMonthDays={showOtherMonthDays}
             overBudgetDates={overBudgetDates}
             onToggle={handleToggle} selectedType={selectedType}
             onHover={setHoveredDay}
@@ -297,7 +307,14 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
             <p className="font-medium">{format(hoveredDay.date, 'dd.MM.yyyy (EEEE)')}</p>
             {hoveredDay.publicHoliday && <p className="text-green-600">🎉 {hoveredDay.publicHoliday}</p>}
             {hoveredDay.schoolHoliday && <p className="text-yellow-600">🏫 {hoveredDay.schoolHoliday}</p>}
-            {hoveredDay.isBridgeDay && <p className="text-orange-500">🌉 Brückentag</p>}
+            {hoveredDay.isBridgeDay && hoveredDay.bridgeDayInfo && (
+              <div className="text-orange-500">
+                <p>🌉 Brückentag</p>
+                <p className="text-xs">Verbindet {hoveredDay.bridgeDayInfo.connectsBeforeName} mit {hoveredDay.bridgeDayInfo.connectsAfterName}</p>
+                <p className="text-xs font-medium">1 Tag Urlaub → {hoveredDay.bridgeDayInfo.freeDaysGained} Tage frei</p>
+              </div>
+            )}
+            {hoveredDay.isBridgeDay && !hoveredDay.bridgeDayInfo && <p className="text-orange-500">🌉 Brückentag</p>}
             {hoveredDay.entry && (
               <p className="text-blue-500">
                 {hoveredDay.entry.type === 'vacation' ? '🏖️ Urlaub' :
