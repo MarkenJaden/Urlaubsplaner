@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   experimental: {
     serverActions: {
-      allowedOrigins: ['urlaubsplaner.me', 'localhost:3000']
+      allowedOrigins: (process.env.ALLOWED_ORIGINS || 'urlaubsplaner.me,localhost:3000').split(',')
     }
   },
   typescript: {
