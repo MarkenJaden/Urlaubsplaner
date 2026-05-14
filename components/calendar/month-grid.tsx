@@ -45,13 +45,13 @@ export function MonthGrid({
   const monthName = format(date, 'MMMM yyyy', { locale: de })
 
   return (
-    <div className="flex flex-col gap-1">
-      <h3 className="text-center text-sm font-semibold text-foreground capitalize">
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <h3 className="text-center text-base font-semibold text-foreground capitalize sm:text-sm">
         {monthName}
       </h3>
-      <div className="grid grid-cols-7 gap-0.5">
+      <div className="grid min-w-0 grid-cols-7 gap-1 sm:gap-0.5">
         {WEEKDAY_LABELS.map(d => (
-          <div key={d} className="text-center text-[10px] font-medium text-muted-foreground py-0.5">
+          <div key={d} className="py-0.5 text-center text-[11px] font-medium text-muted-foreground sm:text-[10px]">
             {d}
           </div>
         ))}

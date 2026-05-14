@@ -233,7 +233,7 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
         noteDates={existingNoteDates}
         onApply={handleApplySuggestions}
       />
-      <main className="container py-4 space-y-4">
+      <main className="container space-y-4 py-3 sm:py-4">
         {!isLoggedIn && (
           <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-900/20 p-3 text-sm text-blue-800 dark:text-blue-200">
             💡 Du planst gerade lokal.{' '}
@@ -303,7 +303,7 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
         )}
 
         {hoveredDay && (
-          <div className="fixed bottom-4 right-4 z-50 bg-card border rounded-lg shadow-lg p-3 text-sm max-w-xs">
+          <div className="pointer-events-none fixed bottom-4 right-4 z-50 hidden max-w-xs rounded-lg border bg-card p-3 text-sm shadow-lg supports-[bottom:env(safe-area-inset-bottom)]:bottom-[calc(1rem+env(safe-area-inset-bottom))] md:block">
             <p className="font-medium">{format(hoveredDay.date, 'dd.MM.yyyy (EEEE)')}</p>
             {hoveredDay.publicHoliday && <p className="text-green-600">🎉 {hoveredDay.publicHoliday}</p>}
             {hoveredDay.schoolHoliday && <p className="text-yellow-600">🏫 {hoveredDay.schoolHoliday}</p>}

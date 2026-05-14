@@ -50,11 +50,17 @@
 }
 
 @layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
   * {
     @apply border-border;
   }
   body {
     @apply bg-background text-foreground;
+    min-width: 0;
   }
 }
 
@@ -63,4 +69,10 @@
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
   user-select: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .day-cell:hover {
+    transform: none;
+  }
 }

@@ -91,6 +91,7 @@ export function DayCell({
   }
 
   const handleMouseEnter = () => {
+    if (window.matchMedia('(hover: none)').matches) return
     onHover?.({
       date,
       publicHoliday: publicHoliday ? getHolidayName(publicHoliday) : undefined,
@@ -107,8 +108,8 @@ export function DayCell({
     <button
       className={cn(
         'day-cell relative w-full aspect-square flex flex-col items-center justify-center',
-        'rounded-md text-xs font-medium transition-all duration-150',
-        'min-h-[2.25rem] sm:min-h-0',
+        'rounded-md text-sm font-medium transition-all duration-150 sm:text-xs',
+        'min-h-11 sm:min-h-0',
         'hover:ring-2 hover:ring-primary/50 hover:z-10 hover:scale-105',
         'active:scale-95',
         'focus:outline-none focus:ring-2 focus:ring-primary',
@@ -129,6 +130,7 @@ export function DayCell({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       title={buildTitle()}
+      aria-label={buildTitle() || format(date, 'dd.MM.yyyy')}
     >
       <span className={cn('leading-none', isToday && !hasEntry && 'text-primary font-bold')}>
         {format(date, 'd')}

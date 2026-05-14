@@ -1,8 +1,14 @@
 'use client'
 
 import { useRef } from 'react'
-import { ChevronLeft, ChevronRight, Sparkles, Download, Upload, Printer, Settings2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Sparkles, Download, Upload, Printer, Settings2, MoreHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
@@ -111,20 +117,20 @@ export function Toolbar({
   }
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg border border-border bg-card">
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3 md:flex-row md:flex-wrap md:items-center md:justify-between">
       {/* Year Navigation */}
-      <div className="flex items-center gap-2">
+      <div className="grid grid-cols-[2.75rem_1fr_2.75rem] items-center gap-2 md:flex md:w-auto">
         <Button variant="ghost" size="icon" onClick={() => onYearChange(year - 1)}>
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        <span className="text-xl font-bold w-16 text-center">{year}</span>
+        <span className="text-center text-xl font-bold md:w-16">{year}</span>
         <Button variant="ghost" size="icon" onClick={() => onYearChange(year + 1)}>
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
 
       {/* Entry Type Selector */}
-      <div className="flex gap-1">
+      <div className="grid grid-cols-3 gap-1 md:flex">
         <Button size="sm" variant={selectedType === 'vacation' ? 'default' : 'outline'}
           onClick={() => onTypeChange('vacation')}
           className={selectedType === 'vacation' ? 'bg-blue-500 hover:bg-blue-600' : ''}>
@@ -142,68 +148,119 @@ export function Toolbar({
       </div>
 
       {/* Toggles */}
-      <div className="flex flex-wrap items-center gap-3 text-sm">
-        <label className="flex items-center gap-1.5 cursor-pointer">
+      <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4 md:flex md:flex-wrap md:items-center md:gap-3">
+        <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-1">
           <Switch checked={showHeatmap} onCheckedChange={onToggleHeatmap} />
-          <span className="text-muted-foreground">Heatmap</span>
+          <span className="min-w-0 truncate text-muted-foreground">Heatmap</span>
         </label>
-        <label className="flex items-center gap-1.5 cursor-pointer">
+        <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-1">
           <Switch checked={showPublicHolidays} onCheckedChange={onTogglePublicHolidays} />
-          <span className="text-muted-foreground">Feiertage</span>
+          <span className="min-w-0 truncate text-muted-foreground">Feiertage</span>
         </label>
-        <label className="flex items-center gap-1.5 cursor-pointer">
+        <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-1">
           <Switch checked={showSchoolHolidays} onCheckedChange={onToggleSchoolHolidays} />
-          <span className="text-muted-foreground">Schulferien</span>
+          <span className="min-w-0 truncate text-muted-foreground">Schulferien</span>
         </label>
-        <label className="flex items-center gap-1.5 cursor-pointer">
+        <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-1">
           <Switch checked={showBridgeDays} onCheckedChange={onToggleBridgeDays} />
-          <span className="text-muted-foreground">Brückentage</span>
+          <span className="min-w-0 truncate text-muted-foreground">Brückentage</span>
         </label>
       </div>
 
       {/* Actions */}
       <TooltipProvider delayDuration={0}>
-      <div className="flex items-center gap-1">
-        <Button size="sm" variant="outline" onClick={onOpenSuggestions}>
-          <Sparkles className="h-4 w-4 mr-1" />
-          Planen
-        </Button>
-        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportCSV}>
-          <Download className="h-4 w-4" />
-        </Button></TooltipTrigger><TooltipContent>CSV Export</TooltipContent></Tooltip>
-        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportClipboard}>
-          📋
-        </Button></TooltipTrigger><TooltipContent>In Zwischenablage</TooltipContent></Tooltip>
-        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportJSON}>
-          {'{}'}
-        </Button></TooltipTrigger><TooltipContent>JSON Export</TooltipContent></Tooltip>
-        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportICS}>
-          📅
-        </Button></TooltipTrigger><TooltipContent>ICS Kalender Export</TooltipContent></Tooltip>
-        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportConfig}>
-          <Settings2 className="h-4 w-4" />
-        </Button></TooltipTrigger><TooltipContent>Konfiguration exportieren</TooltipContent></Tooltip>
-        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handlePrint}>
-          <Printer className="h-4 w-4" />
-        </Button></TooltipTrigger><TooltipContent>Drucken / PDF</TooltipContent></Tooltip>
-        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleImportClick}>
-          <Upload className="h-4 w-4" />
-        </Button></TooltipTrigger><TooltipContent>Daten importieren</TooltipContent></Tooltip>
-        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleConfigImportClick}>
-          ⚙️
-        </Button></TooltipTrigger><TooltipContent>Konfiguration importieren</TooltipContent></Tooltip>
+        <div className="grid grid-cols-[1fr_2.75rem] gap-2 md:hidden">
+          <Button size="sm" variant="outline" onClick={onOpenSuggestions}>
+            <Sparkles className="h-4 w-4" />
+            Planen
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="icon" variant="outline" aria-label="Weitere Aktionen">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExportCSV}>
+                <Download className="h-4 w-4" />
+                CSV Export
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportClipboard}>
+                <span className="w-4 text-center">📋</span>
+                In Zwischenablage
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportJSON}>
+                <span className="w-4 text-center">{'{}'}</span>
+                JSON Export
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportICS}>
+                <span className="w-4 text-center">📅</span>
+                ICS Kalender Export
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportConfig}>
+                <Settings2 className="h-4 w-4" />
+                Konfiguration exportieren
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handlePrint}>
+                <Printer className="h-4 w-4" />
+                Drucken / PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleImportClick}>
+                <Upload className="h-4 w-4" />
+                Daten importieren
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleConfigImportClick}>
+                <span className="w-4 text-center">⚙️</span>
+                Konfiguration importieren
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleReset} className="text-red-500 focus:text-red-600">
+                <span className="w-4 text-center">🗑️</span>
+                Planung zurücksetzen
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <div className="hidden items-center gap-1 md:flex">
+          <Button size="sm" variant="outline" onClick={onOpenSuggestions}>
+            <Sparkles className="h-4 w-4" />
+            Planen
+          </Button>
+          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportCSV}>
+            <Download className="h-4 w-4" />
+          </Button></TooltipTrigger><TooltipContent>CSV Export</TooltipContent></Tooltip>
+          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportClipboard}>
+            📋
+          </Button></TooltipTrigger><TooltipContent>In Zwischenablage</TooltipContent></Tooltip>
+          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportJSON}>
+            {'{}'}
+          </Button></TooltipTrigger><TooltipContent>JSON Export</TooltipContent></Tooltip>
+          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportICS}>
+            📅
+          </Button></TooltipTrigger><TooltipContent>ICS Kalender Export</TooltipContent></Tooltip>
+          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportConfig}>
+            <Settings2 className="h-4 w-4" />
+          </Button></TooltipTrigger><TooltipContent>Konfiguration exportieren</TooltipContent></Tooltip>
+          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handlePrint}>
+            <Printer className="h-4 w-4" />
+          </Button></TooltipTrigger><TooltipContent>Drucken / PDF</TooltipContent></Tooltip>
+          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleImportClick}>
+            <Upload className="h-4 w-4" />
+          </Button></TooltipTrigger><TooltipContent>Daten importieren</TooltipContent></Tooltip>
+          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleConfigImportClick}>
+            ⚙️
+          </Button></TooltipTrigger><TooltipContent>Konfiguration importieren</TooltipContent></Tooltip>
+          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleReset} className="text-red-500 hover:text-red-600">
+            🗑️
+          </Button></TooltipTrigger><TooltipContent>Planung zurücksetzen</TooltipContent></Tooltip>
+        </div>
         <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
         <input ref={configInputRef} type="file" accept=".json" className="hidden" onChange={handleConfigImportFile} />
-        <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleReset} className="text-red-500 hover:text-red-600">
-          🗑️
-        </Button></TooltipTrigger><TooltipContent>Planung zurücksetzen</TooltipContent></Tooltip>
-      </div>
 
       </TooltipProvider>
 
       {/* Stats */}
-      <div className="flex items-center gap-3 text-sm">
-        <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+        <div className="flex min-w-0 items-center gap-1.5">
           <span className="text-muted-foreground">Urlaub:</span>
           <Badge variant={remaining < 5 ? 'destructive' : 'default'}>
             {vacationDaysUsed}/{vacationDaysTotal}

@@ -48,12 +48,12 @@ export function SettingsClient({ calendarToken, preferences }: SettingsClientPro
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="container mx-auto px-4 py-8 max-w-2xl">
-        <h1 className="text-2xl font-bold mb-8">Einstellungen</h1>
+      <main className="container mx-auto max-w-2xl px-4 py-5 sm:py-8">
+        <h1 className="mb-5 text-2xl font-bold sm:mb-8">Einstellungen</h1>
 
-        <div className="space-y-8">
+        <div className="space-y-5 sm:space-y-8">
           {/* Region */}
-          <section className="bg-card rounded-lg p-6 shadow-sm border">
+          <section className="rounded-lg border bg-card p-4 shadow-sm sm:p-6">
             <h2 className="text-lg font-semibold mb-4">Region</h2>
             <div className="space-y-4">
               <div>
@@ -113,7 +113,7 @@ export function SettingsClient({ calendarToken, preferences }: SettingsClientPro
           </section>
 
           {/* Ansicht */}
-          <section className="bg-card rounded-lg p-6 shadow-sm border">
+          <section className="rounded-lg border bg-card p-4 shadow-sm sm:p-6">
             <h2 className="text-lg font-semibold mb-4">Kalenderansicht</h2>
             <div className="space-y-4">
               {([
@@ -121,21 +121,21 @@ export function SettingsClient({ calendarToken, preferences }: SettingsClientPro
                 { key: 'showSchoolHolidays', label: 'Schulferien anzeigen' },
                 { key: 'showHeatmap', label: 'Heatmap anzeigen' },
               ] as const).map(({ key, label }) => (
-                <div key={key} className="flex items-center justify-between">
+                <label key={key} className="flex min-h-11 cursor-pointer items-center justify-between gap-3">
                   <span className="text-sm font-medium">{label}</span>
                   <input
                     type="checkbox"
                     checked={prefs[key] ?? false}
                     onChange={(e) => setPrefs({ ...prefs, [key]: e.target.checked })}
-                    className="w-4 h-4"
+                    className="h-5 w-5 shrink-0"
                   />
-                </div>
+                </label>
               ))}
             </div>
           </section>
 
           {/* Kalender-Abo */}
-          <section className="bg-card rounded-lg p-6 shadow-sm border">
+          <section className="rounded-lg border bg-card p-4 shadow-sm sm:p-6">
             <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
               <Calendar className="w-5 h-5" />
               Kalender abonnieren
@@ -143,18 +143,18 @@ export function SettingsClient({ calendarToken, preferences }: SettingsClientPro
             <p className="text-sm text-muted-foreground mb-4">
               Abonniere deinen Urlaubskalender direkt in Google Calendar, Outlook oder Apple Calendar.
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <input
                 type="text"
                 readOnly
                 value={calendarUrl}
-                className="flex-1 text-xs bg-muted px-3 py-2 rounded-md border font-mono truncate"
+                className="min-h-11 min-w-0 flex-1 rounded-md border bg-muted px-3 py-2 font-mono text-xs"
               />
               <Button variant="outline" size="icon" onClick={handleCopyCalendarUrl} title="URL kopieren">
                 {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+            <p className="mt-2 flex items-start gap-1 text-xs text-muted-foreground">
               <Download className="w-3 h-3" />
               Diese URL in den Kalender-Apps als "Kalender per URL abonnieren" eintragen.
             </p>
@@ -162,7 +162,7 @@ export function SettingsClient({ calendarToken, preferences }: SettingsClientPro
 
           {/* Speichern */}
           <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={updatePrefs.isPending}>
+            <Button onClick={handleSave} disabled={updatePrefs.isPending} className="w-full sm:w-auto">
               {saved ? 'Gespeichert ✓' : updatePrefs.isPending ? 'Speichert...' : 'Einstellungen speichern'}
             </Button>
           </div>

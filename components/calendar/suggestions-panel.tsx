@@ -79,14 +79,14 @@ export function SuggestionsPanel({
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <h2 className="text-xl font-bold mb-1">✨ Optimaler Urlaubsplan</h2>
+      <DialogContent className="max-w-2xl">
+        <h2 className="mb-1 pr-10 text-xl font-bold">✨ Optimaler Urlaubsplan</h2>
         <p className="text-sm text-muted-foreground mb-4">
           Konfiguriere deine Präferenzen und lass den Planer optimale Urlaubsblöcke berechnen.
         </p>
 
         {/* Preferences */}
-        <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+        <div className="mb-4 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2 sm:gap-3">
           {([
             { key: 'preferBridgeDays', label: 'Brückentage bevorzugen' },
             { key: 'distributeEvenly', label: 'Gleichmäßig verteilen' },
@@ -95,39 +95,39 @@ export function SuggestionsPanel({
             { key: 'halfDaysChristmas', label: '½ Tage Heiligabend/Silvester' },
             { key: 'planFromToday', label: 'Ab heute planen' },
           ] as const).map(({ key, label }) => (
-            <label key={key} className="flex items-center gap-2 cursor-pointer">
+            <label key={key} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-1">
               <Switch
                 checked={prefs[key] as boolean}
                 onCheckedChange={v => setPrefs(p => ({ ...p, [key]: v }))}
               />
-              <span>{label}</span>
+              <span className="min-w-0">{label}</span>
             </label>
           ))}
         </div>
 
-        <div className="flex items-center gap-3 mb-4 text-sm">
-          <label className="flex items-center gap-2">
+        <div className="mb-4 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-[auto_auto_1fr] lg:items-center">
+          <label className="grid gap-1 sm:grid-cols-[1fr_4rem] sm:items-center">
             <span className="text-muted-foreground">Min. Tage/Block:</span>
             <input
               type="number" min={1} max={30}
               value={prefs.minDaysPerBlock}
               onChange={e => setPrefs(p => ({ ...p, minDaysPerBlock: Number(e.target.value) }))}
-              className="w-16 border rounded px-2 py-1 bg-background text-center"
+              className="min-h-11 w-full rounded border bg-background px-2 py-2 text-center sm:w-16"
             />
           </label>
-          <label className="flex items-center gap-2">
+          <label className="grid gap-1 sm:grid-cols-[1fr_4rem] sm:items-center">
             <span className="text-muted-foreground">Max. Tage/Block:</span>
             <input
               type="number" min={1} max={30}
               value={prefs.maxDaysPerBlock ?? ''}
               placeholder="∞"
               onChange={e => setPrefs(p => ({ ...p, maxDaysPerBlock: e.target.value ? Number(e.target.value) : null }))}
-              className="w-16 border rounded px-2 py-1 bg-background text-center"
+              className="min-h-11 w-full rounded border bg-background px-2 py-2 text-center sm:w-16"
             />
           </label>
-          <label className="flex items-center gap-2 cursor-pointer">
+          <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md px-1 sm:col-span-2 lg:col-span-1">
             <Switch checked={overwrite} onCheckedChange={setOverwrite} />
-            <span>Vorhandene überschreiben</span>
+            <span className="min-w-0">Vorhandene überschreiben</span>
           </label>
         </div>
 
@@ -141,10 +141,10 @@ export function SuggestionsPanel({
           <>
             <div className="space-y-3 mb-4">
               {suggestions.map((s, i) => (
-                <div key={i} className="border rounded-lg p-3 flex items-start justify-between gap-3">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-medium text-sm">{s.label}</span>
+                <div key={i} className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium">{s.label}</span>
                       <Badge variant={s.efficiency >= 2 ? 'default' : 'secondary'} className="text-xs">
                         {s.efficiency.toFixed(1)}x Effizienz
                       </Badge>
@@ -163,15 +163,16 @@ export function SuggestionsPanel({
                     variant={applied.has(i) ? 'secondary' : 'default'}
                     onClick={() => handleApplyOne(i)}
                     disabled={applied.has(i)}
+                    className="w-full sm:w-auto"
                   >
                     {applied.has(i) ? '✓ Übernommen' : 'Übernehmen'}
                   </Button>
                 </div>
               ))}
             </div>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={onClose}>Schließen</Button>
-              <Button onClick={handleApplyAll}>Alle übernehmen</Button>
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">Schließen</Button>
+              <Button onClick={handleApplyAll} className="w-full sm:w-auto">Alle übernehmen</Button>
             </div>
           </>
         )}
