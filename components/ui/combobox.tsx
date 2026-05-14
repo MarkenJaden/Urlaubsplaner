@@ -129,8 +129,8 @@ export function Combobox({
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border border-input bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
-          <div className="flex min-h-11 items-center border-b px-3 py-2">
+        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95">
+          <div className="flex min-h-11 items-center border-b border-border bg-popover px-3 py-2">
             <Search className="h-3.5 w-3.5 shrink-0 opacity-50 mr-1.5" />
             <input
               ref={inputRef}
@@ -254,8 +254,8 @@ export function MultiCombobox({
       )}
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border border-input bg-popover text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
-          <div className="flex min-h-11 items-center border-b px-3 py-2">
+        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95">
+          <div className="flex min-h-11 items-center border-b border-border bg-popover px-3 py-2">
             <Search className="h-3.5 w-3.5 shrink-0 opacity-50 mr-1.5" />
             <input
               ref={inputRef}

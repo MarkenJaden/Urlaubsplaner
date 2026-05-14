@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import type { VacationSuggestionBlock, PlanningPreferences } from '@/lib/vacation-suggester'
 import { DEFAULT_PREFERENCES } from '@/lib/vacation-suggester'
@@ -80,7 +80,7 @@ export function SuggestionsPanel({
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-2xl">
-        <h2 className="mb-1 pr-10 text-xl font-bold">✨ Optimaler Urlaubsplan</h2>
+        <DialogTitle className="mb-1 pr-10 text-xl font-bold leading-tight tracking-normal">✨ Optimaler Urlaubsplan</DialogTitle>
         <p className="text-sm text-muted-foreground mb-4">
           Konfiguriere deine Präferenzen und lass den Planer optimale Urlaubsblöcke berechnen.
         </p>

@@ -90,19 +90,33 @@ export function DayCell({
     return parts.join('\n')
   }
 
+  const buildDayInfo = (): DayInfo => ({
+    date,
+    publicHoliday: publicHoliday ? getHolidayName(publicHoliday) : undefined,
+    schoolHoliday: schoolHoliday ? getHolidayName(schoolHoliday) : undefined,
+    isBridgeDay: showBridgeDays && isBridgeDay,
+    bridgeDayInfo,
+    entry: vacation ?? gleittag ?? note ?? undefined,
+  })
+
+  const hasVisibleDetails = (info: DayInfo): boolean => {
+    return Boolean(info.publicHoliday || info.schoolHoliday || info.isBridgeDay || info.entry)
+  }
+
   const handleMouseEnter = () => {
     if (window.matchMedia('(hover: none)').matches) return
-    onHover?.({
-      date,
-      publicHoliday: publicHoliday ? getHolidayName(publicHoliday) : undefined,
-      schoolHoliday: schoolHoliday ? getHolidayName(schoolHoliday) : undefined,
-      isBridgeDay,
-      bridgeDayInfo,
-      entry: vacation ?? gleittag ?? note ?? undefined,
-    })
+    onHover?.(buildDayInfo())
   }
 
   const handleMouseLeave = () => onHover?.(null)
+
+  const handleClick = () => {
+    if (window.matchMedia('(hover: none)').matches) {
+      const info = buildDayInfo()
+      onHover?.(hasVisibleDetails(info) ? info : null)
+    }
+    onToggle(date, selectedType)
+  }
 
   return (
     <button
@@ -126,7 +140,7 @@ export function DayCell({
         showBridgeDays && isBridgeDay && !hasEntry && !publicHoliday && 'ring-2 ring-orange-400 bg-orange-50 dark:bg-orange-900/20',
       )}
       style={!hasEntry && !publicHoliday && !schoolHoliday && !(showBridgeDays && isBridgeDay) ? heatmapStyle : {}}
-      onClick={() => onToggle(date, selectedType)}
+      onClick={handleClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       title={buildTitle()}

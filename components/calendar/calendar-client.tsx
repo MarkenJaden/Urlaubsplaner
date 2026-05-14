@@ -10,6 +10,7 @@ import { useVacations, useToggleVacation } from '@/hooks/use-vacations'
 import { useHolidays, useCompareHolidays, useSubdivisions, useCountries, useCountryHolidays } from '@/hooks/use-holidays'
 import { detectBridgeDays } from '@/lib/bridge-days'
 import { loadConfig, saveConfig, configToEntries } from '@/lib/config'
+import { X } from 'lucide-react'
 import { parseISO, isSameDay, format, eachDayOfInterval, isWeekend } from 'date-fns'
 import type { EntryType, VacationEntry, Holiday, LocalConfig } from '@/types'
 import type { DayInfo } from '@/components/calendar/day-cell'
@@ -76,6 +77,31 @@ function computeOverBudget(
     if (cost > totalDays) result.add(dateStr)
   }
   return result
+}
+
+function DayInfoDetails({ day }: { day: DayInfo }) {
+  return (
+    <>
+      <p className="font-medium">{format(day.date, 'dd.MM.yyyy (EEEE)')}</p>
+      {day.publicHoliday && <p className="text-green-600">🎉 {day.publicHoliday}</p>}
+      {day.schoolHoliday && <p className="text-yellow-600">🏫 {day.schoolHoliday}</p>}
+      {day.isBridgeDay && day.bridgeDayInfo && (
+        <div className="text-orange-500">
+          <p>🌉 Brückentag</p>
+          <p className="text-xs">Verbindet {day.bridgeDayInfo.connectsBeforeName} mit {day.bridgeDayInfo.connectsAfterName}</p>
+          <p className="text-xs font-medium">1 Tag Urlaub → {day.bridgeDayInfo.freeDaysGained} Tage frei</p>
+        </div>
+      )}
+      {day.isBridgeDay && !day.bridgeDayInfo && <p className="text-orange-500">🌉 Brückentag</p>}
+      {day.entry && (
+        <p className="text-blue-500">
+          {day.entry.type === 'vacation' ? '🏖️ Urlaub' :
+           day.entry.type === 'gleittag' ? '⏰ Gleittag' :
+           `📝 ${day.entry.title ?? 'Notiz'}`}
+        </p>
+      )}
+    </>
+  )
 }
 
 export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }: CalendarClientProps) {
@@ -303,25 +329,22 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
         )}
 
         {hoveredDay && (
-          <div className="pointer-events-none fixed bottom-4 right-4 z-50 hidden max-w-xs rounded-lg border bg-card p-3 text-sm shadow-lg supports-[bottom:env(safe-area-inset-bottom)]:bottom-[calc(1rem+env(safe-area-inset-bottom))] md:block">
-            <p className="font-medium">{format(hoveredDay.date, 'dd.MM.yyyy (EEEE)')}</p>
-            {hoveredDay.publicHoliday && <p className="text-green-600">🎉 {hoveredDay.publicHoliday}</p>}
-            {hoveredDay.schoolHoliday && <p className="text-yellow-600">🏫 {hoveredDay.schoolHoliday}</p>}
-            {hoveredDay.isBridgeDay && hoveredDay.bridgeDayInfo && (
-              <div className="text-orange-500">
-                <p>🌉 Brückentag</p>
-                <p className="text-xs">Verbindet {hoveredDay.bridgeDayInfo.connectsBeforeName} mit {hoveredDay.bridgeDayInfo.connectsAfterName}</p>
-                <p className="text-xs font-medium">1 Tag Urlaub → {hoveredDay.bridgeDayInfo.freeDaysGained} Tage frei</p>
-              </div>
-            )}
-            {hoveredDay.isBridgeDay && !hoveredDay.bridgeDayInfo && <p className="text-orange-500">🌉 Brückentag</p>}
-            {hoveredDay.entry && (
-              <p className="text-blue-500">
-                {hoveredDay.entry.type === 'vacation' ? '🏖️ Urlaub' :
-                 hoveredDay.entry.type === 'gleittag' ? '⏰ Gleittag' :
-                 `📝 ${hoveredDay.entry.title ?? 'Notiz'}`}
-              </p>
-            )}
+          <div className="pointer-events-none fixed bottom-4 right-4 z-50 hidden max-w-xs rounded-lg border border-border bg-card p-3 text-sm text-card-foreground shadow-lg supports-[bottom:env(safe-area-inset-bottom)]:bottom-[calc(1rem+env(safe-area-inset-bottom))] md:block">
+            <DayInfoDetails day={hoveredDay} />
+          </div>
+        )}
+
+        {hoveredDay && (
+          <div className="fixed inset-x-3 z-50 rounded-lg border border-border bg-card p-3 pr-12 text-sm text-card-foreground shadow-lg supports-[bottom:env(safe-area-inset-bottom)]:bottom-[calc(0.75rem+env(safe-area-inset-bottom))] bottom-3 md:hidden">
+            <DayInfoDetails day={hoveredDay} />
+            <button
+              type="button"
+              onClick={() => setHoveredDay(null)}
+              className="absolute right-2 top-2 inline-flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              aria-label="Tagesinfo schließen"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         )}
 
