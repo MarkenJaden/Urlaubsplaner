@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -39,12 +39,15 @@ export function SuggestionsPanel({
   const [suggestions, setSuggestions] = useState<VacationSuggestionBlock[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [applied, setApplied] = useState<Set<number>>(new Set())
+  const existingVacationSet = useMemo(() => new Set(existingVacationDates), [existingVacationDates])
+
+  const getMissingVacationDays = (suggestion: VacationSuggestionBlock): string[] => {
+    return suggestion.vacationDays.filter(date => !existingVacationSet.has(date))
+  }
 
   const handleGenerate = async () => {
     setLoading(true)
     setError(null)
-    setApplied(new Set())
     try {
       const params = new URLSearchParams({
         country,
@@ -67,14 +70,15 @@ export function SuggestionsPanel({
   }
 
   const handleApplyAll = () => {
-    const allDates = suggestions.flatMap(s => s.vacationDays)
+    const allDates = [...new Set(suggestions.flatMap(getMissingVacationDays))]
+    if (allDates.length === 0) return
     onApply(allDates, 'vacation')
-    setApplied(new Set(suggestions.map((_, i) => i)))
   }
 
   const handleApplyOne = (idx: number) => {
-    onApply(suggestions[idx].vacationDays, 'vacation')
-    setApplied(prev => new Set([...prev, idx]))
+    const missingDates = getMissingVacationDays(suggestions[idx])
+    if (missingDates.length === 0) return
+    onApply(missingDates, 'vacation')
   }
 
   return (
@@ -140,35 +144,38 @@ export function SuggestionsPanel({
         {suggestions.length > 0 && (
           <>
             <div className="space-y-3 mb-4">
-              {suggestions.map((s, i) => (
-                <div key={i} className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-medium">{s.label}</span>
-                      <Badge variant={s.efficiency >= 2 ? 'default' : 'secondary'} className="text-xs">
-                        {s.efficiency.toFixed(1)}x Effizienz
-                      </Badge>
+              {suggestions.map((s, i) => {
+                const isApplied = getMissingVacationDays(s).length === 0
+                return (
+                  <div key={i} className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium">{s.label}</span>
+                        <Badge variant={s.efficiency >= 2 ? 'default' : 'secondary'} className="text-xs">
+                          {s.efficiency.toFixed(1)}x Effizienz
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-1">
+                        {s.cost} Urlaubstag{s.cost !== 1 ? 'e' : ''} → {s.freeDaysGained} freie Tage
+                      </p>
+                      <ul className="text-xs text-muted-foreground space-y-0.5">
+                        {s.vacationDays.map(d => (
+                          <li key={d}>{format(parseISO(d), 'dd.MM.yyyy (EEEE)', { locale: de })}</li>
+                        ))}
+                      </ul>
                     </div>
-                    <p className="text-xs text-muted-foreground mb-1">
-                      {s.cost} Urlaubstag{s.cost !== 1 ? 'e' : ''} → {s.freeDaysGained} freie Tage
-                    </p>
-                    <ul className="text-xs text-muted-foreground space-y-0.5">
-                      {s.vacationDays.map(d => (
-                        <li key={d}>{format(parseISO(d), 'dd.MM.yyyy (EEEE)', { locale: de })}</li>
-                      ))}
-                    </ul>
+                    <Button
+                      size="sm"
+                      variant={isApplied ? 'secondary' : 'default'}
+                      onClick={() => handleApplyOne(i)}
+                      disabled={isApplied}
+                      className="w-full sm:w-auto"
+                    >
+                      {isApplied ? '✓ Übernommen' : 'Übernehmen'}
+                    </Button>
                   </div>
-                  <Button
-                    size="sm"
-                    variant={applied.has(i) ? 'secondary' : 'default'}
-                    onClick={() => handleApplyOne(i)}
-                    disabled={applied.has(i)}
-                    className="w-full sm:w-auto"
-                  >
-                    {applied.has(i) ? '✓ Übernommen' : 'Übernehmen'}
-                  </Button>
-                </div>
-              ))}
+                )
+              })}
             </div>
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">Schließen</Button>

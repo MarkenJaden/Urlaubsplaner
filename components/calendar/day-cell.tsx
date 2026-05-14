@@ -33,6 +33,7 @@ interface DayCellProps {
   onToggle: (date: Date, type: EntryType) => void
   selectedType: EntryType
   onHover?: (info: DayInfo | null) => void
+  onSelectDate?: (date: Date) => void
 }
 
 function getHolidayForDate(holidays: Holiday[], date: Date): Holiday | undefined {
@@ -51,7 +52,7 @@ export function DayCell({
   date, entries, publicHolidays, schoolHolidays,
   isWeekend, isToday, isOtherMonth, isPast, isOverBudget,
   heatmapValue, showHeatmap, isBridgeDay, bridgeDayInfo,
-  showBridgeDays, showOtherMonthDays, onToggle, selectedType, onHover,
+  showBridgeDays, showOtherMonthDays, onToggle, selectedType, onHover, onSelectDate,
 }: DayCellProps) {
   if (isOtherMonth && !showOtherMonthDays) {
     return <div className="aspect-square" />
@@ -99,10 +100,6 @@ export function DayCell({
     entry: vacation ?? gleittag ?? note ?? undefined,
   })
 
-  const hasVisibleDetails = (info: DayInfo): boolean => {
-    return Boolean(info.publicHoliday || info.schoolHoliday || info.isBridgeDay || info.entry)
-  }
-
   const handleMouseEnter = () => {
     if (window.matchMedia('(hover: none)').matches) return
     onHover?.(buildDayInfo())
@@ -111,11 +108,8 @@ export function DayCell({
   const handleMouseLeave = () => onHover?.(null)
 
   const handleClick = () => {
-    if (window.matchMedia('(hover: none)').matches) {
-      const info = buildDayInfo()
-      onHover?.(hasVisibleDetails(info) ? info : null)
-    }
     onToggle(date, selectedType)
+    if (window.matchMedia('(hover: none)').matches) onSelectDate?.(date)
   }
 
   return (

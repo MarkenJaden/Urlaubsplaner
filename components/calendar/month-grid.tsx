@@ -28,13 +28,14 @@ interface MonthGridProps {
   onToggle: (date: Date, type: EntryType) => void
   selectedType: EntryType
   onHover?: (info: DayInfo | null) => void
+  onSelectDate?: (date: Date) => void
 }
 
 export function MonthGrid({
   date, entries, publicHolidays, schoolHolidays,
   heatmapData, showHeatmap, bridgeDaySet, bridgeDayMap,
   showBridgeDays, showOtherMonthDays, overBudgetDates,
-  onToggle, selectedType, onHover,
+  onToggle, selectedType, onHover, onSelectDate,
 }: MonthGridProps) {
   const today = startOfDay(new Date())
   const monthStart = startOfMonth(date)
@@ -78,6 +79,7 @@ export function MonthGrid({
               onToggle={onToggle}
               selectedType={selectedType}
               onHover={onHover}
+              onSelectDate={onSelectDate}
             />
           )
         })}
