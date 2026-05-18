@@ -24,6 +24,7 @@ interface YearViewProps {
   onToggle: (date: Date, type: EntryType) => void
   selectedType: EntryType
   onHover?: (info: DayInfo | null) => void
+  onSelectDate?: (date: Date) => void
 }
 
 export function YearView({
@@ -31,7 +32,7 @@ export function YearView({
   compareHolidays = [], showHeatmap, showPublicHolidays,
   showSchoolHolidays, bridgeDaySet, bridgeDayMap,
   showBridgeDays, showOtherMonthDays, overBudgetDates,
-  onToggle, selectedType, onHover,
+  onToggle, selectedType, onHover, onSelectDate,
 }: YearViewProps) {
   const heatmapData = useMemo(() => {
     if (!showHeatmap || compareHolidays.length === 0) return undefined
@@ -76,6 +77,7 @@ export function YearView({
           onToggle={onToggle}
           selectedType={selectedType}
           onHover={onHover}
+          onSelectDate={onSelectDate}
         />
       ))}
     </div>

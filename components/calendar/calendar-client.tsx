@@ -10,6 +10,7 @@ import { useVacations, useToggleVacation } from '@/hooks/use-vacations'
 import { useHolidays, useCompareHolidays, useSubdivisions, useCountries, useCountryHolidays } from '@/hooks/use-holidays'
 import { detectBridgeDays } from '@/lib/bridge-days'
 import { loadConfig, saveConfig, configToEntries } from '@/lib/config'
+import { X } from 'lucide-react'
 import { parseISO, isSameDay, format, eachDayOfInterval, isWeekend } from 'date-fns'
 import type { EntryType, VacationEntry, Holiday, LocalConfig } from '@/types'
 import type { DayInfo } from '@/components/calendar/day-cell'
@@ -78,6 +79,51 @@ function computeOverBudget(
   return result
 }
 
+function getDateKey(date: Date): string {
+  return format(date, 'yyyy-MM-dd')
+}
+
+function getHolidayForDate(holidays: Holiday[], date: Date): Holiday | undefined {
+  return holidays.find(h => {
+    const start = parseISO(h.startDate)
+    const end = parseISO(h.endDate)
+    return date >= start && date <= end
+  })
+}
+
+function getHolidayName(h: Holiday): string {
+  return h.name.find(n => n.language === 'DE')?.text ?? h.name[0]?.text ?? ''
+}
+
+function hasVisibleDayInfo(day: DayInfo | null): day is DayInfo {
+  return Boolean(day?.publicHoliday || day?.schoolHoliday || day?.isBridgeDay || day?.entry)
+}
+
+function DayInfoDetails({ day }: { day: DayInfo }) {
+  return (
+    <>
+      <p className="font-medium">{format(day.date, 'dd.MM.yyyy (EEEE)')}</p>
+      {day.publicHoliday && <p className="text-green-600">🎉 {day.publicHoliday}</p>}
+      {day.schoolHoliday && <p className="text-yellow-600">🏫 {day.schoolHoliday}</p>}
+      {day.isBridgeDay && day.bridgeDayInfo && (
+        <div className="text-orange-500">
+          <p>🌉 Brückentag</p>
+          <p className="text-xs">Verbindet {day.bridgeDayInfo.connectsBeforeName} mit {day.bridgeDayInfo.connectsAfterName}</p>
+          <p className="text-xs font-medium">1 Tag Urlaub → {day.bridgeDayInfo.freeDaysGained} Tage frei</p>
+        </div>
+      )}
+      {day.isBridgeDay && !day.bridgeDayInfo && <p className="text-orange-500">🌉 Brückentag</p>}
+      {day.entry && (
+        <p className="text-blue-500">
+          {day.entry.type === 'vacation' ? '🏖️ Urlaub' :
+           day.entry.type === 'gleittag' ? '⏰ Gleittag' :
+           `📝 ${day.entry.title ?? 'Notiz'}`}
+        </p>
+      )}
+    </>
+  )
+}
+
 export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }: CalendarClientProps) {
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
@@ -85,6 +131,7 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
   const [config, setConfig] = useState<LocalConfig | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [hoveredDay, setHoveredDay] = useState<DayInfo | null>(null)
+  const [activeDayKey, setActiveDayKey] = useState<string | null>(null)
   const [defaultNoteText, setDefaultNoteText] = useState('')
 
   useEffect(() => { if (!isLoggedIn) setConfig(loadConfig()) }, [isLoggedIn])
@@ -146,6 +193,10 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
   const vacationDaysUsed = entries.filter(e => e.type === 'vacation').length
   const gleittageCount = entries.filter(e => e.type === 'gleittag').length
   const remainingWorkDays = countWorkDays(year, entries, publicHolidays)
+  const vacationDateSet = useMemo(
+    () => new Set(entries.filter(e => e.type === 'vacation').map(e => e.date.split('T')[0])),
+    [entries]
+  )
 
   const updateConfig = useCallback((patch: Partial<LocalConfig>) => {
     if (isLoggedIn) return
@@ -156,9 +207,20 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
     })
   }, [isLoggedIn])
 
+  const updateLocalEntries = useCallback((updater: (entries: LocalConfig['entries']) => LocalConfig['entries']) => {
+    if (isLoggedIn) return
+    setConfig(prev => {
+      const base = prev ?? loadConfig()
+      const next = { ...base, entries: updater(base.entries) }
+      saveConfig(next)
+      return next
+    })
+  }, [isLoggedIn])
+
   const handleToggle = useCallback((date: Date, type: EntryType) => {
+    const dateKey = getDateKey(date)
     if (isLoggedIn) {
-      const dateStr = date.toISOString().split('T')[0] + 'T00:00:00.000Z'
+      const dateStr = `${dateKey}T00:00:00.000Z`
       const existing = serverEntries.find(e => e.type === type && isSameDay(parseISO(e.date), date))
       if (existing) { removeMutation.mutate(existing.id) }
       else {
@@ -167,23 +229,39 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
         addMutation.mutate({ date: dateStr, type, title })
       }
     } else {
-      if (!config) return
-      const dateStr = format(date, 'yyyy-MM-dd')
-      const existing = config.entries.findIndex(e => e.type === type && e.date === dateStr)
-      let newEntries: LocalConfig['entries']
-      if (existing >= 0) {
-        newEntries = config.entries.filter((_, i) => i !== existing)
-      } else {
-        let title: string | undefined
-        if (type === 'note') { title = defaultNoteText || prompt('Notiz-Text (optional):') || undefined }
-        newEntries = [...config.entries, { date: dateStr, type, title }]
-      }
-      updateConfig({ entries: newEntries })
+      const currentEntries = (config ?? loadConfig()).entries
+      const existing = currentEntries.find(e => e.type === type && e.date === dateKey)
+      const title = !existing && type === 'note'
+        ? defaultNoteText || prompt('Notiz-Text (optional):') || undefined
+        : undefined
+
+      updateLocalEntries(current => {
+        const currentExisting = current.findIndex(e => e.type === type && e.date === dateKey)
+        if (currentExisting >= 0) return current.filter((_, i) => i !== currentExisting)
+        return [...current, { date: dateKey, type, title }]
+      })
     }
-  }, [isLoggedIn, serverEntries, config, addMutation, removeMutation, updateConfig, defaultNoteText])
+  }, [isLoggedIn, serverEntries, config, addMutation, removeMutation, updateLocalEntries, defaultNoteText])
 
   const handleApplySuggestions = (dates: string[], type: EntryType) => {
-    for (const dateStr of dates) handleToggle(parseISO(dateStr), type)
+    const dateKeys = [...new Set(dates.map(date => date.split('T')[0]))]
+    if (dateKeys.length === 0) return
+
+    if (isLoggedIn) {
+      for (const dateKey of dateKeys) {
+        const exists = serverEntries.some(e => e.type === type && e.date.split('T')[0] === dateKey)
+        if (!exists) addMutation.mutate({ date: `${dateKey}T00:00:00.000Z`, type })
+      }
+      return
+    }
+
+    updateLocalEntries(current => {
+      const existingKeys = new Set(current.filter(e => e.type === type).map(e => e.date.split('T')[0]))
+      const additions = dateKeys
+        .filter(dateKey => !existingKeys.has(dateKey))
+        .map(dateKey => ({ date: dateKey, type }))
+      return additions.length > 0 ? [...current, ...additions] : current
+    })
   }
 
   const handleImport = (data: ImportData) => {
@@ -210,7 +288,7 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
 
   const handleRetryApi = () => { refetchHolidays() }
 
-  const existingVacationDates = entries.filter(e => e.type === 'vacation').map(e => e.date.split('T')[0])
+  const existingVacationDates = [...vacationDateSet]
   const existingNoteDates = entries.filter(e => e.type === 'note').map(e => e.date.split('T')[0])
 
   const combinedPublicHolidays = useMemo(() => {
@@ -221,6 +299,28 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
     }
     return merged
   }, [publicHolidays, allCountryHolidays])
+
+  const activeDayInfo = useMemo(() => {
+    if (!activeDayKey) return null
+
+    const date = parseISO(activeDayKey)
+    const entry = entries.find(e => e.type === 'vacation' && e.date.split('T')[0] === activeDayKey)
+      ?? entries.find(e => e.type === 'gleittag' && e.date.split('T')[0] === activeDayKey)
+      ?? entries.find(e => e.type === 'note' && e.date.split('T')[0] === activeDayKey)
+    const publicHoliday = getHolidayForDate(combinedPublicHolidays, date)
+    const schoolHoliday = getHolidayForDate(schoolHolidays, date)
+    const bridgeDayInfo = bridgeDayMap.get(activeDayKey)
+    const day: DayInfo = {
+      date,
+      publicHoliday: publicHoliday ? getHolidayName(publicHoliday) : undefined,
+      schoolHoliday: schoolHoliday ? getHolidayName(schoolHoliday) : undefined,
+      isBridgeDay: showBridgeDays && bridgeDaySet.has(activeDayKey),
+      bridgeDayInfo,
+      entry,
+    }
+
+    return hasVisibleDayInfo(day) ? day : null
+  }, [activeDayKey, entries, combinedPublicHolidays, schoolHolidays, bridgeDayMap, bridgeDaySet, showBridgeDays])
 
   return (
     <div className="min-h-screen bg-background">
@@ -233,7 +333,7 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
         noteDates={existingNoteDates}
         onApply={handleApplySuggestions}
       />
-      <main className="container py-4 space-y-4">
+      <main className="container space-y-4 py-3 sm:py-4">
         {!isLoggedIn && (
           <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-900/20 p-3 text-sm text-blue-800 dark:text-blue-200">
             💡 Du planst gerade lokal.{' '}
@@ -299,29 +399,27 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
             overBudgetDates={overBudgetDates}
             onToggle={handleToggle} selectedType={selectedType}
             onHover={setHoveredDay}
+            onSelectDate={(date) => setActiveDayKey(getDateKey(date))}
           />
         )}
 
         {hoveredDay && (
-          <div className="fixed bottom-4 right-4 z-50 bg-card border rounded-lg shadow-lg p-3 text-sm max-w-xs">
-            <p className="font-medium">{format(hoveredDay.date, 'dd.MM.yyyy (EEEE)')}</p>
-            {hoveredDay.publicHoliday && <p className="text-green-600">🎉 {hoveredDay.publicHoliday}</p>}
-            {hoveredDay.schoolHoliday && <p className="text-yellow-600">🏫 {hoveredDay.schoolHoliday}</p>}
-            {hoveredDay.isBridgeDay && hoveredDay.bridgeDayInfo && (
-              <div className="text-orange-500">
-                <p>🌉 Brückentag</p>
-                <p className="text-xs">Verbindet {hoveredDay.bridgeDayInfo.connectsBeforeName} mit {hoveredDay.bridgeDayInfo.connectsAfterName}</p>
-                <p className="text-xs font-medium">1 Tag Urlaub → {hoveredDay.bridgeDayInfo.freeDaysGained} Tage frei</p>
-              </div>
-            )}
-            {hoveredDay.isBridgeDay && !hoveredDay.bridgeDayInfo && <p className="text-orange-500">🌉 Brückentag</p>}
-            {hoveredDay.entry && (
-              <p className="text-blue-500">
-                {hoveredDay.entry.type === 'vacation' ? '🏖️ Urlaub' :
-                 hoveredDay.entry.type === 'gleittag' ? '⏰ Gleittag' :
-                 `📝 ${hoveredDay.entry.title ?? 'Notiz'}`}
-              </p>
-            )}
+          <div className="pointer-events-none fixed bottom-4 right-4 z-50 hidden max-w-xs rounded-lg border border-border bg-card p-3 text-sm text-card-foreground shadow-lg supports-[bottom:env(safe-area-inset-bottom)]:bottom-[calc(1rem+env(safe-area-inset-bottom))] md:block">
+            <DayInfoDetails day={hoveredDay} />
+          </div>
+        )}
+
+        {activeDayInfo && (
+          <div className="fixed inset-x-3 z-50 rounded-lg border border-border bg-card p-3 pr-12 text-sm text-card-foreground shadow-lg supports-[bottom:env(safe-area-inset-bottom)]:bottom-[calc(0.75rem+env(safe-area-inset-bottom))] bottom-3 md:hidden">
+            <DayInfoDetails day={activeDayInfo} />
+            <button
+              type="button"
+              onClick={() => setActiveDayKey(null)}
+              className="absolute right-2 top-2 inline-flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              aria-label="Tagesinfo schließen"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         )}
 

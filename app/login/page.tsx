@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button'
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="w-full max-w-sm space-y-6 p-8 rounded-xl border border-border bg-card shadow-lg">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-6">
+      <div className="w-full max-w-sm space-y-6 rounded-xl border border-border bg-card p-6 shadow-lg sm:p-8">
         <div className="text-center space-y-2">
           <h1 className="text-3xl font-bold tracking-tight">Urlaubsplaner</h1>
           <p className="text-muted-foreground text-sm">

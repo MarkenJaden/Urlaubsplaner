@@ -33,6 +33,7 @@ interface DayCellProps {
   onToggle: (date: Date, type: EntryType) => void
   selectedType: EntryType
   onHover?: (info: DayInfo | null) => void
+  onSelectDate?: (date: Date) => void
 }
 
 function getHolidayForDate(holidays: Holiday[], date: Date): Holiday | undefined {
@@ -51,7 +52,7 @@ export function DayCell({
   date, entries, publicHolidays, schoolHolidays,
   isWeekend, isToday, isOtherMonth, isPast, isOverBudget,
   heatmapValue, showHeatmap, isBridgeDay, bridgeDayInfo,
-  showBridgeDays, showOtherMonthDays, onToggle, selectedType, onHover,
+  showBridgeDays, showOtherMonthDays, onToggle, selectedType, onHover, onSelectDate,
 }: DayCellProps) {
   if (isOtherMonth && !showOtherMonthDays) {
     return <div className="aspect-square" />
@@ -90,25 +91,33 @@ export function DayCell({
     return parts.join('\n')
   }
 
+  const buildDayInfo = (): DayInfo => ({
+    date,
+    publicHoliday: publicHoliday ? getHolidayName(publicHoliday) : undefined,
+    schoolHoliday: schoolHoliday ? getHolidayName(schoolHoliday) : undefined,
+    isBridgeDay: showBridgeDays && isBridgeDay,
+    bridgeDayInfo,
+    entry: vacation ?? gleittag ?? note ?? undefined,
+  })
+
   const handleMouseEnter = () => {
-    onHover?.({
-      date,
-      publicHoliday: publicHoliday ? getHolidayName(publicHoliday) : undefined,
-      schoolHoliday: schoolHoliday ? getHolidayName(schoolHoliday) : undefined,
-      isBridgeDay,
-      bridgeDayInfo,
-      entry: vacation ?? gleittag ?? note ?? undefined,
-    })
+    if (window.matchMedia('(hover: none)').matches) return
+    onHover?.(buildDayInfo())
   }
 
   const handleMouseLeave = () => onHover?.(null)
+
+  const handleClick = () => {
+    onToggle(date, selectedType)
+    if (window.matchMedia('(hover: none)').matches) onSelectDate?.(date)
+  }
 
   return (
     <button
       className={cn(
         'day-cell relative w-full aspect-square flex flex-col items-center justify-center',
-        'rounded-md text-xs font-medium transition-all duration-150',
-        'min-h-[2.25rem] sm:min-h-0',
+        'rounded-md text-sm font-medium transition-all duration-150 sm:text-xs',
+        'min-h-11 sm:min-h-0',
         'hover:ring-2 hover:ring-primary/50 hover:z-10 hover:scale-105',
         'active:scale-95',
         'focus:outline-none focus:ring-2 focus:ring-primary',
@@ -125,10 +134,11 @@ export function DayCell({
         showBridgeDays && isBridgeDay && !hasEntry && !publicHoliday && 'ring-2 ring-orange-400 bg-orange-50 dark:bg-orange-900/20',
       )}
       style={!hasEntry && !publicHoliday && !schoolHoliday && !(showBridgeDays && isBridgeDay) ? heatmapStyle : {}}
-      onClick={() => onToggle(date, selectedType)}
+      onClick={handleClick}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       title={buildTitle()}
+      aria-label={buildTitle() || format(date, 'dd.MM.yyyy')}
     >
       <span className={cn('leading-none', isToday && !hasEntry && 'text-primary font-bold')}>
         {format(date, 'd')}

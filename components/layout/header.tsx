@@ -12,13 +12,13 @@ interface HeaderProps {
 export function Header({ isLoggedIn }: HeaderProps) {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-14 items-center justify-between">
-        <Link href="/" className="flex items-center gap-2 font-semibold text-lg">
+      <div className="container flex h-14 items-center justify-between gap-3">
+        <Link href="/" className="flex min-w-0 items-center gap-2 text-base font-semibold sm:text-lg">
           <span className="text-2xl">🏖️</span>
-          <span>Urlaubsplaner</span>
+          <span className="truncate">Urlaubsplaner</span>
         </Link>
 
-        <nav className="flex items-center gap-2">
+        <nav className="flex shrink-0 items-center gap-1 sm:gap-2">
           {isLoggedIn ? (
             <>
               <Button variant="ghost" size="icon" asChild title="Einstellungen">
@@ -36,9 +36,9 @@ export function Header({ isLoggedIn }: HeaderProps) {
               </Button>
             </>
           ) : (
-            <Button variant="ghost" size="sm" asChild>
+            <Button variant="ghost" size="sm" className="px-2 sm:px-3" asChild>
               <Link href="/login">
-                <LogIn className="h-4 w-4 mr-1" />
+                <LogIn className="h-4 w-4" />
                 Anmelden
               </Link>
             </Button>

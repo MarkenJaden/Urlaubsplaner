@@ -91,13 +91,13 @@ export function SettingsPanel({
       </button>
 
       {open && (
-        <div className="p-3 pt-0 space-y-4 text-sm">
+        <div className="space-y-4 p-3 pt-0 text-sm">
           {apiError && (
-            <div className="flex items-center gap-2 rounded-md border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 p-2 text-yellow-800 dark:text-yellow-200">
+            <div className="flex flex-col gap-2 rounded-md border border-yellow-300 bg-yellow-50 p-2 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-200 sm:flex-row sm:items-center">
               <AlertTriangle className="h-4 w-4 flex-shrink-0" />
               <span className="flex-1">OpenHolidays API nicht erreichbar. Feiertage/Ferien nicht verfügbar.</span>
               {onRetryApi && (
-                <Button size="sm" variant="outline" onClick={onRetryApi}>
+                <Button size="sm" variant="outline" onClick={onRetryApi} className="w-full sm:w-auto">
                   <RefreshCw className="h-3 w-3 mr-1" /> Erneut versuchen
                 </Button>
               )}
@@ -152,30 +152,30 @@ export function SettingsPanel({
             <div className="space-y-2">
               <h4 className="font-medium text-muted-foreground">Berechnungsoptionen</h4>
 
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex min-h-11 cursor-pointer items-start gap-2 py-1">
                 <input type="checkbox" checked={countWeekendsAsVacation}
-                  onChange={e => onCountWeekendsChange(e.target.checked)} className="rounded" />
+                  onChange={e => onCountWeekendsChange(e.target.checked)} className="mt-1 h-5 w-5 rounded" />
                 <span className="text-xs">Wochenende als Urlaubstage zählen</span>
               </label>
 
-              <label className="flex items-center gap-2 cursor-pointer">
+              <label className="flex min-h-11 cursor-pointer items-start gap-2 py-1">
                 <input type="checkbox" checked={halfDaysChristmas}
-                  onChange={e => onHalfDaysChange(e.target.checked)} className="rounded" />
+                  onChange={e => onHalfDaysChange(e.target.checked)} className="mt-1 h-5 w-5 rounded" />
                 <span className="text-xs">24./31.12. als halbe Tage zählen (0,5)</span>
               </label>
 
-              <div className="mt-3">
-                <label className="text-xs text-muted-foreground">Urlaubsanspruch (Tage)</label>
+              <div className="mt-3 space-y-1">
+                <label className="block text-xs text-muted-foreground">Urlaubsanspruch (Tage)</label>
                 <input type="number" min={0} max={60} value={vacationDaysTotal}
                   onChange={e => onVacationDaysChange(Number(e.target.value) || 30)}
-                  className="w-20 rounded-md border border-input bg-background px-2 py-1 text-sm text-right" />
+                  className="min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-right text-sm sm:w-24" />
               </div>
 
               <div className="mt-3">
                 <label className="text-xs text-muted-foreground">Standard-Notiztext</label>
                 <input type="text" placeholder="z.B. Arzt, Geburtstag" value={defaultNoteText}
                   onChange={e => onDefaultNoteTextChange(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm" />
+                  className="min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
                 <p className="text-xs text-muted-foreground mt-0.5">Wird beim Erstellen neuer Notizen verwendet</p>
               </div>
             </div>
