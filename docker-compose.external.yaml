@@ -14,14 +14,6 @@ services:
       - DATABASE_URL=${DATABASE_URL:?}
     ports:
       - "3000"
-    labels:
-      - traefik.enable=true
-      - traefik.http.services.urlaubsplaner-svc.loadbalancer.server.port=3000
-      - traefik.http.routers.http-0-oijmrvqenai4edth8wih76xs-urlaubsplaner.service=urlaubsplaner-svc
-      - traefik.http.routers.http-1-oijmrvqenai4edth8wih76xs-urlaubsplaner.service=urlaubsplaner-svc
-      - traefik.http.routers.https-0-oijmrvqenai4edth8wih76xs-urlaubsplaner.service=urlaubsplaner-svc
-      - traefik.http.routers.https-1-oijmrvqenai4edth8wih76xs-urlaubsplaner.service=urlaubsplaner-svc
-      - traefik.docker.network=markenjaden
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
       interval: 30s
