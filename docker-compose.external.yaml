@@ -7,13 +7,12 @@ services:
     environment:
       - NEXTAUTH_URL=${SERVICE_URL_URLAUBSPLANER}
       - NEXTAUTH_SECRET=${SERVICE_BASE64_URLAUBSPLANER}
-      - AUTH_KEYCLOAK_ID=${AUTH_KEYCLOAK_ID:?}
-      - AUTH_KEYCLOAK_SECRET=${AUTH_KEYCLOAK_SECRET:?}
-      - AUTH_KEYCLOAK_ISSUER=${AUTH_KEYCLOAK_ISSUER:?https://auth.samt-con.de/realms/culture-fusion}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
-      - DATABASE_URL=${DATABASE_URL:?}
+      - AUTH_KEYCLOAK_ID=${AUTH_KEYCLOAK_ID}
+      - AUTH_KEYCLOAK_SECRET=${AUTH_KEYCLOAK_SECRET}
+      - AUTH_KEYCLOAK_ISSUER=${AUTH_KEYCLOAK_ISSUER:-https://auth.samt-con.de/realms/culture-fusion}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-urlaubsplaner.me}
+      - DATABASE_URL=${DATABASE_URL}
     networks:
-      - default
       - markenjaden
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
