@@ -1,5 +1,7 @@
 # External: PostgreSQL und Keycloak laufen extern.
 # Für Coolify: DATABASE_URL und Keycloak-Credentials in der UI setzen.
+# Keine custom networks definieren — Coolify managed das automatisch.
+# "Connect to Predefined Network" in Coolify UI aktivieren für DB-Zugriff.
 
 services:
   urlaubsplaner:
@@ -12,17 +14,9 @@ services:
       - AUTH_KEYCLOAK_ISSUER=${AUTH_KEYCLOAK_ISSUER:-https://auth.samt-con.de/realms/culture-fusion}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-urlaubsplaner.me}
       - DATABASE_URL=${DATABASE_URL}
-    networks:
-      - markenjaden
-    labels:
-      - traefik.docker.network=markenjaden
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 30s
-
-networks:
-  markenjaden:
-    external: true
