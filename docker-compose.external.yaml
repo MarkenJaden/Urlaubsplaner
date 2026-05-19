@@ -14,6 +14,8 @@ services:
       - AUTH_KEYCLOAK_ISSUER=${AUTH_KEYCLOAK_ISSUER:-https://auth.samt-con.de/realms/culture-fusion}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-urlaubsplaner.me}
       - DATABASE_URL=${DATABASE_URL}
+    labels:
+      - traefik.docker.network=markenjaden
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
       interval: 30s
