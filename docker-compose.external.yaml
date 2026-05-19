@@ -14,6 +14,8 @@ services:
       - DATABASE_URL=${DATABASE_URL}
     networks:
       - markenjaden
+    labels:
+      - traefik.docker.network=markenjaden
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
       interval: 30s
