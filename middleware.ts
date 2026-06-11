@@ -26,5 +26,8 @@ export default auth((req) => {
 })
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  // Skip the auth() wrapper for static assets and the liveness probe.
+  // /api/health must stay reachable even when NEXTAUTH_SECRET / Keycloak
+  // are misconfigured, otherwise the container is marked unhealthy.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/health).*)'],
 }
