@@ -1,11 +1,18 @@
 # External: PostgreSQL und Keycloak laufen extern.
 # Für Coolify: DATABASE_URL und Keycloak-Credentials in der UI setzen.
-# Keine custom networks definieren — Coolify managed das automatisch.
-# "Connect to Predefined Network" in Coolify UI aktivieren für DB-Zugriff.
+#
+# Routing-Konvention (Coolify dockercompose build pack):
+#   - Service-Name = Key in docker_compose_domains ("urlaubsplaner")
+#   - "expose: [PORT]" macht den Port intern erreichbar, ohne ihn am Host zu binden
+#   - KEINE eigenen Traefik-Labels — Coolify generiert Router/Service/Network-Labels
+#     automatisch aus docker_compose_domains und hängt den Container ins richtige
+#     Proxy-Netzwerk ("coolify" bzw. das in der UI ausgewählte Predefined Network).
 
 services:
   urlaubsplaner:
     build: .
+    expose:
+      - "3000"
     environment:
       - NEXTAUTH_URL=${SERVICE_URL_URLAUBSPLANER}
       - NEXTAUTH_SECRET=${SERVICE_BASE64_URLAUBSPLANER}
@@ -14,8 +21,6 @@ services:
       - AUTH_KEYCLOAK_ISSUER=${AUTH_KEYCLOAK_ISSUER:-https://auth.samt-con.de/realms/culture-fusion}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-urlaubsplaner.me}
       - DATABASE_URL=${DATABASE_URL}
-    labels:
-      - traefik.docker.network=markenjaden
     healthcheck:
       # Use node instead of wget: node is guaranteed to exist in the runtime
       # image and gives us full HTTP status-code control. The /api/health
