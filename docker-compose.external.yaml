@@ -11,8 +11,8 @@
 services:
   urlaubsplaner:
     build: .
-    expose:
-      - "3000"
+    ports:
+      - "3000:3000"
     environment:
       - NEXTAUTH_URL=${SERVICE_URL_URLAUBSPLANER}
       - NEXTAUTH_SECRET=${SERVICE_BASE64_URLAUBSPLANER}
