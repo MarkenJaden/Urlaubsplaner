@@ -18,3 +18,7 @@ export async function getUserByToken(calendarToken: string) {
     include: { vacations: true }
   })
 }
+
+export async function getUserFromSession(session: { user: { id: string } }) {
+  return prisma.user.findUniqueOrThrow({ where: { id: session.user.id } })
+}

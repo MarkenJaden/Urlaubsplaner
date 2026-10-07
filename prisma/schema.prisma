@@ -10,6 +10,10 @@ datasource db {
 model User {
   id            String          @id @default(cuid())
   keycloakId    String          @unique
+  username      String?         @unique
+  passwordHash  String?
+  recoveryHash  String?
+  sessionVersion Int            @default(0)
   email         String?
   name          String?
   calendarToken String          @unique @default(cuid())
@@ -32,4 +36,12 @@ model VacationEntry {
 
   @@unique([userId, date, type])
   @@index([userId, year])
+}
+
+model RateLimit {
+  key       String   @id
+  hits      Int
+  expiresAt DateTime
+
+  @@index([expiresAt])
 }

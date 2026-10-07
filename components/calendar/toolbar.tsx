@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef } from 'react'
-import { ChevronLeft, ChevronRight, Sparkles, Download, Upload, Printer, Settings2, MoreHorizontal } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Sparkles, Download, Upload, Printer, Settings2, MoreHorizontal, Clipboard, FileJson, CalendarDays, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -9,7 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import type { EntryType, VacationEntry, LocalConfig } from '@/types'
@@ -117,14 +117,14 @@ export function Toolbar({
   }
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3 md:flex-row md:flex-wrap md:items-center md:justify-between">
+    <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-3 shadow-sm md:flex-row md:flex-wrap md:items-center md:justify-between">
       {/* Year Navigation */}
       <div className="grid grid-cols-[2.75rem_1fr_2.75rem] items-center gap-2 md:flex md:w-auto">
-        <Button variant="ghost" size="icon" onClick={() => onYearChange(year - 1)}>
+        <Button variant="ghost" size="icon" onClick={() => onYearChange(year - 1)} aria-label="Vorheriges Jahr">
           <ChevronLeft className="h-4 w-4" />
         </Button>
         <span className="text-center text-xl font-bold md:w-16">{year}</span>
-        <Button variant="ghost" size="icon" onClick={() => onYearChange(year + 1)}>
+        <Button variant="ghost" size="icon" onClick={() => onYearChange(year + 1)} aria-label="Nächstes Jahr">
           <ChevronRight className="h-4 w-4" />
         </Button>
       </div>
@@ -133,16 +133,16 @@ export function Toolbar({
       <div className="grid grid-cols-3 gap-1 md:flex">
         <Button size="sm" variant={selectedType === 'vacation' ? 'default' : 'outline'}
           onClick={() => onTypeChange('vacation')}
-          className={selectedType === 'vacation' ? 'bg-blue-500 hover:bg-blue-600' : ''}>
+          aria-pressed={selectedType === 'vacation'} className={selectedType === 'vacation' ? 'bg-blue-500 hover:bg-blue-600' : ''}>
           Urlaub
         </Button>
         <Button size="sm" variant={selectedType === 'gleittag' ? 'default' : 'outline'}
           onClick={() => onTypeChange('gleittag')}
-          className={selectedType === 'gleittag' ? 'bg-purple-500 hover:bg-purple-600' : ''}>
+          aria-pressed={selectedType === 'gleittag'} className={selectedType === 'gleittag' ? 'bg-purple-500 hover:bg-purple-600' : ''}>
           Gleittag
         </Button>
         <Button size="sm" variant={selectedType === 'note' ? 'default' : 'outline'}
-          onClick={() => onTypeChange('note')}>
+          onClick={() => onTypeChange('note')} aria-pressed={selectedType === 'note'}>
           Notiz
         </Button>
       </div>
@@ -169,7 +169,7 @@ export function Toolbar({
 
       {/* Actions */}
       <TooltipProvider delayDuration={0}>
-        <div className="grid grid-cols-[1fr_2.75rem] gap-2 md:hidden">
+        <div className="grid grid-cols-[1fr_2.75rem] gap-2 md:flex md:items-center">
           <Button size="sm" variant="outline" onClick={onOpenSuggestions}>
             <Sparkles className="h-4 w-4" />
             Planen
@@ -186,15 +186,15 @@ export function Toolbar({
                 CSV Export
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleExportClipboard}>
-                <span className="w-4 text-center">📋</span>
+                <Clipboard className="h-4 w-4" />
                 In Zwischenablage
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleExportJSON}>
-                <span className="w-4 text-center">{'{}'}</span>
+                <FileJson className="h-4 w-4" />
                 JSON Export
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleExportICS}>
-                <span className="w-4 text-center">📅</span>
+                <CalendarDays className="h-4 w-4" />
                 ICS Kalender Export
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleExportConfig}>
@@ -210,48 +210,15 @@ export function Toolbar({
                 Daten importieren
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleConfigImportClick}>
-                <span className="w-4 text-center">⚙️</span>
+                <Settings2 className="h-4 w-4" />
                 Konfiguration importieren
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleReset} className="text-red-500 focus:text-red-600">
-                <span className="w-4 text-center">🗑️</span>
+                <Trash2 className="h-4 w-4" />
                 Planung zurücksetzen
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-        <div className="hidden items-center gap-1 md:flex">
-          <Button size="sm" variant="outline" onClick={onOpenSuggestions}>
-            <Sparkles className="h-4 w-4" />
-            Planen
-          </Button>
-          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportCSV}>
-            <Download className="h-4 w-4" />
-          </Button></TooltipTrigger><TooltipContent>CSV Export</TooltipContent></Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportClipboard}>
-            📋
-          </Button></TooltipTrigger><TooltipContent>In Zwischenablage</TooltipContent></Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportJSON}>
-            {'{}'}
-          </Button></TooltipTrigger><TooltipContent>JSON Export</TooltipContent></Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportICS}>
-            📅
-          </Button></TooltipTrigger><TooltipContent>ICS Kalender Export</TooltipContent></Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleExportConfig}>
-            <Settings2 className="h-4 w-4" />
-          </Button></TooltipTrigger><TooltipContent>Konfiguration exportieren</TooltipContent></Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handlePrint}>
-            <Printer className="h-4 w-4" />
-          </Button></TooltipTrigger><TooltipContent>Drucken / PDF</TooltipContent></Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleImportClick}>
-            <Upload className="h-4 w-4" />
-          </Button></TooltipTrigger><TooltipContent>Daten importieren</TooltipContent></Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleConfigImportClick}>
-            ⚙️
-          </Button></TooltipTrigger><TooltipContent>Konfiguration importieren</TooltipContent></Tooltip>
-          <Tooltip><TooltipTrigger asChild><Button size="sm" variant="ghost" onClick={handleReset} className="text-red-500 hover:text-red-600">
-            🗑️
-          </Button></TooltipTrigger><TooltipContent>Planung zurücksetzen</TooltipContent></Tooltip>
         </div>
         <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
         <input ref={configInputRef} type="file" accept=".json" className="hidden" onChange={handleConfigImportFile} />

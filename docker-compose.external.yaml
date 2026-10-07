@@ -1,4 +1,4 @@
-# External: PostgreSQL und Keycloak laufen extern.
+# External: PostgreSQL is external. Keycloak is optional during legacy account migration.
 # Für Coolify: DATABASE_URL und Keycloak-Credentials in der UI setzen.
 #
 # Routing-Konvention (Coolify dockercompose build pack):
@@ -14,9 +14,9 @@ services:
     environment:
       - NEXTAUTH_URL=${SERVICE_URL_URLAUBSPLANER}
       - NEXTAUTH_SECRET=${SERVICE_BASE64_URLAUBSPLANER}
-      - AUTH_KEYCLOAK_ID=${AUTH_KEYCLOAK_ID}
-      - AUTH_KEYCLOAK_SECRET=${AUTH_KEYCLOAK_SECRET}
-      - AUTH_KEYCLOAK_ISSUER=${AUTH_KEYCLOAK_ISSUER:-https://auth.samt-con.de/realms/culture-fusion}
+      - AUTH_KEYCLOAK_ID=${AUTH_KEYCLOAK_ID:-}
+      - AUTH_KEYCLOAK_SECRET=${AUTH_KEYCLOAK_SECRET:-}
+      - AUTH_KEYCLOAK_ISSUER=${AUTH_KEYCLOAK_ISSUER:-}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-urlaubsplaner.me}
       - DATABASE_URL=${DATABASE_URL}
     healthcheck:

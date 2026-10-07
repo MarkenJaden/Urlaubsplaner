@@ -35,4 +35,11 @@ yarn-error.log*
 next-env.d.ts
 
 # prisma
-prisma/migrations
+
+
+# local analysis and browser output
+graphify-out/
+.code-review-graph/
+.superpowers/
+playwright-report/
+test-results/

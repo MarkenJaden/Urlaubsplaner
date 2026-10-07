@@ -8,6 +8,10 @@ export function useVacations(year: number, enabled = true) {
   return useQuery<VacationEntry[]>({
     queryKey: ['vacations', year],
     enabled,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: 'always',
+    staleTime: 0,
     queryFn: async () => {
       const res = await fetch(`/api/vacations?year=${year}`)
       if (!res.ok) throw new Error('Failed to fetch vacations')
@@ -54,7 +58,7 @@ export function useToggleVacation(year: number, enabled = true) {
       return { previous }
     },
     onError: (_error, _variables, context) => {
-      if (context?.previous) queryClient.setQueryData(queryKey, context.previous)
+      queryClient.setQueryData(queryKey, context?.previous ?? [])
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey })
@@ -74,7 +78,7 @@ export function useToggleVacation(year: number, enabled = true) {
       return { previous }
     },
     onError: (_error, _variables, context) => {
-      if (context?.previous) queryClient.setQueryData(queryKey, context.previous)
+      queryClient.setQueryData(queryKey, context?.previous ?? [])
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey })

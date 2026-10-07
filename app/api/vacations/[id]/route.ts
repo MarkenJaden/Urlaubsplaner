@@ -1,24 +1,22 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { getOrCreateUser } from '@/lib/user'
+import { getUserFromSession } from '@/lib/user'
 import { NextResponse } from 'next/server'
+import { validOrigin, jsonError } from '@/lib/request'
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  if (!validOrigin(request)) return jsonError('Ungültige Anfrage.', 403)
   const session = await auth()
-  if (!session?.user?.keycloakId) {
+  if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const { id } = await params
 
-  const user = await getOrCreateUser(
-    session.user.keycloakId,
-    session.user.email,
-    session.user.name
-  )
+  const user = await getUserFromSession(session)
 
   const entry = await prisma.vacationEntry.findUnique({ where: { id } })
   if (!entry || entry.userId !== user.id) {

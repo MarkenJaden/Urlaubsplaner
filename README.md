@@ -1,108 +1,129 @@
-# Urlaubsplaner - The Smart Vacation Planner
+# Urlaubsplaner
 
-![Urlaubsplaner Logo](Server/wwwroot/images/logo.png)
+Personal vacation planning with German public holidays, school holidays, bridge
+days and optional synchronization between your own devices.
 
-**Maximize your time off! This intelligent vacation planner helps you find the optimal vacation periods by cleverly utilizing public holidays and bridge days ("Brückentage").**
+Live application: https://urlaubsplaner.me/
 
-This application is designed for users in Germany, providing a powerful tool to visualize and plan vacations for the entire year. It fetches data for public holidays and school holidays, calculates the best opportunities to use your vacation days, and presents everything in an intuitive, interactive calendar.
+## Stack
 
-**Live:** https://urlaubsplaner.me/
-<!-- ![Urlaubsplaner Screenshot](docs/screenshot.gif) -->
+Next.js 15, React 19, TypeScript, Auth.js, Prisma/PostgreSQL, React Query,
+Tailwind/Radix UI and Lucide icons. Holiday data comes from OpenHolidays API.
 
----
+## Local development
 
-## ✨ Features
+Use Node.js 22 and PostgreSQL. Install with `npm ci`, configure the database and
+an authentication secret in your local environment, then run:
 
-- **Interactive Year-Round Calendar:** View public holidays, school holidays, and your planned vacation days for the entire year at a glance.
-- **Smart Vacation Suggestions:** Get AI-powered recommendations for the most efficient use of your vacation days. The planner can create a full plan from scratch, extend your existing selections, or plan out the remainder of the year.
-- **Bridge Day (Brückentag) Calculation:** Automatically identifies and highlights "bridge days" (days falling between a public holiday and a weekend) to help you get the longest possible time off with the fewest vacation days.
-- **Multi-Region Support:** Plan around holidays in any of Germany's 16 federal states (`Bundesländer`).
-- **International Holidays:** Optionally include public holidays from other countries in your planning.
-- **Customizable Day Counting:** Flexible options to control how vacation days are counted (e.g., ignore weekends/holidays, treat days between Christmas and New Year's as half-days).
-- **Vacation Day Tracking:** Keep a clear overview of your total, planned, and remaining vacation days.
-- **Responsive Design:** Fully functional on both desktop and mobile devices.
-- **Light & Dark Mode:** Automatically adapts to your system's theme preference.
+```sh
+npm run db:migrate
+npm run dev
+npm test
+npm run typecheck
+npm run build
+```
 
-## 🛠️ Tech Stack
+`DATABASE_URL` selects PostgreSQL. `AUTH_SECRET` (or the existing
+`NEXTAUTH_SECRET`) must be a securely generated secret. Configure `AUTH_URL`
+(or the existing `NEXTAUTH_URL`) with the public application origin.
+`ALLOWED_ORIGINS` lists trusted proxy hostnames for server actions and writes.
+Reverse proxies must replace incoming forwarded-host and forwarded-IP headers.
+Do not commit environment files or secrets.
 
-- **Framework:** .NET 9
-- **Frontend:** Blazor WebAssembly with Interactive Auto render mode.
-- **Backend:** ASP.NET Core
-- **UI Components:** [Radzen Blazor Components](https://blazor.radzen.com/)
-- **Holiday Data:** Powered by the free and open [OpenHolidays API](https://openholidaysapi.org/).
-- **Containerization:** Docker & Docker Compose
-- **CI/CD:** GitHub Actions for automated Docker image publishing to GitHub Container Registry (ghcr.io).
+## Personal accounts and synchronization
 
-## 🚀 Getting Started
+Guests can plan immediately; their plan stays in localStorage on that device.
+Optional local accounts use a username (3–32 characters) and a password (12–128
+characters). Passwords use salted scrypt; no external identity or email service
+is required. Save the recovery key in a password manager: it is displayed once.
+Recovery rotates that key and revokes all previous device sessions.
 
-You can run this project either directly using the .NET SDK or with Docker.
+Settings provide credential changes, sign-out on every device and explicit
+account deletion. There is no administrator role or shared editing in this release.
+Accounts synchronize vacations, notes and settings. Active devices refresh every
+15 seconds and on returning to the app. Concurrent preference changes merge;
+entry changes to the same date/type follow the latest committed write.
 
-### Prerequisites
+After logging in, choose **Lokalen Plan übernehmen** to import guest entries and
+settings. Existing server entries are preserved and repeated imports do not
+create duplicates. The local source remains available. Existing server settings
+win over conflicting imported settings.
 
-- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for containerized approach)
+Existing Keycloak users can use **Bestehendes Konto übernehmen**, then configure
+local credentials under **Mein Konto**. This keeps their existing user ID, entries
+and calendar token. Accounts are never linked automatically by email.
+The legacy provider is only offered while all three `AUTH_KEYCLOAK_ID`,
+`AUTH_KEYCLOAK_SECRET` and `AUTH_KEYCLOAK_ISSUER` variables are configured.
+Once every existing account has local credentials, those optional variables can
+be removed by the deployment administrator. Existing identity-service volumes
+must be retained according to the administrator's backup policy.
 
-### Running Locally with the .NET SDK
+## Holidays and controls
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/your-username/Urlaubsplaner.git
-    cd Urlaubsplaner
-    ```
-2.  **Navigate to the server project:**
-    ```bash
-    cd Server
-    ```
-3.  **Run the application:**
-    ```bash
-    dotnet run
-    ```
-4.  Open your browser and navigate to `https://localhost:5001` or `http://localhost:5000` (the exact URL will be shown in your console).
+Choose a home state for personal holiday calculations. The comparison supports
+all 16 German states and highlights overlapping school holidays. Each state is
+counted once per date; comparison holidays do not change your personal vacation
+budget. Holiday intervals include their final day and are clipped to the selected
+year. Missing data and provider failures are shown separately.
 
-### Running with Docker Compose
+## Outlook and Apple Calendar subscriptions
 
-This is the recommended way for a quick and isolated setup.
+Settings provide a private ICS subscription URL and an Apple Calendar shortcut.
+In Outlook on the web, use **Add calendar → Subscribe from web**. On iPhone, use
+**Calendar → Calendars → Add calendar → Add Subscription Calendar**.
+Importing a downloaded ICS file is a snapshot, not ongoing synchronization.
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/your-username/Urlaubsplaner.git
-    cd Urlaubsplaner
-    ```
-2.  **Start the application using Docker Compose:**
-    ```bash
-    docker-compose up --build -d
-    ```
-3.  Open your browser and navigate to `http://localhost:8080` or `https://localhost:8081`.
+The subscription requires no browser login. Anyone holding the private URL can
+read the included entries; do not share it publicly. Notes are excluded by
+default. Public/school holidays for the home state can be enabled and cover the
+previous, current and next year. Revoking the link invalidates the old URL; set
+up a new subscription on your devices afterward. Events retain stable UIDs and
+use date-only, exclusive next-day ends. If holiday fetching fails, the entire feed
+returns 503 rather than serving incomplete data that could appear as deletions.
 
-##  usage
+This is a read-only, one-way subscription. Make changes in Urlaubsplaner.
+Calendar apps control refresh timing; Outlook can take more than 24 hours.
+References: [Microsoft](https://support.microsoft.com/en-us/outlook/import-or-subscribe-to-a-calendar-in-outlook-com-or-outlook-on-the-web?ad=us&rs=en-us&ui=en-us),
+[Apple](https://support.apple.com/en-lamr/guide/iphone/iph3d1110d4/ios).
 
-1.  **Select Your State(s):** Use the "Bundesländer" dropdown to select the German federal state(s) you want to plan for. This will load the correct public and school holidays.
-2.  **Set Vacation Days:** Enter your total number of available vacation days for the year in the "Urlaubstage" numeric input.
-3.  **Toggle Views:** Use the checkboxes to show or hide Public Holidays (`Feiertage`), School Holidays (`Ferien`), and Bridge Days (`Brückentage`).
-4.  **Manual Planning:** Click directly on dates in the calendar to mark them as vacation days. The counters for "Planned" and "Remaining" days will update automatically.
-5.  **Get Smart Suggestions:**
-    - Click the **"Perfekten Urlaub vorschlagen"** (Suggest perfect vacation) button.
-    - Choose a strategy:
-        - `Vollständige Neuplanung`: Creates a brand new plan using all your vacation days, overwriting any current selections.
-        - `Bestehende Auswahl erweitern`: Finds the best additions to your currently selected days.
-        - `Restliches Jahr planen`: Creates a plan for the remaining part of the year from today.
-    - A dialog will appear with the optimized vacation blocks.
-    - Click **"Anwenden"** (Apply) to add these suggestions to your calendar.
+## Deployment and migrations
 
-## ⚙️ CI/CD
+Pushes to `master` trigger the Docker publication workflow in
+`.github/workflows/docker-publish.yml`. That publishes a tested image; activation
+by the hosting platform is a separate step and must be verified on the live site.
+The container listens on port 3000. `/api/health` is a liveness endpoint and does
+not prove database or login readiness.
 
-This project is configured with a GitHub Actions workflow in `.github/workflows/docker-publish.yml`. This workflow automates the following process:
+Container startup runs `scripts/migrate.mjs` and starts the app only after
+migration success. Empty databases receive the baseline and local-account
+migrations. Existing databases created with the previous `db push` startup are
+checked against the legacy column layout, types and nullability before baselining.
+Migration adds optional credentials and a session version; it keeps existing IDs,
+entries and calendar tokens. No data-loss flags or destructive resets are used.
+`npm run db:push` remains available only for deliberate disposable development.
 
-- **Triggers:** The workflow runs on every push to the `master` branch and whenever a new version tag (e.g., `v1.2.3`) is pushed.
-- **Build:** It builds the .NET application inside a Docker container.
-- **Push:** It pushes the final Docker image to the GitHub Container Registry (ghcr.io).
-- **Signing:** It signs the published Docker image using `sigstore/cosign` for enhanced security and verifiability.
+Take a database backup through your normal deployment process before rollout.
+For rollback, redeploy the previous application/image commit. The account
+migration is additive, so the old app can continue using its existing columns;
+new local-only accounts cannot sign into the old Keycloak-only app. Do not reverse
+migrations or remove database volumes as part of an application rollback.
 
-## 🙏 Acknowledgments
+`docker-compose.yaml` retains the former Keycloak services and credential
+fallbacks so unchanged standalone deployments can migrate existing accounts.
+After migrating every account, administrators can remove those services and
+provider variables while retaining their backups. The external
+compose file uses an existing PostgreSQL database and optionally an existing
+legacy identity provider. Compose volume names are unchanged.
 
-- This project relies heavily on the fantastic and free **[OpenHolidays API](https://openholidaysapi.org/)** for providing comprehensive holiday data.
-- The user interface is built with the excellent **[Radzen Blazor Components](https://blazor.radzen.com/)**.
+## Verification
 
-## 📄 License
+Unit/regression checks: `npm test`; type checking: `npm run typecheck`;
+production compilation: `npm run build`. The pre-existing `npm run lint` command
+requires an ESLint configuration and is not a verified lint gate in this checkout.
 
-This project is licensed under the MIT License. See the [LICENSE.txt](LICENSE.txt) file for details.
+`scripts/verify-integration.mjs` exercises registration, recovery, session
+revocation, two independent devices, concurrent preferences, idempotent guest
+imports, all-state holiday loading and unauthenticated calendar subscriptions.
+Run it only against an isolated local production build with a disposable database:
+`TEST_BASE_URL=http://127.0.0.1:3107 node scripts/verify-integration.mjs`.
+The script refuses non-loopback destinations and never prints credential values.

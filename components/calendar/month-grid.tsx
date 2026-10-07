@@ -19,6 +19,7 @@ interface MonthGridProps {
   publicHolidays: Holiday[]
   schoolHolidays: Holiday[]
   heatmapData?: Map<string, number>
+  comparisonByDate?: Map<string, string[]>
   showHeatmap: boolean
   bridgeDaySet: Set<string>
   bridgeDayMap: Map<string, BridgeDay>
@@ -33,7 +34,7 @@ interface MonthGridProps {
 
 export function MonthGrid({
   date, entries, publicHolidays, schoolHolidays,
-  heatmapData, showHeatmap, bridgeDaySet, bridgeDayMap,
+  heatmapData, comparisonByDate, showHeatmap, bridgeDaySet, bridgeDayMap,
   showBridgeDays, showOtherMonthDays, overBudgetDates,
   onToggle, selectedType, onHover, onSelectDate,
 }: MonthGridProps) {
@@ -69,6 +70,7 @@ export function MonthGrid({
               isToday={isToday(day)}
               isOtherMonth={!isSameMonth(day, date)}
               heatmapValue={heatmapData?.get(key)}
+              comparisonStates={comparisonByDate?.get(key)}
               showHeatmap={showHeatmap}
               isPast={isBefore(day, today)}
               isOverBudget={overBudgetDates.has(key)}

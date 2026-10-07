@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { ChevronDown, ChevronUp, AlertTriangle, RefreshCw } from 'lucide-react'
+import { ChevronDown, ChevronUp, AlertTriangle, RefreshCw, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Combobox, MultiCombobox } from '@/components/ui/combobox'
 import type { ComboboxOption } from '@/components/ui/combobox'
@@ -86,7 +86,7 @@ export function SettingsPanel({
         className="w-full flex items-center justify-between p-3 text-sm font-medium hover:bg-muted/50 transition-colors"
         onClick={() => setOpen(!open)}
       >
-        <span>⚙️ Einstellungen & Statistik</span>
+        <span className="flex items-center gap-2"><Settings2 className="h-4 w-4" /> Einstellungen & Statistik</span>
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </button>
 
@@ -95,7 +95,7 @@ export function SettingsPanel({
           {apiError && (
             <div className="flex flex-col gap-2 rounded-md border border-yellow-300 bg-yellow-50 p-2 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-200 sm:flex-row sm:items-center">
               <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-              <span className="flex-1">OpenHolidays API nicht erreichbar. Feiertage/Ferien nicht verfügbar.</span>
+              <span className="flex-1">Ferien oder Feiertage konnten nicht vollständig geladen werden. Bitte erneut versuchen.</span>
               {onRetryApi && (
                 <Button size="sm" variant="outline" onClick={onRetryApi} className="w-full sm:w-auto">
                   <RefreshCw className="h-3 w-3 mr-1" /> Erneut versuchen
@@ -122,15 +122,20 @@ export function SettingsPanel({
               </div>
 
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Vergleichs-Regionen (Heatmap)</label>
+                <label className="text-xs text-muted-foreground mb-1 block">Ferien in anderen Bundesländern vergleichen</label>
                 <MultiCombobox
                   options={compareOptions}
                   value={compareSubdivisions}
                   onChange={onCompareChange}
-                  placeholder="Regionen vergleichen..."
+                  placeholder="Bundesländer auswählen..."
                   searchPlaceholder="z.B. NRW, Bayern..."
                   emptyText="Kein Bundesland gefunden"
                 />
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={() => onCompareChange(subdivisions.map(s => s.code))}>Alle 16 Bundesländer</Button>
+                {compareSubdivisions.length > 0 && <Button size="sm" variant="ghost" onClick={() => onCompareChange([])}>Auswahl leeren</Button>}
               </div>
 
               {countryOptions.length > 0 && (
@@ -166,8 +171,8 @@ export function SettingsPanel({
 
               <div className="mt-3 space-y-1">
                 <label className="block text-xs text-muted-foreground">Urlaubsanspruch (Tage)</label>
-                <input type="number" min={0} max={60} value={vacationDaysTotal}
-                  onChange={e => onVacationDaysChange(Number(e.target.value) || 30)}
+                <input type="number" min={0} max={366} value={vacationDaysTotal}
+                  onChange={e => onVacationDaysChange(Number(e.target.value))}
                   className="min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-right text-sm sm:w-24" />
               </div>
 

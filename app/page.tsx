@@ -1,5 +1,5 @@
 import { auth } from '@/auth'
-import { getOrCreateUser } from '@/lib/user'
+import { getUserFromSession } from '@/lib/user'
 import { CalendarClient } from '@/components/calendar/calendar-client'
 
 export const dynamic = 'force-dynamic'
@@ -11,13 +11,9 @@ export default async function HomePage() {
   let userId: string | undefined
   let preferences: Record<string, unknown> = {}
 
-  if (session?.user?.keycloakId) {
+  if (session?.user?.id) {
     try {
-      const user = await getOrCreateUser(
-        session.user.keycloakId,
-        session.user.email,
-        session.user.name
-      )
+      const user = await getUserFromSession(session)
       userId = user.id
       preferences = user.preferences as Record<string, unknown>
     } catch {
@@ -25,5 +21,5 @@ export default async function HomePage() {
     }
   }
 
-  return <CalendarClient userId={userId} preferences={preferences} isLoggedIn={!!session?.user?.keycloakId} />
+  return <CalendarClient userId={userId} preferences={preferences} isLoggedIn={!!session?.user?.id} />
 }

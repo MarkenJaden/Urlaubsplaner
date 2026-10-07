@@ -8,6 +8,7 @@ const mkEntry = (date: string, type: 'vacation' | 'gleittag' | 'note', title?: s
   type,
   title: title ?? null,
   userId: 'test',
+  year: Number(date.slice(0, 4)),
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 })

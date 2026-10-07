@@ -12,6 +12,7 @@ export interface DayInfo {
   isBridgeDay: boolean
   bridgeDayInfo?: BridgeDay
   entry?: VacationEntry
+  comparisonStates?: string[]
 }
 
 interface DayCellProps {
@@ -25,6 +26,7 @@ interface DayCellProps {
   isPast: boolean
   isOverBudget: boolean
   heatmapValue?: number
+  comparisonStates?: string[]
   showHeatmap: boolean
   isBridgeDay: boolean
   bridgeDayInfo?: BridgeDay
@@ -51,7 +53,7 @@ function getHolidayName(h: Holiday): string {
 export function DayCell({
   date, entries, publicHolidays, schoolHolidays,
   isWeekend, isToday, isOtherMonth, isPast, isOverBudget,
-  heatmapValue, showHeatmap, isBridgeDay, bridgeDayInfo,
+  heatmapValue, comparisonStates = [], showHeatmap, isBridgeDay, bridgeDayInfo,
   showBridgeDays, showOtherMonthDays, onToggle, selectedType, onHover, onSelectDate,
 }: DayCellProps) {
   if (isOtherMonth && !showOtherMonthDays) {
@@ -88,11 +90,13 @@ export function DayCell({
     if (vacation) parts.push('Urlaub')
     if (gleittag) parts.push('Gleittag')
     if (note) parts.push(note.title ?? 'Notiz')
+    if (comparisonStates.length) parts.push(`Schulferien in ${comparisonStates.length} Bundesländern: ${comparisonStates.join(', ')}`)
     return parts.join('\n')
   }
 
   const buildDayInfo = (): DayInfo => ({
     date,
+    comparisonStates,
     publicHoliday: publicHoliday ? getHolidayName(publicHoliday) : undefined,
     schoolHoliday: schoolHoliday ? getHolidayName(schoolHoliday) : undefined,
     isBridgeDay: showBridgeDays && isBridgeDay,
@@ -124,7 +128,7 @@ export function DayCell({
         isOtherMonth && 'opacity-30',
         isWeekend && !hasEntry && !publicHoliday && 'bg-muted/50',
         isToday && 'ring-2 ring-primary',
-        isPast && !hasEntry && 'opacity-50 grayscale',
+        isPast && !hasEntry && !publicHoliday && !schoolHoliday && !isBridgeDay && 'opacity-60',
         vacation && !isOverBudget && 'bg-blue-500 text-white hover:bg-blue-600',
         vacation && isOverBudget && 'bg-red-500 text-white hover:bg-red-600',
         gleittag && !vacation && 'bg-purple-500 text-white hover:bg-purple-600',
@@ -138,7 +142,8 @@ export function DayCell({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       title={buildTitle()}
-      aria-label={buildTitle() || format(date, 'dd.MM.yyyy')}
+      aria-label={`${format(date, 'dd.MM.yyyy')}${buildTitle() ? ` · ${buildTitle()}` : ''}`}
+      aria-pressed={Boolean(hasEntry)}
     >
       <span className={cn('leading-none', isToday && !hasEntry && 'text-primary font-bold')}>
         {format(date, 'd')}

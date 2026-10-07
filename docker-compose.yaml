@@ -1,5 +1,5 @@
-# Standalone: Alles inklusive (PostgreSQL + Keycloak)
-# Für Coolify: Einfach als Docker Compose deployen, alle Services sind enthalten.
+# Standalone app with PostgreSQL and the existing Keycloak transition service.
+# Keep legacy deployments accessible until all accounts have local credentials.
 
 services:
   urlaubsplaner:
@@ -10,14 +10,12 @@ services:
       - NEXTAUTH_URL=${SERVICE_URL_URLAUBSPLANER}
       - NEXTAUTH_SECRET=${SERVICE_BASE64_URLAUBSPLANER}
       - AUTH_KEYCLOAK_ID=${AUTH_KEYCLOAK_ID:-urlaubsplaner}
-      - AUTH_KEYCLOAK_SECRET=${SERVICE_PASSWORD_KEYCLOAK-CLIENT}
-      - AUTH_KEYCLOAK_ISSUER=http://keycloak:8080/realms/${KEYCLOAK_REALM:-urlaubsplaner}
+      - AUTH_KEYCLOAK_SECRET=${AUTH_KEYCLOAK_SECRET:-${SERVICE_PASSWORD_KEYCLOAK-CLIENT}}
+      - AUTH_KEYCLOAK_ISSUER=${AUTH_KEYCLOAK_ISSUER:-http://keycloak:8080/realms/${KEYCLOAK_REALM:-urlaubsplaner}}
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
       - DATABASE_URL=postgres://${SERVICE_USER_POSTGRES}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-urlaubsplaner}
     depends_on:
       postgres:
-        condition: service_healthy
-      keycloak:
         condition: service_healthy
     healthcheck:
       # Use node-based check against /api/health (no DB / Keycloak / auth deps).
@@ -40,7 +38,7 @@ services:
     volumes:
       - urlaubsplaner-db:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-ARGS", "pg_isready", "-U", "$${POSTGRES_USER}", "-d", "$${POSTGRES_DB}"]
+      test: ["CMD", "pg_isready", "-U", "$${POSTGRES_USER}", "-d", "$${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -63,7 +61,7 @@ services:
       keycloak-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-ARGS", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080"]
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -78,7 +76,7 @@ services:
     volumes:
       - keycloak-db:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-ARGS", "pg_isready", "-U", "$${POSTGRES_USER}", "-d", "$${POSTGRES_DB}"]
+      test: ["CMD", "pg_isready", "-U", "$${POSTGRES_USER}", "-d", "$${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5

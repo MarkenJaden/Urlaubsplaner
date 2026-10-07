@@ -7,6 +7,7 @@ RUN npm ci
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npx prisma generate
+RUN npm test
 RUN npm run build
 
 FROM base AS runner
@@ -21,6 +22,7 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 COPY start.sh ./start.sh
+COPY scripts ./scripts
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000

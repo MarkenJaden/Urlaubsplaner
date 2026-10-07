@@ -12,6 +12,8 @@ export interface VacationEntry {
 }
 
 export interface UserProfile {
+  username?: string | null
+  hasLocalAccount: boolean
   id: string
   name?: string | null
   email?: string | null
@@ -19,7 +21,10 @@ export interface UserProfile {
   preferences: UserPreferences
 }
 
-export interface UserPreferences {
+export interface UserPreferences extends Partial<Omit<LocalConfig, 'entries'>> {
+  feedIncludePublicHolidays?: boolean
+  feedIncludeSchoolHolidays?: boolean
+  feedIncludeNotes?: boolean
   subdivision?: string
   country?: string
   vacationDays?: number

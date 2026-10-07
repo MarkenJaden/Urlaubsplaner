@@ -46,7 +46,7 @@ export function useCountryHolidays(
           type: 'public',
         })
         const res = await fetch(`/api/holidays?${params}`)
-        if (!res.ok) return []
+        if (!res.ok) throw new Error('Ferien oder Feiertage konnten nicht geladen werden.')
         return res.json()
       },
       enabled: enabled && countries.length > 0,
@@ -61,7 +61,7 @@ export function useCompareHolidays(
   subdivisions: string[],
   year: number,
   enabled: boolean,
-): Holiday[][] {
+) {
   const results = useQueries({
     queries: subdivisions.map(sub => ({
       queryKey: ['holidays', country, sub, year, 'school'] as const,
@@ -69,14 +69,14 @@ export function useCompareHolidays(
         const params = new URLSearchParams({ country, year: String(year), type: 'school' })
         params.set('subdivision', sub)
         const res = await fetch(`/api/holidays?${params}`)
-        if (!res.ok) return []
+        if (!res.ok) throw new Error('Ferien oder Feiertage konnten nicht geladen werden.')
         return res.json()
       },
       enabled: enabled && subdivisions.length > 0,
       staleTime: 24 * 60 * 60 * 1000,
     })),
   })
-  return results.map(r => r.data ?? [])
+  return { holidays: results.map(r => r.data ?? []), isError: results.some(r => r.isError), isLoading: results.some(r => r.isLoading), retry: () => Promise.all(results.map(r => r.refetch())) }
 }
 
 export function useSubdivisions(country = 'DE') {

@@ -5,7 +5,7 @@ import { MonthGrid } from './month-grid'
 import type { DayInfo } from './day-cell'
 import type { VacationEntry, Holiday, EntryType } from '@/types'
 import type { BridgeDay } from '@/lib/bridge-days'
-import { format, parseISO, eachDayOfInterval } from 'date-fns'
+import { countHolidayStates } from '@/lib/holidays'
 
 interface YearViewProps {
   year: number
@@ -13,6 +13,7 @@ interface YearViewProps {
   publicHolidays: Holiday[]
   schoolHolidays: Holiday[]
   compareHolidays?: Holiday[][]
+  compareLabels?: string[]
   showHeatmap: boolean
   showPublicHolidays: boolean
   showSchoolHolidays: boolean
@@ -29,32 +30,28 @@ interface YearViewProps {
 
 export function YearView({
   year, entries, publicHolidays, schoolHolidays,
-  compareHolidays = [], showHeatmap, showPublicHolidays,
+  compareHolidays = [], compareLabels = [], showHeatmap, showPublicHolidays,
   showSchoolHolidays, bridgeDaySet, bridgeDayMap,
   showBridgeDays, showOtherMonthDays, overBudgetDates,
   onToggle, selectedType, onHover, onSelectDate,
 }: YearViewProps) {
   const heatmapData = useMemo(() => {
     if (!showHeatmap || compareHolidays.length === 0) return undefined
-    const map = new Map<string, number>()
-    for (const regionHolidays of compareHolidays) {
-      for (const h of regionHolidays) {
-        try {
-          const start = parseISO(h.startDate)
-          const end = parseISO(h.endDate)
-          const days = eachDayOfInterval({ start, end })
-          for (const d of days) {
-            const key = format(d, 'yyyy-MM-dd')
-            map.set(key, (map.get(key) ?? 0) + 1)
-          }
-        } catch { /* skip */ }
-      }
-    }
-    const max = Math.max(...Array.from(map.values()), 1)
+    const map = countHolidayStates(compareHolidays)
+    const max = Math.max(compareHolidays.length, 1)
     const normalized = new Map<string, number>()
     map.forEach((v, k) => normalized.set(k, v / max))
     return normalized
   }, [showHeatmap, compareHolidays])
+
+  const comparisonByDate = useMemo(() => {
+    const map = new Map<string, string[]>()
+    if (!showHeatmap) return map
+    for (let i = 0; i < compareHolidays.length; i++) {
+      for (const date of countHolidayStates([compareHolidays[i]]).keys()) map.set(date, [...(map.get(date) ?? []), compareLabels[i] ?? `Bundesland ${i + 1}`])
+    }
+    return map
+  }, [compareHolidays, compareLabels, showHeatmap])
 
   const months = Array.from({ length: 12 }, (_, i) => new Date(year, i, 1))
 
@@ -68,6 +65,7 @@ export function YearView({
           publicHolidays={showPublicHolidays ? publicHolidays : []}
           schoolHolidays={showSchoolHolidays ? schoolHolidays : []}
           heatmapData={heatmapData}
+          comparisonByDate={comparisonByDate}
           showHeatmap={showHeatmap}
           bridgeDaySet={bridgeDaySet}
           bridgeDayMap={bridgeDayMap}

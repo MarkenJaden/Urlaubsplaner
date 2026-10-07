@@ -119,6 +119,7 @@ export function Combobox({
         onClick={() => setOpen(!open)}
         onKeyDown={handleKeyDown}
         className="flex min-h-11 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-left text-sm transition-colors touch-manipulation hover:bg-muted/50"
+        aria-label={placeholder}
         aria-expanded={open}
         aria-haspopup="listbox"
       >
@@ -227,6 +228,7 @@ export function MultiCombobox({
         type="button"
         onClick={() => setOpen(!open)}
         className="flex min-h-11 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-left text-sm transition-colors touch-manipulation hover:bg-muted/50"
+        aria-label={placeholder}
         aria-expanded={open}
         aria-haspopup="listbox"
       >
@@ -240,7 +242,7 @@ export function MultiCombobox({
 
       {value.length > 0 && (
         <div className="flex flex-wrap gap-1 mt-1">
-          {selectedLabels.map((label, i) => (
+          {selectedLabels.slice(0, 3).map((label, i) => (
             <span
               key={value[i]}
               className="inline-flex min-h-8 max-w-full cursor-pointer items-center gap-1 rounded-full bg-secondary px-2 py-1 text-xs font-medium transition-colors hover:bg-secondary/80"
@@ -250,6 +252,7 @@ export function MultiCombobox({
               <X className="h-2.5 w-2.5" />
             </span>
           ))}
+          {value.length > 3 && <span className="inline-flex items-center px-2 text-xs text-muted-foreground">+{value.length - 3} weitere</span>}
         </div>
       )}
 
