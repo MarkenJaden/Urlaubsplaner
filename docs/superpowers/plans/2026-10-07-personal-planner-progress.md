@@ -19,3 +19,5 @@
 - Final checks: 59 tests / 7 suites; typecheck; production build; 44 isolated API integration checks; compose syntax and legacy-environment compatibility; git diff whitespace check.
 - Responsive visual check: all 16 states selected, 325px effective mobile viewport, document client/scroll width both 312px; desktop inspected after restoring normal viewport.
 - Docker context excludes local builds, analysis outputs, environment variants and Git metadata.
+
+- Post-push dependency check found existing Auth.js advisories. Updated only Auth.js and its authentication dependencies to the official compatible patched release, retaining platform metadata in the lockfile. Remaining audit: 18 findings (15 high, 3 moderate), no critical findings. Broader dependency upgrades are outside this feature release.

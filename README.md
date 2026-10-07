@@ -127,3 +127,10 @@ imports, all-state holiday loading and unauthenticated calendar subscriptions.
 Run it only against an isolated local production build with a disposable database:
 `TEST_BASE_URL=http://127.0.0.1:3107 node scripts/verify-integration.mjs`.
 The script refuses non-loopback destinations and never prints credential values.
+
+The release pins `next-auth` 5.0.0-beta.32 / `@auth/core` 0.41.3, including
+[the Auth.js security fixes](https://github.com/nextauthjs/next-auth/security/advisories/GHSA-8fpg-xm3f-6cx3).
+The dependency audit still reports 18 findings (15 high, 3 moderate) elsewhere
+in the existing dependency tree; no critical findings remain in the audited lockfile.
+A separate dependency maintenance pass is required. This release does not claim
+a complete security audit or upgrade the application to a new framework major.
