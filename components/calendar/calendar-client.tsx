@@ -19,6 +19,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { parsePreferences, parseEntry, countryChangePatch } from '@/lib/preferences'
 import { parseISO, format } from 'date-fns'
+import { de } from 'date-fns/locale'
 import type { EntryType, Holiday, LocalConfig, PreferencesPatch } from '@/types'
 import type { DayInfo } from '@/components/calendar/day-cell'
 import type { ImportData } from '@/lib/export'
@@ -54,7 +55,7 @@ function hasVisibleDayInfo(day: DayInfo | null): day is DayInfo {
 function DayInfoDetails({ day }: { day: DayInfo }) {
   return (
     <>
-      <p className="font-medium">{format(day.date, 'dd.MM.yyyy (EEEE)')}</p>
+      <p className="font-medium">{format(day.date, 'dd.MM.yyyy (EEEE)', { locale: de })}</p>
       {day.publicHoliday && <p className="text-green-600"><PartyPopper className="mr-1 inline h-4 w-4" /> {day.publicHoliday}</p>}
       {day.schoolHoliday && <p className="text-yellow-600"><School className="mr-1 inline h-4 w-4" /> {day.schoolHoliday}</p>}
       {day.isBridgeDay && day.bridgeDayInfo && (
