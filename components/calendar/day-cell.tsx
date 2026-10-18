@@ -3,7 +3,7 @@
 import { cn } from '@/lib/utils'
 import type { VacationEntry, Holiday, EntryType } from '@/types'
 import type { BridgeDay } from '@/lib/bridge-days'
-import { format, isSameDay, parseISO } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 
 export interface DayInfo {
   date: Date
@@ -60,9 +60,11 @@ export function DayCell({
     return <div className="aspect-square" />
   }
 
-  const vacation = entries.find(e => e.type === 'vacation' && isSameDay(parseISO(e.date), date))
-  const gleittag = entries.find(e => e.type === 'gleittag' && isSameDay(parseISO(e.date), date))
-  const note = entries.find(e => e.type === 'note' && isSameDay(parseISO(e.date), date))
+  // Entries are stored as UTC midnight; compare calendar dates, not local instants.
+  const key = format(date, 'yyyy-MM-dd')
+  const vacation = entries.find(e => e.type === 'vacation' && e.date.slice(0, 10) === key)
+  const gleittag = entries.find(e => e.type === 'gleittag' && e.date.slice(0, 10) === key)
+  const note = entries.find(e => e.type === 'note' && e.date.slice(0, 10) === key)
   const publicHoliday = getHolidayForDate(publicHolidays, date)
   const schoolHoliday = getHolidayForDate(schoolHolidays, date)
   const hasEntry = vacation || gleittag || note

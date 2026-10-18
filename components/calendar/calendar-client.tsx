@@ -77,7 +77,7 @@ function DayInfoDetails({ day }: { day: DayInfo }) {
   )
 }
 
-export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }: CalendarClientProps) {
+export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: CalendarClientProps) {
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
   const [selectedType, setSelectedType] = useState<EntryType>('vacation')
@@ -100,7 +100,8 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
   const home = useHomeRegion(config)
   const { country, subdivision, region, locationReady, groupsLoading } = home
   const subdivisionsData = home.subdivisions, groupsData = home.groups
-  const compareSubdivisions = [...new Set(config?.compareSubdivisions ?? [])]
+  const storedCompare = config?.compareSubdivisions
+  const compareSubdivisions = useMemo(() => [...new Set(storedCompare ?? [])], [storedCompare])
   const selectedCountries = (config?.selectedCountries ?? []).filter(code => code !== country)
   const showHeatmap = config?.showHeatmap ?? false
   const showPublicHolidays = config?.showPublicHolidays ?? true
@@ -114,7 +115,7 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
   const { data: serverEntries = [], isLoading: entriesLoading, isError: entriesError } = useVacations(year, isLoggedIn)
   const { addMutation, removeMutation } = useToggleVacation(year, isLoggedIn)
 
-  const entries = isLoggedIn ? serverEntries : (config ? configToEntries(config, year) : [])
+  const entries = useMemo(() => isLoggedIn ? serverEntries : (localConfig ? configToEntries(localConfig, year) : []), [isLoggedIn, serverEntries, localConfig, year])
 
 
   const { data: publicHolidays = [], isError: holidaysError, refetch: refetchHolidays } = useHolidays({

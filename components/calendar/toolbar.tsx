@@ -99,6 +99,7 @@ export function Toolbar({
       const content = ev.target?.result as string
       const data = parseImportFile(content)
       if (data) onImport(data)
+      else alert('Die Datei enthält keine gültigen Urlaubsplaner-Daten.')
     }
     reader.readAsText(file)
     e.target.value = ''
@@ -112,6 +113,7 @@ export function Toolbar({
       const content = ev.target?.result as string
       const data = parseConfigJSON(content)
       if (data && onImportConfig) onImportConfig(data)
+      else if (!data) alert('Die Datei enthält keine gültige Konfiguration.')
     }
     reader.readAsText(file)
     e.target.value = ''
