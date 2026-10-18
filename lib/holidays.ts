@@ -1,4 +1,8 @@
-import type { Holiday } from '@/types'
+import type { Holiday, RegionReference } from '@/types'
+
+function isReference(value: unknown): value is RegionReference {
+  return Boolean(value) && typeof (value as RegionReference).code === 'string'
+}
 
 function validDate(value: unknown): value is string {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
@@ -13,7 +17,12 @@ export function normalizeHolidays(input: unknown, year: number): Holiday[] {
   for (const item of input) {
     if (!item || typeof item.id !== 'string' || !validDate(item.startDate) || !validDate(item.endDate) || item.startDate > item.endDate || !Array.isArray(item.name) || item.name.some((name: { language: unknown; text: unknown }) => !name || typeof name.language !== 'string' || typeof name.text !== 'string')) throw new Error('Invalid holiday interval')
     if (item.endDate < from || item.startDate > to) continue
-    result.set(item.id, { ...item, startDate: item.startDate < from ? from : item.startDate, endDate: item.endDate > to ? to : item.endDate })
+    // Keep the fields the app uses; NL entries list over 100 subdivisions each.
+    result.set(item.id, {
+      id: item.id, type: item.type, name: item.name, nationwide: Boolean(item.nationwide),
+      ...(Array.isArray(item.groups) ? { groups: item.groups.filter(isReference).map(({ code, shortName }: RegionReference) => ({ code, shortName })) } : {}),
+      startDate: item.startDate < from ? from : item.startDate, endDate: item.endDate > to ? to : item.endDate,
+    })
   }
   return [...result.values()]
 }

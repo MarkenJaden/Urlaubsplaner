@@ -62,3 +62,12 @@ export async function POST(request: Request) {
 
   return NextResponse.json(entry)
 }
+
+/** "Planung zurücksetzen": removes all of the signed-in user's entries. */
+export async function DELETE(request: Request) {
+  if (!validOrigin(request)) return jsonError('Ungültige Anfrage.', 403)
+  const session = await auth()
+  if (!session?.user?.id) return jsonError('Unauthorized', 401)
+  const { count } = await prisma.vacationEntry.deleteMany({ where: { userId: session.user.id } })
+  return NextResponse.json({ deleted: count }, { headers: { 'Cache-Control': 'no-store' } })
+}

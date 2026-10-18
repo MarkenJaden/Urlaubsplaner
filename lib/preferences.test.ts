@@ -1,10 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { parsePreferences, mergePreferences, parseEntry } from './preferences'
+import { parsePreferences, mergePreferences, parseEntry, normalizePreferences, mergeImportedPreferences, countryChangePatch } from './preferences'
 
 describe('personal plan validation', () => {
-  it('accepts all 16 German states and rejects invalid state codes', () => {
+  it('accepts German states and other countries, rejects malformed codes', () => {
     expect(parsePreferences({ compareSubdivisions: ['DE-BW', 'DE-NW'] })).toEqual({ compareSubdivisions: ['DE-BW', 'DE-NW'] })
-    expect(parsePreferences({ subdivision: 'DE-NOPE' })).toBeNull()
+    expect(parsePreferences({ country: 'NL', subdivision: 'NL-UT', holidayGroup: 'NL-MI', compareSubdivisions: ['NL-NO', 'NL-ZU'] })).toEqual({ country: 'NL', subdivision: 'NL-UT', holidayGroup: 'NL-MI', compareSubdivisions: ['NL-NO', 'NL-ZU'] })
+    expect(parsePreferences({ subdivision: 'de-by' })).toBeNull()
+    expect(parsePreferences({ subdivision: 'DE BY' })).toBeNull()
+    expect(parsePreferences({ country: 'Deutschland' })).toBeNull()
+    expect(parsePreferences({ selectedCountries: ['AT', 'at'] })).toBeNull()
+  })
+  it('allows clearing location values with null but nothing else', () => {
+    expect(parsePreferences({ subdivision: null, holidayGroup: null })).toEqual({ subdivision: null, holidayGroup: null })
+    expect(parsePreferences({ showHeatmap: null })).toBeNull()
+    expect(mergePreferences({ country: 'NL', subdivision: 'NL-UT', holidayGroup: 'NL-MI' }, { holidayGroup: null })).toEqual({ country: 'NL', subdivision: 'NL-UT' })
+  })
+  it('drops region codes that do not belong to the home country', () => {
+    expect(normalizePreferences({ subdivision: 'NL-UT', compareSubdivisions: ['DE-BY', 'NL-NO'] })).toEqual({ compareSubdivisions: ['DE-BY'] })
+    expect(mergePreferences({ subdivision: 'DE-BY', compareSubdivisions: ['DE-NW'], selectedCountries: ['NL', 'AT'] }, countryChangePatch('NL'))).toEqual({ country: 'NL', compareSubdivisions: [], showHeatmap: false, selectedCountries: ['AT'] })
+  })
+  it('keeps stored settings on import and never mixes the stored and imported locations', () => {
+    expect(mergeImportedPreferences({ subdivision: 'DE-BY', showHeatmap: true }, { country: 'NL', subdivision: 'NL-UT', showHeatmap: false, halfDaysChristmas: false })).toEqual({ subdivision: 'DE-BY', showHeatmap: true, halfDaysChristmas: false })
+    expect(mergeImportedPreferences({ showHeatmap: true }, { country: 'NL', subdivision: 'NL-UT' })).toEqual({ country: 'NL', subdivision: 'NL-UT', showHeatmap: true })
   })
   it('rejects unknown keys, invalid booleans and dangerous budgets', () => {
     expect(parsePreferences({ admin: true })).toBeNull()

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -17,10 +17,15 @@ interface SuggestionsPanelProps {
   year: number
   country: string
   subdivision?: string
+  group?: string
+  /** Budget left after the planned days (shared vacation accounting). */
   remainingDays: number
+  /** Full budget; used when existing vacation days are replaced. */
+  totalDays: number
+  halfDaysChristmas: boolean
   existingVacationDates: string[]
   noteDates: string[]
-  onApply: (dates: string[], type: EntryType) => void
+  onApply: (dates: string[], type: EntryType, replace: boolean) => void
 }
 
 export function SuggestionsPanel({
@@ -29,16 +34,21 @@ export function SuggestionsPanel({
   year,
   country,
   subdivision,
+  group,
   remainingDays,
+  totalDays,
+  halfDaysChristmas,
   existingVacationDates,
   noteDates,
   onApply,
 }: SuggestionsPanelProps) {
-  const [prefs, setPrefs] = useState<PlanningPreferences>({ ...DEFAULT_PREFERENCES })
+  const [prefs, setPrefs] = useState<PlanningPreferences>({ ...DEFAULT_PREFERENCES, halfDaysChristmas })
   const [overwrite, setOverwrite] = useState(false)
   const [suggestions, setSuggestions] = useState<VacationSuggestionBlock[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Follow the half-day setting of the plan whenever the dialog opens.
+  useEffect(() => { if (open) setPrefs(p => ({ ...p, halfDaysChristmas })) }, [open, halfDaysChristmas])
   const existingVacationSet = useMemo(() => new Set(existingVacationDates), [existingVacationDates])
 
   const getMissingVacationDays = (suggestion: VacationSuggestionBlock): string[] => {
@@ -52,15 +62,16 @@ export function SuggestionsPanel({
       const params = new URLSearchParams({
         country,
         year: String(year),
-        remainingDays: String(remainingDays),
+        remainingDays: String(Math.max(0, overwrite ? totalDays : remainingDays)),
         overwrite: String(overwrite),
         preferences: JSON.stringify(prefs),
         existingDates: existingVacationDates.join(','),
         noteDates: noteDates.join(','),
       })
       if (subdivision) params.set('subdivision', subdivision)
+      if (group) params.set('group', group)
       const res = await fetch(`/api/suggestions?${params}`)
-      if (!res.ok) throw new Error('Fehler beim Laden der Vorschläge')
+      if (!res.ok) throw new Error(res.status === 502 ? 'Feiertage konnten nicht geladen werden. Bitte erneut versuchen.' : 'Fehler beim Laden der Vorschläge')
       setSuggestions(await res.json())
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
@@ -70,15 +81,20 @@ export function SuggestionsPanel({
   }
 
   const handleApplyAll = () => {
+    if (overwrite) {
+      if (!confirm(`Bisherige Urlaubstage in ${year} werden durch die Vorschläge ersetzt. Gleittage und Notizen bleiben erhalten. Fortfahren?`)) return
+      onApply([...new Set(suggestions.flatMap(s => s.vacationDays))], 'vacation', true)
+      return
+    }
     const allDates = [...new Set(suggestions.flatMap(getMissingVacationDays))]
     if (allDates.length === 0) return
-    onApply(allDates, 'vacation')
+    onApply(allDates, 'vacation', false)
   }
 
   const handleApplyOne = (idx: number) => {
     const missingDates = getMissingVacationDays(suggestions[idx])
     if (missingDates.length === 0) return
-    onApply(missingDates, 'vacation')
+    onApply(missingDates, 'vacation', false)
   }
 
   return (

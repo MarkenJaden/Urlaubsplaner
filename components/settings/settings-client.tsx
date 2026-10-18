@@ -6,11 +6,13 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Header } from '@/components/layout/header'
 import { AccountPanel } from '@/components/account/account-panel'
 import { Button } from '@/components/ui/button'
-import { Combobox } from '@/components/ui/combobox'
-import { useSubdivisions } from '@/hooks/use-holidays'
+import { LocationFields } from '@/components/calendar/location-fields'
+import { useCountries } from '@/hooks/use-holidays'
+import { useHomeRegion } from '@/hooks/use-home-region'
 import { useProfile, useUpdatePreferences } from '@/hooks/use-profile'
+import { countryChangePatch } from '@/lib/preferences'
 import { CalendarDays, Copy, Check, RefreshCw, MapPin, ExternalLink, ShieldCheck } from 'lucide-react'
-import type { Subdivision, UserPreferences, UserProfile } from '@/types'
+import type { UserPreferences, UserProfile } from '@/types'
 
 interface SettingsClientProps {
   calendarToken: string
@@ -30,7 +32,9 @@ export function SettingsClient({ calendarToken, preferences, username, hasLocalA
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   useEffect(() => setOrigin(window.location.origin), [])
-  const { data: subdivisions = [], isError: subdivisionsError, refetch } = useSubdivisions('DE')
+  const home = useHomeRegion(prefs)
+  const { data: countries = [] } = useCountries()
+  const regionLabel = home.country === 'DE' ? 'meines Bundeslands' : 'meiner Region'
   const calendarUrl = `${origin}/api/calendar/${profile.data?.calendarToken ?? token}/feed.ics`
   const subscriptionUrl = calendarUrl.replace(/^https?:/, 'webcal:')
 
@@ -58,9 +62,15 @@ export function SettingsClient({ calendarToken, preferences, username, hasLocalA
       <div><Link href="/" className="text-sm text-primary">Zurück zum Kalender</Link><h1 className="mt-2 text-2xl font-semibold tracking-tight">Dein Urlaubsplaner</h1><p className="mt-1 text-sm text-muted-foreground">Konto, Region und Kalender-Verbindung.</p></div>
       {(error || profile.isError || updatePrefs.isError) && <p role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">{error || 'Einstellungen konnten nicht geladen oder gespeichert werden. Prüfe deine Verbindung und Anmeldung.'} <Link className="underline" href="/login">Anmelden</Link></p>}
       <section className="rounded-xl border bg-card p-4 sm:p-6">
-        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><MapPin className="h-5 w-5" /> Mein Bundesland</h2>
-        <Combobox options={subdivisions.map((sub: Subdivision) => ({ value: sub.code, label: sub.name.find(n => n.language === 'DE')?.text ?? sub.code }))} value={prefs.subdivision} onChange={subdivision => updatePrefs.mutate({ subdivision })} placeholder="Bundesland wählen" />
-        {subdivisionsError && <Button variant="outline" onClick={() => refetch()}>Bundesländer erneut laden</Button>}
+        <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><MapPin className="h-5 w-5" /> Meine Region</h2>
+        <div className="space-y-3">
+          <LocationFields
+            countries={countries} country={home.country} onCountryChange={country => { if (country !== home.country) updatePrefs.mutate(countryChangePatch(country)) }}
+            subdivisions={home.subdivisions} subdivision={home.subdivision} onSubdivisionChange={subdivision => updatePrefs.mutate({ subdivision, holidayGroup: null })}
+            groups={home.region.candidates} holidayGroup={home.region.group} onHolidayGroupChange={holidayGroup => updatePrefs.mutate({ holidayGroup })}
+          />
+        </div>
+        {home.isError && <Button variant="outline" onClick={() => home.retry()}>Regionen erneut laden</Button>}
         <p className="mt-2 text-xs text-muted-foreground">Wird mit deinen Geräten synchronisiert und für Ferien und Feiertage im Abo verwendet.</p>
       </section>
       <section className="space-y-4 rounded-xl border bg-card p-4 sm:p-6">
@@ -68,12 +78,13 @@ export function SettingsClient({ calendarToken, preferences, username, hasLocalA
         <p className="text-sm text-muted-foreground">Abonniere deinen Plan einmal. Neue oder gelöschte Urlaubstage erscheinen beim nächsten Abruf in deiner Kalender-App.</p>
         <div className="space-y-2">
           {([
-            ['feedIncludePublicHolidays', 'Feiertage meines Bundeslands'],
-            ['feedIncludeSchoolHolidays', 'Schulferien meines Bundeslands'],
+            ['feedIncludePublicHolidays', `Feiertage ${regionLabel}`],
+            ['feedIncludeSchoolHolidays', `Schulferien ${regionLabel}`],
             ['feedIncludeNotes', 'Meine Notizen (können persönliche Angaben enthalten)'],
-          ] as const).map(([key, label]) => <label key={key} className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" className="h-4 w-4" checked={Boolean(prefs[key])} disabled={key !== 'feedIncludeNotes' && !prefs.subdivision} onChange={event => updatePrefs.mutate({ [key]: event.target.checked })} />{label}</label>)}
+          ] as const).map(([key, label]) => <label key={key} className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" className="h-4 w-4" checked={Boolean(prefs[key])} disabled={key !== 'feedIncludeNotes' && !home.locationReady} onChange={event => updatePrefs.mutate({ [key]: event.target.checked })} />{label}</label>)}
         </div>
-        {!prefs.subdivision && <p className="text-xs text-muted-foreground">Wähle zuerst dein Bundesland, um Ferien und Feiertage einzuschließen.</p>}
+        {!home.locationReady && <p className="text-xs text-muted-foreground">Wähle zuerst deine Region, um Ferien und Feiertage einzuschließen.</p>}
+        {home.region.ambiguous && prefs.feedIncludeSchoolHolidays && <p className="text-xs text-muted-foreground">Wähle deine Ferienregion, damit das Abo nur deine Schulferien enthält.</p>}
         <p className="text-xs text-muted-foreground">Ferien und Feiertage umfassen das vorherige, aktuelle und nächste Jahr.</p>
         <label className="block text-sm font-medium">Dein privater Abo-Link<input aria-label="Privater Kalender-Abo-Link" readOnly value={calendarUrl} className="mt-1 min-h-11 w-full rounded-lg border bg-muted px-3 font-mono text-xs" /></label>
         <div className="flex flex-wrap gap-2">

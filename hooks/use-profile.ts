@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { UserProfile, UserPreferences } from '@/types'
+import type { UserProfile, PreferencesPatch } from '@/types'
 import { mergePreferences } from '@/lib/preferences'
 
 export function useProfile(enabled = true) {
@@ -26,7 +26,7 @@ export function useUpdatePreferences() {
   return useMutation({
     scope: { id: 'preferences' },
     mutationKey: ['preferences'],
-    mutationFn: async (preferences: UserPreferences) => {
+    mutationFn: async (preferences: PreferencesPatch) => {
       const res = await fetch('/api/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },

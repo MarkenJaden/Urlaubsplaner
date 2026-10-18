@@ -90,7 +90,7 @@ export function DayCell({
     if (vacation) parts.push('Urlaub')
     if (gleittag) parts.push('Gleittag')
     if (note) parts.push(note.title ?? 'Notiz')
-    if (comparisonStates.length) parts.push(`Schulferien in ${comparisonStates.length} Bundesländern: ${comparisonStates.join(', ')}`)
+    if (comparisonStates.length) parts.push(`Schulferien in ${comparisonStates.length} Regionen: ${comparisonStates.join(', ')}`)
     return parts.join('\n')
   }
 

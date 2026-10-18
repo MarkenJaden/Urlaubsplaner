@@ -1,5 +1,6 @@
 import type { Holiday } from '@/types'
 import { parseISO, eachDayOfInterval, isWeekend, format, getMonth } from 'date-fns'
+import { isChristmasHalfDay } from './vacation-accounting'
 
 export interface PlanningPreferences {
   preferBridgeDays: boolean
@@ -66,13 +67,9 @@ function buildDateSet(holidays: Holiday[]): Set<string> {
   return set
 }
 
-function isHalfDayChristmas(dateStr: string): boolean {
-  const d = parseISO(dateStr)
-  return d.getMonth() === 11 && (d.getDate() === 24 || d.getDate() === 31)
-}
-
+// Same half-day rule as the plan statistics.
 function getDayCost(dateStr: string, halfDaysChristmas: boolean): number {
-  return halfDaysChristmas && isHalfDayChristmas(dateStr) ? 0.5 : 1.0
+  return halfDaysChristmas && isChristmasHalfDay(dateStr) ? 0.5 : 1.0
 }
 
 function getMonthLabel(dateStr: string): string {
