@@ -12,6 +12,7 @@ import { useHomeRegion } from '@/hooks/use-home-region'
 import { detectBridgeDays } from '@/lib/bridge-days'
 import { loadConfig, saveConfig, configToEntries, defaultConfig, applyConfigPatch, mergeImportedEntries, toggleEntry } from '@/lib/config'
 import { comparisonRegions, defaultComparisonSelection, localizedName } from '@/lib/holiday-regions'
+import { getSubdivisionAliases } from '@/lib/subdivision-aliases'
 import { holidayDateSet, remainingWorkDays as countRemainingWorkDays, summarizeVacation, vacationBudget } from '@/lib/vacation-accounting'
 import { X, Info, Cloud, PartyPopper, School, Palmtree, Clock, StickyNote, Route } from 'lucide-react'
 import { useProfile, useUpdatePreferences } from '@/hooks/use-profile'
@@ -118,7 +119,6 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
 
   const entries = useMemo(() => isLoggedIn ? serverEntries : (localConfig ? configToEntries(localConfig, year) : []), [isLoggedIn, serverEntries, localConfig, year])
 
-
   const { data: publicHolidays = [], isError: holidaysError, refetch: refetchHolidays } = useHolidays({
     country, subdivision, year, type: 'public', enabled: locationReady,
   })
@@ -135,7 +135,7 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
   const regionName = useCallback((code: string) => localizedName(
     subdivisionsData.find(s => s.code === code)?.name ?? groupsData.find(g => g.code === code)?.name, code,
   ), [subdivisionsData, groupsData])
-  const compareOptions = useMemo(() => comparisonRegions(subdivisionsData, groupsData).map(r => ({ value: r.code, label: regionName(r.code) })), [subdivisionsData, groupsData, regionName])
+  const compareOptions = useMemo(() => comparisonRegions(subdivisionsData, groupsData).map(r => ({ value: r.code, label: regionName(r.code), aliases: getSubdivisionAliases(r.code) })), [subdivisionsData, groupsData, regionName])
 
   const bridgeDays = useMemo(() => {
     if (!showBridgeDays || publicHolidays.length === 0) return []
@@ -192,15 +192,18 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
 
   const handleToggle = useCallback((date: Date, type: EntryType) => {
     const dateKey = getDateKey(date)
-    const existing = entries.find(e => e.type === type && e.date.slice(0, 10) === dateKey)
+    const matches = (e: { date: string; type: string }) => e.type === type && e.date.slice(0, 10) === dateKey
+    const saved = isLoggedIn ? entries.find(matches) : undefined
+    // Guests: search all years, days of the neighbouring year can be visible in the grid.
+    const existing = isLoggedIn ? saved : localConfig?.entries.find(matches)
     const title = !existing && type === 'note' ? defaultNoteText || prompt('Notiz-Text (optional):') || undefined : undefined
     if (isLoggedIn) {
-      if (existing) removeMutation.mutate(existing.id)
+      if (saved) removeMutation.mutate(saved.id)
       else addMutation.mutate({ date: `${dateKey}T00:00:00.000Z`, type, title })
     } else {
       updateLocalEntries(current => toggleEntry(current, dateKey, type, title))
     }
-  }, [isLoggedIn, entries, addMutation, removeMutation, updateLocalEntries, defaultNoteText])
+  }, [isLoggedIn, entries, localConfig, addMutation, removeMutation, updateLocalEntries, defaultNoteText])
 
   const importSavedData = async (vacations: unknown[], preferences?: Record<string, unknown>, successMessage = 'Plan übernommen. Die lokale Kopie bleibt erhalten.') => {
     setImportBusy(true); setSyncMessage('')
