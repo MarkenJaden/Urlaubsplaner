@@ -1,5 +1,10 @@
 # Standalone app with PostgreSQL and the existing Keycloak transition service.
 # Keep legacy deployments accessible until all accounts have local credentials.
+#
+# Coolify magic variables must not contain "-": Compose reads
+# SERVICE_PASSWORD_KEYCLOAK-DB as "SERVICE_PASSWORD_KEYCLOAK, default DB".
+# Existing Keycloak database volumes keep the credentials they were created
+# with; set KEYCLOAK_DB_USER/KEYCLOAK_DB_PASSWORD to those values (see README).
 
 services:
   urlaubsplaner:
@@ -10,9 +15,9 @@ services:
       - NEXTAUTH_URL=${SERVICE_URL_URLAUBSPLANER}
       - NEXTAUTH_SECRET=${SERVICE_BASE64_URLAUBSPLANER}
       - AUTH_KEYCLOAK_ID=${AUTH_KEYCLOAK_ID:-urlaubsplaner}
-      - AUTH_KEYCLOAK_SECRET=${AUTH_KEYCLOAK_SECRET:-${SERVICE_PASSWORD_KEYCLOAK-CLIENT}}
+      - AUTH_KEYCLOAK_SECRET=${AUTH_KEYCLOAK_SECRET:-${SERVICE_PASSWORD_KEYCLOAKCLIENT}}
       - AUTH_KEYCLOAK_ISSUER=${AUTH_KEYCLOAK_ISSUER:-http://keycloak:8080/realms/${KEYCLOAK_REALM:-urlaubsplaner}}
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-urlaubsplaner.me}
       - DATABASE_URL=postgres://${SERVICE_USER_POSTGRES}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-urlaubsplaner}
     depends_on:
       postgres:
@@ -50,13 +55,13 @@ services:
     environment:
       - KC_DB=postgres
       - KC_DB_URL=jdbc:postgresql://keycloak-db:5432/${KEYCLOAK_DB:-keycloak}
-      - KC_DB_USERNAME=${SERVICE_USER_KEYCLOAK-DB}
-      - KC_DB_PASSWORD=${SERVICE_PASSWORD_KEYCLOAK-DB}
+      - KC_DB_USERNAME=${KEYCLOAK_DB_USER:-${SERVICE_USER_KEYCLOAKDB}}
+      - KC_DB_PASSWORD=${KEYCLOAK_DB_PASSWORD:-${SERVICE_PASSWORD_KEYCLOAKDB}}
       - KC_HOSTNAME_STRICT=false
       - KC_PROXY_HEADERS=xforwarded
       - KC_HTTP_ENABLED=true
       - KEYCLOAK_ADMIN=${KEYCLOAK_ADMIN:-admin}
-      - KEYCLOAK_ADMIN_PASSWORD=${SERVICE_PASSWORD_KEYCLOAK-ADMIN}
+      - KEYCLOAK_ADMIN_PASSWORD=${SERVICE_PASSWORD_KEYCLOAKADMIN}
     depends_on:
       keycloak-db:
         condition: service_healthy
@@ -70,8 +75,8 @@ services:
   keycloak-db:
     image: postgres:17-alpine
     environment:
-      - POSTGRES_USER=${SERVICE_USER_KEYCLOAK-DB}
-      - POSTGRES_PASSWORD=${SERVICE_PASSWORD_KEYCLOAK-DB}
+      - POSTGRES_USER=${KEYCLOAK_DB_USER:-${SERVICE_USER_KEYCLOAKDB}}
+      - POSTGRES_PASSWORD=${KEYCLOAK_DB_PASSWORD:-${SERVICE_PASSWORD_KEYCLOAKDB}}
       - POSTGRES_DB=${KEYCLOAK_DB:-keycloak}
     volumes:
       - keycloak-db:/var/lib/postgresql/data

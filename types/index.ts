@@ -25,29 +25,46 @@ export interface UserPreferences extends Partial<Omit<LocalConfig, 'entries'>> {
   feedIncludePublicHolidays?: boolean
   feedIncludeSchoolHolidays?: boolean
   feedIncludeNotes?: boolean
-  subdivision?: string
-  country?: string
+  /** Legacy single budget; vacationDaysPerYear takes precedence. */
   vacationDays?: number
-  showHeatmap?: boolean
-  showPublicHolidays?: boolean
-  showSchoolHolidays?: boolean
-  compareSubdivisions?: string[]
 }
+
+/** Patch sent to the server: null removes a stored location value. */
+export type PreferencesPatch = { [K in keyof UserPreferences]?: UserPreferences[K] | null }
+
+export interface LocalizedText { language: string; text: string }
+
+export interface RegionReference { code: string; shortName?: string }
 
 export interface Holiday {
   id: string
   startDate: string
   endDate: string
   type: string
-  name: Array<{ language: string; text: string }>
+  name: LocalizedText[]
   nationwide: boolean
+  subdivisions?: RegionReference[]
+  groups?: RegionReference[]
 }
 
 export interface Subdivision {
   code: string
   shortName: string
-  name: Array<{ language: string; text: string }>
+  name: LocalizedText[]
   isoCode?: string
+  category?: LocalizedText[]
+  /** Holiday groups (e.g. NL school regions) this subdivision belongs to. */
+  groups?: RegionReference[]
+  children?: Subdivision[]
+}
+
+/** OpenHolidays holiday group, e.g. a school holiday region or school type. */
+export interface HolidayGroup {
+  code: string
+  shortName?: string
+  name: LocalizedText[]
+  category?: LocalizedText[]
+  subdivisions?: RegionReference[]
 }
 
 export interface Country {
@@ -57,7 +74,12 @@ export interface Country {
 }
 
 export interface LocalConfig {
+  /** Home country (ISO 3166-1 alpha-2); defaults to DE. */
+  country?: string
   subdivision?: string
+  /** OpenHolidays group code used for school holidays, e.g. NL-NO. */
+  holidayGroup?: string
+  /** Subdivision or regional group codes of the home country. */
   compareSubdivisions?: string[]
   selectedCountries?: string[]
   showPublicHolidays: boolean

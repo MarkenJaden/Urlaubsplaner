@@ -11,10 +11,10 @@ const TYPE_LABELS: Record<string, string> = {
 
 export function exportToCSV(entries: VacationEntry[]): string {
   const header = 'Datum;Typ;Titel'
-  const rows = entries
+  const rows = [...entries]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map(e => {
-      const dateStr = format(parseISO(e.date), 'dd.MM.yyyy', { locale: de })
+      const dateStr = format(parseISO(e.date.slice(0, 10)), 'dd.MM.yyyy', { locale: de })
       const type = TYPE_LABELS[e.type] ?? e.type
       const title = e.title ?? ''
       return `${dateStr};${type};${title}`
@@ -23,10 +23,10 @@ export function exportToCSV(entries: VacationEntry[]): string {
 }
 
 export function exportToClipboardText(entries: VacationEntry[]): string {
-  return entries
+  return [...entries]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map(e => {
-      const dateStr = format(parseISO(e.date), 'dd.MM.yyyy (EEEE)', { locale: de })
+      const dateStr = format(parseISO(e.date.slice(0, 10)), 'dd.MM.yyyy (EEEE)', { locale: de })
       const type = TYPE_LABELS[e.type] ?? e.type
       const title = e.title ? ` — ${e.title}` : ''
       return `${dateStr}: ${type}${title}`

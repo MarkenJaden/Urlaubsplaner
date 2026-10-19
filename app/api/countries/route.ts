@@ -1,21 +1,7 @@
 import { NextResponse } from 'next/server'
-
-const OPENHOLIDAYS_BASE = 'https://openholidaysapi.org'
+import { fetchCountries } from '@/lib/holiday-api'
 
 export async function GET() {
-  try {
-    const response = await fetch(
-      `${OPENHOLIDAYS_BASE}/Countries?languageIsoCode=DE`,
-      { next: { revalidate: 86400 } }
-    )
-
-    if (!response.ok) {
-      return NextResponse.json({ error: 'OpenHolidays API error' }, { status: 502 })
-    }
-
-    const data = await response.json()
-    return NextResponse.json(data)
-  } catch {
-    return NextResponse.json({ error: 'OpenHolidays API unreachable' }, { status: 503 })
-  }
+  try { return NextResponse.json(await fetchCountries()) }
+  catch { return NextResponse.json({ error: 'Länder konnten nicht geladen werden.' }, { status: 502 }) }
 }

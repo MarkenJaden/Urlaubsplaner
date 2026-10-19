@@ -70,19 +70,15 @@ export function detectBridgeDays(year: number, publicHolidays: Holiday[]): Bridg
 
     if (prevIsNonWork && nextIsNonWork) {
       let before = 0
-      let firstBefore = prev
       let cur = new Date(day.getTime() - 86400000)
       while (nonWorkDays.has(format(cur, 'yyyy-MM-dd')) && cur >= start) {
         before++
-        firstBefore = format(cur, 'yyyy-MM-dd')
         cur = new Date(cur.getTime() - 86400000)
       }
       let after = 0
-      let firstAfter = next
       cur = new Date(day.getTime() + 86400000)
       while (nonWorkDays.has(format(cur, 'yyyy-MM-dd')) && cur <= end) {
         after++
-        firstAfter = format(cur, 'yyyy-MM-dd')
         cur = new Date(cur.getTime() + 86400000)
       }
 

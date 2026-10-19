@@ -53,7 +53,7 @@ export function CredentialsForm({ mode, legacyLoginEnabled = false }: { mode: 'l
           </div>
         ) : (
           <form onSubmit={submit} className="space-y-4">
-            <label className="block space-y-1.5 text-sm font-medium">Benutzername<input required autoComplete="username" minLength={3} maxLength={32} pattern="[A-Za-z0-9][A-Za-z0-9._-]{2,31}" value={username} onChange={e => setUsername(e.target.value)} className="min-h-11 w-full rounded-lg border bg-background px-3" /></label>
+            <label className="block space-y-1.5 text-sm font-medium">Benutzername<input required autoComplete="username" minLength={3} maxLength={32} pattern="[A-Za-z0-9][A-Za-z0-9._\-]{2,31}" value={username} onChange={e => setUsername(e.target.value)} className="min-h-11 w-full rounded-lg border bg-background px-3" /></label>
             {mode !== 'login' && <p className="text-xs text-muted-foreground">3–32 Zeichen: Buchstaben, Zahlen, Punkt, Bindestrich oder Unterstrich.</p>}
             {mode === 'recover' && <label className="block space-y-1.5 text-sm font-medium">Wiederherstellungsschlüssel<input required autoComplete="off" value={recoveryInput} onChange={e => setRecoveryInput(e.target.value.trim())} className="min-h-11 w-full rounded-lg border bg-background px-3" /></label>}
             <label className="block space-y-1.5 text-sm font-medium">{mode === 'recover' ? 'Neues Passwort' : 'Passwort'}<input required type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'login' ? 1 : 12} maxLength={128} value={password} onChange={e => setPassword(e.target.value)} className="min-h-11 w-full rounded-lg border bg-background px-3" /></label>

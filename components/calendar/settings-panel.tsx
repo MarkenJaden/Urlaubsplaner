@@ -3,17 +3,27 @@
 import { useState, useMemo } from 'react'
 import { ChevronDown, ChevronUp, AlertTriangle, RefreshCw, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Combobox, MultiCombobox } from '@/components/ui/combobox'
+import { MultiCombobox } from '@/components/ui/combobox'
+import { LocationFields } from './location-fields'
 import type { ComboboxOption } from '@/components/ui/combobox'
-import { getSubdivisionAliases } from '@/lib/subdivision-aliases'
-import type { Subdivision, Country } from '@/types'
+import { localizedName } from '@/lib/holiday-regions'
+import { formatDays } from '@/lib/vacation-accounting'
+import type { Subdivision, Country, HolidayGroup } from '@/types'
 
 interface SettingsPanelProps {
+  country: string
+  onCountryChange: (code: string) => void
   subdivisions: Subdivision[]
   subdivision?: string
   onSubdivisionChange: (code: string) => void
+  /** Holiday groups that apply to the selected subdivision. */
+  groups: HolidayGroup[]
+  holidayGroup?: string
+  onHolidayGroupChange: (code: string) => void
+  compareOptions: ComboboxOption[]
   compareSubdivisions: string[]
   onCompareChange: (codes: string[]) => void
+  defaultCompareSelection: string[]
   countries: Country[]
   selectedCountries: string[]
   onCountriesChange: (codes: string[]) => void
@@ -32,17 +42,15 @@ interface SettingsPanelProps {
   onRetryApi?: () => void
 }
 
-function getSubName(sub: Subdivision): string {
-  return sub.name.find(n => n.language === 'DE')?.text ?? sub.shortName ?? sub.code
-}
-
 function getCountryName(c: Country): string {
-  return c.name.find(n => n.language === 'DE')?.text ?? c.isoCode
+  return localizedName(c.name, c.isoCode)
 }
 
 export function SettingsPanel({
+  country, onCountryChange,
   subdivisions, subdivision, onSubdivisionChange,
-  compareSubdivisions, onCompareChange,
+  groups, holidayGroup, onHolidayGroupChange,
+  compareOptions, compareSubdivisions, onCompareChange, defaultCompareSelection,
   countries, selectedCountries, onCountriesChange,
   vacationDaysTotal, onVacationDaysChange,
   countWeekendsAsVacation, onCountWeekendsChange,
@@ -52,33 +60,15 @@ export function SettingsPanel({
   apiError, onRetryApi,
 }: SettingsPanelProps) {
   const [open, setOpen] = useState(true)
+  // Lets the field be emptied while typing without saving 0 as the budget.
+  const [budgetDraft, setBudgetDraft] = useState<string | null>(null)
   const remaining = vacationDaysTotal - vacationDaysUsed
 
-  const subdivisionOptions: ComboboxOption[] = useMemo(() =>
-    subdivisions.map(s => ({
-      value: s.code,
-      label: getSubName(s),
-      aliases: getSubdivisionAliases(s.code),
-    })),
-  [subdivisions])
-
-  const compareOptions: ComboboxOption[] = useMemo(() =>
-    subdivisions.map(s => ({
-      value: s.code,
-      label: getSubName(s),
-      aliases: getSubdivisionAliases(s.code),
-    })),
-  [subdivisions])
-
   const countryOptions: ComboboxOption[] = useMemo(() =>
-    countries
-      .filter(c => c.isoCode !== 'DE')
-      .map(c => ({
-        value: c.isoCode,
-        label: getCountryName(c),
-        aliases: [c.isoCode],
-      })),
-  [countries])
+    countries.filter(c => c.isoCode !== country).map(c => ({ value: c.isoCode, label: getCountryName(c), aliases: [c.isoCode] })),
+  [countries, country])
+
+  const allRegionsLabel = country === 'DE' && defaultCompareSelection.length === 16 ? 'Alle 16 Bundesländer' : 'Alle Regionen'
 
   return (
     <div className="rounded-lg border border-border bg-card">
@@ -109,32 +99,26 @@ export function SettingsPanel({
             <div className="space-y-3">
               <h4 className="font-medium text-muted-foreground">Standort & Regionen</h4>
 
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Mein Bundesland</label>
-                <Combobox
-                  options={subdivisionOptions}
-                  value={subdivision}
-                  onChange={onSubdivisionChange}
-                  placeholder="Bundesland wählen..."
-                  searchPlaceholder="z.B. NRW, Bayern..."
-                  emptyText="Kein Bundesland gefunden"
-                />
-              </div>
+              <LocationFields
+                countries={countries} country={country} onCountryChange={onCountryChange}
+                subdivisions={subdivisions} subdivision={subdivision} onSubdivisionChange={onSubdivisionChange}
+                groups={groups} holidayGroup={holidayGroup} onHolidayGroupChange={onHolidayGroupChange}
+              />
 
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Ferien in anderen Bundesländern vergleichen</label>
+                <label className="text-xs text-muted-foreground mb-1 block">Ferien in anderen Regionen vergleichen</label>
                 <MultiCombobox
                   options={compareOptions}
                   value={compareSubdivisions}
                   onChange={onCompareChange}
-                  placeholder="Bundesländer auswählen..."
-                  searchPlaceholder="z.B. NRW, Bayern..."
-                  emptyText="Kein Bundesland gefunden"
+                  placeholder="Regionen auswählen..."
+                  searchPlaceholder={country === 'DE' ? 'z.B. NRW, Bayern...' : 'Suchen...'}
+                  emptyText="Keine Region gefunden"
                 />
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" onClick={() => onCompareChange(subdivisions.map(s => s.code))}>Alle 16 Bundesländer</Button>
+                {defaultCompareSelection.length > 0 && <Button size="sm" variant="outline" onClick={() => onCompareChange(defaultCompareSelection)}>{allRegionsLabel}</Button>}
                 {compareSubdivisions.length > 0 && <Button size="sm" variant="ghost" onClick={() => onCompareChange([])}>Auswahl leeren</Button>}
               </div>
 
@@ -170,15 +154,16 @@ export function SettingsPanel({
               </label>
 
               <div className="mt-3 space-y-1">
-                <label className="block text-xs text-muted-foreground">Urlaubsanspruch (Tage)</label>
-                <input type="number" min={0} max={366} value={vacationDaysTotal}
-                  onChange={e => onVacationDaysChange(Number(e.target.value))}
+                <label htmlFor="vacation-days-total" className="block text-xs text-muted-foreground">Urlaubsanspruch (Tage)</label>
+                <input id="vacation-days-total" type="number" min={0} max={366} step={0.5} value={budgetDraft ?? String(vacationDaysTotal)}
+                  onChange={e => { setBudgetDraft(e.target.value); const days = e.target.valueAsNumber; if (Number.isFinite(days) && days >= 0 && days <= 366) onVacationDaysChange(days) }}
+                  onBlur={() => setBudgetDraft(null)}
                   className="min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-right text-sm sm:w-24" />
               </div>
 
               <div className="mt-3">
-                <label className="text-xs text-muted-foreground">Standard-Notiztext</label>
-                <input type="text" placeholder="z.B. Arzt, Geburtstag" value={defaultNoteText}
+                <label htmlFor="default-note-text" className="text-xs text-muted-foreground">Standard-Notiztext</label>
+                <input id="default-note-text" type="text" placeholder="z.B. Arzt, Geburtstag" value={defaultNoteText}
                   onChange={e => onDefaultNoteTextChange(e.target.value)}
                   className="min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
                 <p className="text-xs text-muted-foreground mt-0.5">Wird beim Erstellen neuer Notizen verwendet</p>
@@ -192,11 +177,11 @@ export function SettingsPanel({
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-md bg-blue-50 dark:bg-blue-900/20 p-2">
                   <div className="text-xs text-muted-foreground">Verplant</div>
-                  <div className="text-lg font-bold text-blue-600">{vacationDaysUsed}</div>
+                  <div className="text-lg font-bold text-blue-600">{formatDays(vacationDaysUsed)}</div>
                 </div>
                 <div className={`rounded-md p-2 ${remaining < 0 ? 'bg-red-50 dark:bg-red-900/20' : 'bg-green-50 dark:bg-green-900/20'}`}>
                   <div className="text-xs text-muted-foreground">Verbleibend</div>
-                  <div className={`text-lg font-bold ${remaining < 0 ? 'text-red-600' : 'text-green-600'}`}>{remaining}</div>
+                  <div className={`text-lg font-bold ${remaining < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatDays(remaining)}</div>
                 </div>
                 <div className="rounded-md bg-purple-50 dark:bg-purple-900/20 p-2">
                   <div className="text-xs text-muted-foreground">Gleittage</div>

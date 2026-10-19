@@ -163,3 +163,11 @@ describe('parseConfigJSON / exportConfigJSON', () => {
     expect(parseConfigJSON('null')).toBeNull()
   })
 })
+
+describe('export does not change the displayed plan', () => {
+  it('sorts a copy and keeps calendar dates in every time zone', () => {
+    const unsorted = [mkEntry('2026-06-01', 'note', 'B'), mkEntry('2026-01-01T00:00:00.000Z', 'vacation')]
+    expect(exportToCSV(unsorted).split('\n')[1]).toBe('01.01.2026;Urlaub;')
+    expect(unsorted[0].date).toBe('2026-06-01')
+  })
+})

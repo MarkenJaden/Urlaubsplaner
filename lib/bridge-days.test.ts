@@ -112,10 +112,8 @@ describe('detectBridgeDays', () => {
   it('handles holiday on Friday (bridge on Monday or Thursday)', () => {
     // Karfreitag April 3 2026 is Friday
     const result = detectBridgeDays(2026, holidays2026)
-    // Thursday April 2 could be a bridge day connecting to the previous weekend
-    const apr2 = result.find(b => b.date === '2026-04-02')
-    // Only if March 31 or April 1 is also off
-    expect(Array.isArray(result)).toBe(true)
+    // Thursday April 2 is no bridge day: Wednesday April 1 is a working day
+    expect(result.find(b => b.date === '2026-04-02')).toBeUndefined()
   })
 
   it('returns dates in yyyy-MM-dd format', () => {

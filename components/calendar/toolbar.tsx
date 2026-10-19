@@ -18,6 +18,7 @@ import {
   exportToJSON, exportToICS, parseImportFile,
   exportConfigJSON, parseConfigJSON,
 } from '@/lib/export'
+import { formatDays } from '@/lib/vacation-accounting'
 
 interface ToolbarProps {
   year: number
@@ -84,7 +85,7 @@ export function Toolbar({
   const handlePrint = () => window.print()
 
   const handleReset = () => {
-    if (confirm('Möchtest du wirklich alle Planungen löschen?')) onReset()
+    if (confirm('Möchtest du wirklich alle Planungen aller Jahre löschen?')) onReset()
   }
 
   const handleImportClick = () => fileInputRef.current?.click()
@@ -98,6 +99,7 @@ export function Toolbar({
       const content = ev.target?.result as string
       const data = parseImportFile(content)
       if (data) onImport(data)
+      else alert('Die Datei enthält keine gültigen Urlaubsplaner-Daten.')
     }
     reader.readAsText(file)
     e.target.value = ''
@@ -111,6 +113,7 @@ export function Toolbar({
       const content = ev.target?.result as string
       const data = parseConfigJSON(content)
       if (data && onImportConfig) onImportConfig(data)
+      else if (!data) alert('Die Datei enthält keine gültige Konfiguration.')
     }
     reader.readAsText(file)
     e.target.value = ''
@@ -230,9 +233,9 @@ export function Toolbar({
         <div className="flex min-w-0 items-center gap-1.5">
           <span className="text-muted-foreground">Urlaub:</span>
           <Badge variant={remaining < 5 ? 'destructive' : 'default'}>
-            {vacationDaysUsed}/{vacationDaysTotal}
+            {formatDays(vacationDaysUsed)}/{formatDays(vacationDaysTotal)}
           </Badge>
-          <span className="text-xs text-muted-foreground">({remaining} übrig)</span>
+          <span className="text-xs text-muted-foreground">({formatDays(remaining)} übrig)</span>
         </div>
         {gleittageCount > 0 && (
           <div className="flex items-center gap-1.5">

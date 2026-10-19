@@ -7,16 +7,21 @@ import { YearView } from '@/components/calendar/year-view'
 import { SettingsPanel } from '@/components/calendar/settings-panel'
 import { SuggestionsPanel } from '@/components/calendar/suggestions-panel'
 import { useVacations, useToggleVacation } from '@/hooks/use-vacations'
-import { useHolidays, useCompareHolidays, useSubdivisions, useCountries, useCountryHolidays } from '@/hooks/use-holidays'
+import { useHolidays, useCompareHolidays, useCountries, useCountryHolidays } from '@/hooks/use-holidays'
+import { useHomeRegion } from '@/hooks/use-home-region'
 import { detectBridgeDays } from '@/lib/bridge-days'
-import { loadConfig, saveConfig, configToEntries, defaultConfig } from '@/lib/config'
+import { loadConfig, saveConfig, configToEntries, defaultConfig, applyConfigPatch, mergeImportedEntries, toggleEntry } from '@/lib/config'
+import { comparisonRegions, defaultComparisonSelection, localizedName } from '@/lib/holiday-regions'
+import { getSubdivisionAliases } from '@/lib/subdivision-aliases'
+import { holidayDateSet, remainingWorkDays as countRemainingWorkDays, summarizeVacation, vacationBudget } from '@/lib/vacation-accounting'
 import { X, Info, Cloud, PartyPopper, School, Palmtree, Clock, StickyNote, Route } from 'lucide-react'
 import { useProfile, useUpdatePreferences } from '@/hooks/use-profile'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
-import { parsePreferences, parseEntry } from '@/lib/preferences'
-import { parseISO, isSameDay, format, eachDayOfInterval, isWeekend } from 'date-fns'
-import type { EntryType, VacationEntry, Holiday, LocalConfig } from '@/types'
+import { parsePreferences, parseEntry, countryChangePatch } from '@/lib/preferences'
+import { parseISO, format } from 'date-fns'
+import { de } from 'date-fns/locale'
+import type { EntryType, Holiday, LocalConfig, PreferencesPatch } from '@/types'
 import type { DayInfo } from '@/components/calendar/day-cell'
 import type { ImportData } from '@/lib/export'
 
@@ -24,63 +29,6 @@ interface CalendarClientProps {
   userId?: string
   preferences: Record<string, unknown>
   isLoggedIn: boolean
-}
-
-function countWorkDays(year: number, entries: VacationEntry[], publicHolidays: Holiday[]): number {
-  const start = new Date(year, 0, 1)
-  const end = new Date(year, 11, 31)
-  const today = new Date()
-  const calcStart = today > start && today.getFullYear() === year ? today : start
-  if (calcStart.getFullYear() > year) return 0
-
-  const holidaySet = new Set<string>()
-  for (const h of publicHolidays) {
-    try {
-      const days = eachDayOfInterval({ start: parseISO(h.startDate), end: parseISO(h.endDate) })
-      for (const d of days) holidaySet.add(format(d, 'yyyy-MM-dd'))
-    } catch {}
-  }
-  const entrySet = new Set(entries.map(e => e.date.split('T')[0]))
-
-  let count = 0
-  const all = eachDayOfInterval({ start: calcStart, end })
-  for (const d of all) {
-    const key = format(d, 'yyyy-MM-dd')
-    if (isWeekend(d) || holidaySet.has(key) || entrySet.has(key)) continue
-    count++
-  }
-  return count
-}
-
-function computeOverBudget(
-  entries: VacationEntry[],
-  publicHolidays: Holiday[],
-  totalDays: number,
-  halfDaysChristmas: boolean,
-): Set<string> {
-  const result = new Set<string>()
-  const holidaySet = new Set<string>()
-  for (const h of publicHolidays) {
-    try {
-      const days = eachDayOfInterval({ start: parseISO(h.startDate), end: parseISO(h.endDate) })
-      for (const d of days) holidaySet.add(format(d, 'yyyy-MM-dd'))
-    } catch {}
-  }
-
-  const vacDays = entries
-    .filter(e => e.type === 'vacation')
-    .sort((a, b) => a.date.localeCompare(b.date))
-
-  let cost = 0
-  for (const e of vacDays) {
-    const dateStr = e.date.split('T')[0]
-    const d = parseISO(e.date)
-    if (isWeekend(d) || holidaySet.has(dateStr)) continue
-    const isHalf = halfDaysChristmas && d.getMonth() === 11 && (d.getDate() === 24 || d.getDate() === 31)
-    cost += isHalf ? 0.5 : 1
-    if (cost > totalDays) result.add(dateStr)
-  }
-  return result
 }
 
 function getDateKey(date: Date): string {
@@ -96,8 +44,10 @@ function getHolidayForDate(holidays: Holiday[], date: Date): Holiday | undefined
 }
 
 function getHolidayName(h: Holiday): string {
-  return h.name.find(n => n.language === 'DE')?.text ?? h.name[0]?.text ?? ''
+  return localizedName(h.name)
 }
+
+type ConfigPatch = PreferencesPatch & { entries?: LocalConfig['entries'] }
 
 function hasVisibleDayInfo(day: DayInfo | null): day is DayInfo {
   return Boolean(day?.publicHoliday || day?.schoolHoliday || day?.isBridgeDay || day?.entry || day?.comparisonStates?.length)
@@ -106,7 +56,7 @@ function hasVisibleDayInfo(day: DayInfo | null): day is DayInfo {
 function DayInfoDetails({ day }: { day: DayInfo }) {
   return (
     <>
-      <p className="font-medium">{format(day.date, 'dd.MM.yyyy (EEEE)')}</p>
+      <p className="font-medium">{format(day.date, 'dd.MM.yyyy (EEEE)', { locale: de })}</p>
       {day.publicHoliday && <p className="text-green-600"><PartyPopper className="mr-1 inline h-4 w-4" /> {day.publicHoliday}</p>}
       {day.schoolHoliday && <p className="text-yellow-600"><School className="mr-1 inline h-4 w-4" /> {day.schoolHoliday}</p>}
       {day.isBridgeDay && day.bridgeDayInfo && (
@@ -129,7 +79,7 @@ function DayInfoDetails({ day }: { day: DayInfo }) {
   )
 }
 
-export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }: CalendarClientProps) {
+export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: CalendarClientProps) {
   const currentYear = new Date().getFullYear()
   const [year, setYear] = useState(currentYear)
   const [selectedType, setSelectedType] = useState<EntryType>('vacation')
@@ -146,37 +96,46 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
   const queryClient = useQueryClient()
   const [importBusy, setImportBusy] = useState(false)
   const [syncMessage, setSyncMessage] = useState('')
-  const config = isLoggedIn ? { ...defaultConfig(), ...(profile.data?.preferences ?? serverPrefs), entries: [] } as LocalConfig : localConfig
-  const subdivision = config?.subdivision
-  const country = 'DE'
-  const compareSubdivisions = [...new Set(config?.compareSubdivisions ?? [])]
-  const selectedCountries = config?.selectedCountries ?? []
+  const prefs = profile.data?.preferences ?? serverPrefs
+  const config = isLoggedIn ? { ...defaultConfig(), ...prefs, entries: [] } as LocalConfig : localConfig
+  // Country → subdivision → holiday group (e.g. NL-UT → NL-MI).
+  const home = useHomeRegion(config)
+  const { country, subdivision, region, locationReady, groupsLoading } = home
+  const subdivisionsData = home.subdivisions, groupsData = home.groups
+  const storedCompare = config?.compareSubdivisions
+  const compareSubdivisions = useMemo(() => [...new Set(storedCompare ?? [])], [storedCompare])
+  const selectedCountries = (config?.selectedCountries ?? []).filter(code => code !== country)
   const showHeatmap = config?.showHeatmap ?? false
   const showPublicHolidays = config?.showPublicHolidays ?? true
   const showSchoolHolidays = config?.showSchoolHolidays ?? true
   const showBridgeDays = config?.showBridgeDays ?? true
   const halfDaysChristmas = config?.halfDaysChristmas ?? true
   const countWeekendsAsVacation = config?.countWeekendsAsVacation ?? false
-  const prefs = profile.data?.preferences ?? serverPrefs
-  const vacationDaysTotal = config?.vacationDaysPerYear?.[year] ?? (isLoggedIn ? (prefs.vacationDays as number ?? 30) : 30)
+  const vacationDaysTotal = vacationBudget(config ?? {}, year)
 
-  const { data: subdivisionsData = [] } = useSubdivisions(country)
   const { data: countriesData = [] } = useCountries()
   const { data: serverEntries = [], isLoading: entriesLoading, isError: entriesError } = useVacations(year, isLoggedIn)
   const { addMutation, removeMutation } = useToggleVacation(year, isLoggedIn)
 
-  const entries = isLoggedIn ? serverEntries : (config ? configToEntries(config, year) : [])
+  const entries = useMemo(() => isLoggedIn ? serverEntries : (localConfig ? configToEntries(localConfig, year) : []), [isLoggedIn, serverEntries, localConfig, year])
 
   const { data: publicHolidays = [], isError: holidaysError, refetch: refetchHolidays } = useHolidays({
-    country, subdivision, year, type: 'public', enabled: !!subdivision,
+    country, subdivision, year, type: 'public', enabled: locationReady,
   })
   const { data: schoolHolidays = [], isError: schoolError, isLoading: schoolLoading, refetch: refetchSchool } = useHolidays({
-    country, subdivision, year, type: 'school', enabled: showSchoolHolidays && !!subdivision,
+    country, subdivision, group: region.group, year, type: 'school', enabled: showSchoolHolidays && locationReady && !groupsLoading,
   })
-  const comparison = useCompareHolidays(country, compareSubdivisions, year, showHeatmap)
+  const groupCodes = useMemo(() => new Set(groupsData.map(g => g.code)), [groupsData])
+  const compareRegions = useMemo(() => compareSubdivisions.map(code => ({ code, kind: groupCodes.has(code) ? 'group' as const : 'subdivision' as const })), [compareSubdivisions, groupCodes])
+  const comparison = useCompareHolidays(country, compareRegions, year, showHeatmap && !groupsLoading)
   const countryHolidayArrays = useCountryHolidays(selectedCountries, year, selectedCountries.length > 0)
 
   const allCountryHolidays = useMemo(() => countryHolidayArrays.flat(), [countryHolidayArrays])
+
+  const regionName = useCallback((code: string) => localizedName(
+    subdivisionsData.find(s => s.code === code)?.name ?? groupsData.find(g => g.code === code)?.name, code,
+  ), [subdivisionsData, groupsData])
+  const compareOptions = useMemo(() => comparisonRegions(subdivisionsData, groupsData).map(r => ({ value: r.code, label: regionName(r.code), aliases: getSubdivisionAliases(r.code) })), [subdivisionsData, groupsData, regionName])
 
   const bridgeDays = useMemo(() => {
     if (!showBridgeDays || publicHolidays.length === 0) return []
@@ -193,28 +152,29 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
 
   const showOtherMonthDays = config?.showOtherMonthDays ?? false
 
-  const overBudgetDates = useMemo(
-    () => computeOverBudget(entries, publicHolidays, vacationDaysTotal, halfDaysChristmas),
-    [entries, publicHolidays, vacationDaysTotal, halfDaysChristmas]
+  // One cost definition for "verplant", "verbleibend", over budget and suggestions.
+  const holidayDates = useMemo(() => holidayDateSet(publicHolidays), [publicHolidays])
+  const summary = useMemo(
+    () => summarizeVacation(entries, vacationDaysTotal, { holidayDates, halfDaysChristmas, countWeekendsAsVacation }),
+    [entries, vacationDaysTotal, holidayDates, halfDaysChristmas, countWeekendsAsVacation]
   )
-
-  const vacationDaysUsed = entries.filter(e => e.type === 'vacation').length
+  const overBudgetDates = summary.overBudget
+  const vacationDaysUsed = summary.used
   const gleittageCount = entries.filter(e => e.type === 'gleittag').length
-  const remainingWorkDays = countWorkDays(year, entries, publicHolidays)
+  const remainingWorkDays = countRemainingWorkDays(year, entries, { holidayDates, countWeekendsAsVacation }, format(new Date(), 'yyyy-MM-dd'))
   const vacationDateSet = useMemo(
     () => new Set(entries.filter(e => e.type === 'vacation').map(e => e.date.split('T')[0])),
     [entries]
   )
 
-  const updateConfig = useCallback((patch: Partial<LocalConfig>) => {
+  const updateConfig = useCallback((patch: ConfigPatch) => {
     if (isLoggedIn) {
       const { entries: _entries, ...preferences } = patch
       updatePreferences.mutate(preferences)
       return
     }
     setConfig(prev => {
-      const base = prev ?? loadConfig()
-      const next = { ...base, ...patch, vacationDaysPerYear: { ...base.vacationDaysPerYear, ...patch.vacationDaysPerYear } } as LocalConfig
+      const next = applyConfigPatch(prev ?? loadConfig(), patch)
       saveConfig(next)
       return next
     })
@@ -232,75 +192,51 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
 
   const handleToggle = useCallback((date: Date, type: EntryType) => {
     const dateKey = getDateKey(date)
+    const matches = (e: { date: string; type: string }) => e.type === type && e.date.slice(0, 10) === dateKey
+    const saved = isLoggedIn ? entries.find(matches) : undefined
+    // Guests: search all years, days of the neighbouring year can be visible in the grid.
+    const existing = isLoggedIn ? saved : localConfig?.entries.find(matches)
+    const title = !existing && type === 'note' ? defaultNoteText || prompt('Notiz-Text (optional):') || undefined : undefined
     if (isLoggedIn) {
-      const dateStr = `${dateKey}T00:00:00.000Z`
-      const existing = serverEntries.find(e => e.type === type && isSameDay(parseISO(e.date), date))
-      if (existing) { removeMutation.mutate(existing.id) }
-      else {
-        let title: string | undefined
-        if (type === 'note') { title = defaultNoteText || prompt('Notiz-Text (optional):') || undefined }
-        addMutation.mutate({ date: dateStr, type, title })
-      }
+      if (saved) removeMutation.mutate(saved.id)
+      else addMutation.mutate({ date: `${dateKey}T00:00:00.000Z`, type, title })
     } else {
-      const currentEntries = (config ?? loadConfig()).entries
-      const existing = currentEntries.find(e => e.type === type && e.date === dateKey)
-      const title = !existing && type === 'note'
-        ? defaultNoteText || prompt('Notiz-Text (optional):') || undefined
-        : undefined
-
-      updateLocalEntries(current => {
-        const currentExisting = current.findIndex(e => e.type === type && e.date === dateKey)
-        if (currentExisting >= 0) return current.filter((_, i) => i !== currentExisting)
-        return [...current, { date: dateKey, type, title }]
-      })
+      updateLocalEntries(current => toggleEntry(current, dateKey, type, title))
     }
-  }, [isLoggedIn, serverEntries, config, addMutation, removeMutation, updateLocalEntries, defaultNoteText])
+  }, [isLoggedIn, entries, localConfig, addMutation, removeMutation, updateLocalEntries, defaultNoteText])
 
-  const handleApplySuggestions = (dates: string[], type: EntryType) => {
-    const dateKeys = [...new Set(dates.map(date => date.split('T')[0]))]
-    if (dateKeys.length === 0) return
-
-    if (isLoggedIn) {
-      for (const dateKey of dateKeys) {
-        const exists = serverEntries.some(e => e.type === type && e.date.split('T')[0] === dateKey)
-        if (!exists) addMutation.mutate({ date: `${dateKey}T00:00:00.000Z`, type })
-      }
-      return
-    }
-
-    updateLocalEntries(current => {
-      const existingKeys = new Set(current.filter(e => e.type === type).map(e => e.date.split('T')[0]))
-      const additions = dateKeys
-        .filter(dateKey => !existingKeys.has(dateKey))
-        .map(dateKey => ({ date: dateKey, type }))
-      return additions.length > 0 ? [...current, ...additions] : current
-    })
-  }
-
-  const importSavedData = async (vacations: unknown[], preferences?: Record<string, unknown>) => {
+  const importSavedData = async (vacations: unknown[], preferences?: Record<string, unknown>, successMessage = 'Plan übernommen. Die lokale Kopie bleibt erhalten.') => {
     setImportBusy(true); setSyncMessage('')
     try {
       const response = await fetch('/api/vacations/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vacations, preferences }) })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error)
       await Promise.all([queryClient.invalidateQueries({ queryKey: ['vacations'] }), queryClient.invalidateQueries({ queryKey: ['profile'] })])
-      setSyncMessage('Plan übernommen. Die lokale Kopie bleibt erhalten.')
+      setSyncMessage(successMessage)
     } catch (error) { setSyncMessage(error instanceof Error ? error.message : 'Import fehlgeschlagen.') }
     finally { setImportBusy(false) }
+  }
+
+  const handleApplySuggestions = (dates: string[], type: EntryType, replace = false) => {
+    const dateKeys = [...new Set(dates.map(date => date.split('T')[0]))]
+    if (dateKeys.length === 0) return
+    const wanted = new Set(dateKeys)
+    // "Vorhandene überschreiben" replaces this year's vacation days; Gleittage and notes stay.
+    const replaced = (entry: { date: string; type: string }) => replace && entry.type === type && entry.date.startsWith(`${year}-`) && !wanted.has(entry.date.slice(0, 10))
+
+    if (isLoggedIn) {
+      for (const entry of serverEntries) if (replaced(entry)) removeMutation.mutate(entry.id)
+      void importSavedData(dateKeys.map(date => ({ date, type })), undefined, 'Vorschläge übernommen.')
+      return
+    }
+
+    updateLocalEntries(current => mergeImportedEntries(current.filter(entry => !replaced(entry)), dateKeys.map(date => ({ date, type }))))
   }
 
   const handleImport = (data: ImportData) => {
     if (isLoggedIn) { void importSavedData(data.vacations); return }
     if (data.vacations.some(entry => !parseEntry(entry))) { setSyncMessage('Import enthält ungültige Einträge.'); return }
-    updateLocalEntries(current => {
-      const keys = new Set(current.map(e => `${e.date.split('T')[0]}:${e.type}`))
-      const additions = data.vacations.filter(v => {
-        const key = `${v.date.split('T')[0]}:${v.type}`
-        if (keys.has(key)) return false
-        keys.add(key); return true
-      }).map(v => ({ ...v, date: v.date.split('T')[0] }))
-      return [...current, ...additions]
-    })
+    updateLocalEntries(current => mergeImportedEntries(current, data.vacations))
   }
 
   const handleImportConfig = (data: Record<string, unknown>) => {
@@ -317,15 +253,18 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
     void importSavedData(entries, preferences as Record<string, unknown>)
   }
 
-  const handleReset = () => {
-    if (isLoggedIn) {
-      for (const e of serverEntries) removeMutation.mutate(e.id)
-    } else {
-      updateConfig({ entries: [] })
-    }
+  const handleReset = async () => {
+    if (!isLoggedIn) { updateConfig({ entries: [] }); return }
+    setSyncMessage('')
+    try {
+      const response = await fetch('/api/vacations', { method: 'DELETE' })
+      if (!response.ok) throw new Error()
+      setSyncMessage('Alle Planungen wurden gelöscht.')
+    } catch { setSyncMessage('Planungen konnten nicht gelöscht werden. Bitte erneut versuchen.') }
+    finally { await queryClient.invalidateQueries({ queryKey: ['vacations'] }) }
   }
 
-  const handleRetryApi = () => { refetchHolidays(); refetchSchool(); comparison.retry() }
+  const handleRetryApi = () => { home.retry(); refetchHolidays(); refetchSchool(); comparison.retry() }
 
   const existingVacationDates = [...vacationDateSet]
   const existingNoteDates = entries.filter(e => e.type === 'note').map(e => e.date.split('T')[0])
@@ -351,7 +290,7 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
     const bridgeDayInfo = bridgeDayMap.get(activeDayKey)
     const day: DayInfo = {
       date,
-      comparisonStates: showHeatmap ? comparison.holidays.flatMap((holidays, i) => getHolidayForDate(holidays, date) ? [subdivisionsData.find((s: { code: string }) => s.code === compareSubdivisions[i])?.name?.find((n: { language: string }) => n.language === 'DE')?.text ?? compareSubdivisions[i]] : []) : [],
+      comparisonStates: showHeatmap ? comparison.holidays.flatMap((holidays, i) => getHolidayForDate(holidays, date) ? [regionName(compareSubdivisions[i])] : []) : [],
       publicHoliday: publicHoliday ? getHolidayName(publicHoliday) : undefined,
       schoolHoliday: schoolHoliday ? getHolidayName(schoolHoliday) : undefined,
       isBridgeDay: showBridgeDays && bridgeDaySet.has(activeDayKey),
@@ -360,15 +299,17 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
     }
 
     return hasVisibleDayInfo(day) ? day : null
-  }, [activeDayKey, entries, combinedPublicHolidays, schoolHolidays, bridgeDayMap, bridgeDaySet, showBridgeDays, showHeatmap, comparison.holidays, compareSubdivisions, subdivisionsData])
+  }, [activeDayKey, entries, combinedPublicHolidays, schoolHolidays, bridgeDayMap, bridgeDaySet, showBridgeDays, showHeatmap, comparison.holidays, compareSubdivisions, regionName])
 
   return (
     <div className="min-h-screen bg-background">
       <Header isLoggedIn={isLoggedIn} />
       <SuggestionsPanel
         open={showSuggestions} onClose={() => setShowSuggestions(false)}
-        year={year} country={country} subdivision={subdivision}
+        year={year} country={country} subdivision={subdivision} group={region.group}
         remainingDays={vacationDaysTotal - vacationDaysUsed}
+        totalDays={vacationDaysTotal}
+        halfDaysChristmas={halfDaysChristmas}
         existingVacationDates={existingVacationDates}
         noteDates={existingNoteDates}
         onApply={handleApplySuggestions}
@@ -389,19 +330,27 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
         {(profile.isError || entriesError || updatePreferences.isError || addMutation.isError || removeMutation.isError) && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">Speichern oder Synchronisieren fehlgeschlagen. Prüfe deine Verbindung und Anmeldung. <Button variant="outline" size="sm" onClick={() => { profile.refetch(); queryClient.invalidateQueries({ queryKey: ['vacations'] }) }}>Neu laden</Button></div>}
         {syncMessage && <p role="status" className="rounded-lg border p-3 text-sm">{syncMessage}</p>}
         {(schoolLoading || comparison.isLoading) && <p role="status" className="text-sm text-muted-foreground">Schulferien werden geladen…</p>}
-        {subdivision && showSchoolHolidays && !schoolLoading && !schoolError && schoolHolidays.length === 0 && <p role="status" className="text-sm text-muted-foreground">Für dieses Bundesland und Jahr sind noch keine Schulferien verfügbar.</p>}
-        {!subdivision && <p className="text-sm text-muted-foreground">Wähle dein Bundesland, um Feiertage und Schulferien zu laden.</p>}
-        {showHeatmap && <p className="text-sm text-muted-foreground">Ferienvergleich: {compareSubdivisions.length === 16 ? 'Alle 16 Bundesländer' : compareSubdivisions.length ? compareSubdivisions.map(code => subdivisionsData.find((s: { code: string }) => s.code === code)?.name?.find((n: { language: string }) => n.language === 'DE')?.text ?? code).join(', ') : 'Wähle Vergleichs-Bundesländer oder alle 16 Länder aus.'}</p>}
+        {locationReady && showSchoolHolidays && !schoolLoading && !schoolError && schoolHolidays.length === 0 && <p role="status" className="text-sm text-muted-foreground">Für {country === 'DE' ? 'dieses Bundesland' : 'diese Region'} und Jahr sind noch keine Schulferien verfügbar.</p>}
+        {showSchoolHolidays && region.ambiguous && <p role="status" className="text-sm text-muted-foreground">Hier gelten mehrere Ferienregionen. Wähle deine Ferienregion, damit nur deine Schulferien angezeigt werden.</p>}
+        {!locationReady && <p className="text-sm text-muted-foreground">{country === 'DE' ? 'Wähle dein Bundesland' : 'Wähle deine Region oder Ferienregion'}, um Feiertage und Schulferien zu laden.</p>}
+        {showHeatmap && <p className="text-sm text-muted-foreground">Ferienvergleich: {country === 'DE' && compareSubdivisions.length === 16 ? 'Alle 16 Bundesländer' : compareSubdivisions.length ? compareSubdivisions.map(regionName).join(', ') : 'Wähle Vergleichsregionen aus.'}</p>}
 
         <SettingsPanel
+          country={country}
+          onCountryChange={(code) => { if (code !== country) updateConfig(countryChangePatch(code)) }}
           subdivisions={subdivisionsData}
           subdivision={subdivision}
-          onSubdivisionChange={(code) => updateConfig({ subdivision: code })}
+          onSubdivisionChange={(code) => updateConfig({ subdivision: code, holidayGroup: null })}
+          groups={region.candidates}
+          holidayGroup={region.group}
+          onHolidayGroupChange={(code) => updateConfig({ holidayGroup: code })}
+          compareOptions={compareOptions}
           compareSubdivisions={compareSubdivisions}
           onCompareChange={(codes) => updateConfig({ compareSubdivisions: codes, showHeatmap: codes.length > 0 })}
+          defaultCompareSelection={defaultComparisonSelection(subdivisionsData, groupsData)}
           countries={countriesData}
           selectedCountries={selectedCountries}
-          onCountriesChange={(codes) => updateConfig({ selectedCountries: codes } as Partial<LocalConfig>)}
+          onCountriesChange={(codes) => updateConfig({ selectedCountries: codes })}
           vacationDaysTotal={vacationDaysTotal}
           onVacationDaysChange={(n) => updateConfig({ vacationDaysPerYear: { [year]: n } })}
           countWeekendsAsVacation={countWeekendsAsVacation}
@@ -413,7 +362,7 @@ export function CalendarClient({ userId, preferences: serverPrefs, isLoggedIn }:
           remainingWorkDays={remainingWorkDays}
           defaultNoteText={defaultNoteText}
           onDefaultNoteTextChange={setDefaultNoteText}
-          apiError={holidaysError || schoolError || comparison.isError}
+          apiError={home.isError || holidaysError || schoolError || comparison.isError}
           onRetryApi={handleRetryApi}
         />
 
