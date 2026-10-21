@@ -229,7 +229,7 @@ export function Toolbar({
       </TooltipProvider>
 
       {/* Stats */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm md:basis-full">
         <div className="flex min-w-0 items-center gap-1.5">
           <span className="text-muted-foreground">Urlaub:</span>
           <Badge variant={remaining < 5 ? 'destructive' : 'default'}>
@@ -237,12 +237,10 @@ export function Toolbar({
           </Badge>
           <span className="text-xs text-muted-foreground">({formatDays(remaining)} übrig)</span>
         </div>
-        {gleittageCount > 0 && (
-          <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground">Gleittage:</span>
-            <Badge variant="secondary">{gleittageCount}</Badge>
-          </div>
-        )}
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">Gleittage:</span>
+          <Badge variant="secondary">{gleittageCount}</Badge>
+        </div>
         <div className="flex items-center gap-1.5">
           <span className="text-muted-foreground">Arbeitstage:</span>
           <Badge variant="secondary">{remainingWorkDays}</Badge>
