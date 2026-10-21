@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
+import { X } from 'lucide-react'
 import type { VacationSuggestionBlock, PlanningPreferences } from '@/lib/vacation-suggester'
 import { DEFAULT_PREFERENCES } from '@/lib/vacation-suggester'
 import { format, getISOWeek, parseISO } from 'date-fns'
@@ -33,6 +34,10 @@ interface SuggestionsPanelProps {
   existingVacationDates: string[]
   noteDates: string[]
   onApply: (dates: string[], type: EntryType, replace: boolean) => void
+  /** Removes vacation days that were added from this dialog. */
+  onRemove: (dates: string[]) => void
+  /** A change is still being saved; toggling again could race it. */
+  busy?: boolean
 }
 
 export function SuggestionsPanel({
@@ -48,14 +53,18 @@ export function SuggestionsPanel({
   existingVacationDates,
   noteDates,
   onApply,
+  onRemove,
+  busy = false,
 }: SuggestionsPanelProps) {
   const [prefs, setPrefs] = useState<PlanningPreferences>({ ...DEFAULT_PREFERENCES, halfDaysChristmas })
   const [overwrite, setOverwrite] = useState(false)
   const [suggestions, setSuggestions] = useState<VacationSuggestionBlock[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Once single blocks are picked, "Alle übernehmen" would add the rest too, so it is hidden.
-  const [pickedSingle, setPickedSingle] = useState(false)
+  // Days each block added in this dialog, so a block can be switched off again
+  // without touching days that were planned before.
+  const [addedByBlock, setAddedByBlock] = useState<Record<number, string[]>>({})
+  const pickedSingle = Object.keys(addedByBlock).length > 0
   const used = totalDays - remainingDays
   // Follow the half-day setting of the plan whenever the dialog opens.
   useEffect(() => { if (open) setPrefs(p => ({ ...p, halfDaysChristmas })) }, [open, halfDaysChristmas])
@@ -68,7 +77,7 @@ export function SuggestionsPanel({
   const handleGenerate = async () => {
     setLoading(true)
     setError(null)
-    setPickedSingle(false)
+    setAddedByBlock({})
     try {
       const params = new URLSearchParams({
         country,
@@ -92,6 +101,11 @@ export function SuggestionsPanel({
   }
 
   const handleApplyAll = () => {
+    if (pickedSingle && !confirm('Bist du sicher, dass du alle Vorschläge übernehmen willst?')) return
+    setAddedByBlock(added => Object.fromEntries(suggestions.flatMap((s, i) => {
+      const dates = added[i] ?? getMissingVacationDays(s)
+      return dates.length > 0 ? [[i, dates]] : []
+    })))
     if (overwrite) {
       if (!confirm(`Bisherige Urlaubstage in ${year} werden durch die Vorschläge ersetzt. Gleittage und Notizen bleiben erhalten. Fortfahren?`)) return
       onApply([...new Set(suggestions.flatMap(s => s.vacationDays))], 'vacation', true)
@@ -105,8 +119,15 @@ export function SuggestionsPanel({
   const handleApplyOne = (idx: number) => {
     const missingDates = getMissingVacationDays(suggestions[idx])
     if (missingDates.length === 0) return
-    setPickedSingle(true)
+    setAddedByBlock(added => ({ ...added, [idx]: missingDates }))
     onApply(missingDates, 'vacation', false)
+  }
+
+  const handleRemoveOne = (idx: number) => {
+    const dates = addedByBlock[idx]
+    if (!dates) return
+    setAddedByBlock(({ [idx]: _removed, ...rest }) => rest)
+    onRemove(dates)
   }
 
   return (
@@ -178,6 +199,7 @@ export function SuggestionsPanel({
             <div className="space-y-3 mb-4">
               {suggestions.map((s, i) => {
                 const isApplied = getMissingVacationDays(s).length === 0
+                const removable = isApplied && Boolean(addedByBlock[i])
                 return (
                   <div key={i} className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 flex-1">
@@ -200,18 +222,20 @@ export function SuggestionsPanel({
                     <Button
                       size="sm"
                       variant={isApplied ? 'secondary' : 'default'}
-                      onClick={() => handleApplyOne(i)}
-                      disabled={isApplied}
+                      onClick={() => removable ? handleRemoveOne(i) : handleApplyOne(i)}
+                      disabled={busy || (isApplied && !removable)}
+                      aria-pressed={isApplied}
+                      title={removable ? 'Klicken, um den Vorschlag wieder zu entfernen' : undefined}
                       className="w-full sm:w-auto"
                     >
-                      {isApplied ? '✓ Übernommen' : 'Übernehmen'}
+                      {removable ? <>✓ Übernommen <X className="h-3.5 w-3.5" /></> : isApplied ? '✓ Bereits geplant' : 'Übernehmen'}
                     </Button>
                   </div>
                 )
               })}
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              {!pickedSingle && <Button variant="outline" onClick={handleApplyAll} className="w-full sm:w-auto">Alle übernehmen</Button>}
+              <Button variant="outline" onClick={handleApplyAll} disabled={busy} className="w-full sm:w-auto">Alle übernehmen</Button>
               <Button onClick={onClose} className="w-full sm:w-auto">Schließen</Button>
             </div>
           </>
