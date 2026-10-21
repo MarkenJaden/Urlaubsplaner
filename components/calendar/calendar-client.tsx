@@ -270,6 +270,14 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
     updateLocalEntries(current => mergeImportedEntries(current.filter(entry => !replaced(entry)), dateKeys.map(date => ({ date, type }))))
   }
 
+  const handleRemoveSuggestion = (dates: string[]) => {
+    const removed = new Set(dates)
+    const isRemoved = (entry: { date: string; type: string }) => entry.type === 'vacation' && removed.has(entry.date.slice(0, 10))
+    recordUndo()
+    if (isLoggedIn) { for (const entry of serverEntries) if (isRemoved(entry)) removeMutation.mutate(entry.id); return }
+    updateLocalEntries(current => current.filter(entry => !isRemoved(entry)))
+  }
+
   const handleImport = (data: ImportData) => {
     if (isLoggedIn) { void importSavedData(data.vacations); return }
     if (data.vacations.some(entry => !parseEntry(entry))) { setSyncMessage('Import enthält ungültige Einträge.'); return }
@@ -354,6 +362,8 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
         existingVacationDates={existingVacationDates}
         noteDates={existingNoteDates}
         onApply={handleApplySuggestions}
+        onRemove={handleRemoveSuggestion}
+        busy={importBusy || addMutation.isPending || removeMutation.isPending}
       />
       <main className="container space-y-4 py-3 sm:py-4">
         {!isLoggedIn && (

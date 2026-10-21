@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
-import { Settings, LogOut, LogIn, Palmtree } from 'lucide-react'
+import { Settings, LogOut, LogIn } from 'lucide-react'
 
 interface HeaderProps {
   isLoggedIn?: boolean
@@ -14,7 +14,7 @@ export function Header({ isLoggedIn }: HeaderProps) {
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center justify-between gap-3">
         <Link href="/" className="flex min-w-0 items-center gap-2 text-base font-semibold sm:text-lg">
-          <Palmtree className="h-6 w-6 shrink-0 text-primary" />
+          <img src="/icon.svg" alt="" className="h-7 w-7 shrink-0" />
           <span className="truncate">Urlaubsplaner</span>
         </Link>
 
