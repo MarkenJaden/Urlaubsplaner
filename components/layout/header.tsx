@@ -20,7 +20,6 @@ export function Header({ isLoggedIn }: HeaderProps) {
         </Link>
 
         <nav className="flex shrink-0 items-center gap-1 sm:gap-2">
-          <ThemeToggle />
           {isLoggedIn ? (
             <>
               <Button variant="ghost" size="icon" asChild title="Einstellungen" aria-label="Einstellungen">
@@ -28,6 +27,7 @@ export function Header({ isLoggedIn }: HeaderProps) {
                   <Settings className="h-4 w-4" />
                 </Link>
               </Button>
+              <ThemeToggle />
               <Button
                 variant="ghost"
                 size="icon"
@@ -38,12 +38,15 @@ export function Header({ isLoggedIn }: HeaderProps) {
               </Button>
             </>
           ) : (
-            <Button variant="ghost" size="sm" className="px-2 sm:px-3" asChild>
-              <Link href="/login">
-                <LogIn className="h-4 w-4" />
-                Anmelden
-              </Link>
-            </Button>
+            <>
+              <ThemeToggle />
+              <Button variant="ghost" size="sm" className="px-2 sm:px-3" asChild>
+                <Link href="/login">
+                  <LogIn className="h-4 w-4" />
+                  Anmelden
+                </Link>
+              </Button>
+            </>
           )}
         </nav>
       </div>
