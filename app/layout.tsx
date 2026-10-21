@@ -20,6 +20,9 @@ export default function RootLayout({
       <body className={inter.className}>
         <Providers>
           {children}
+          <footer className="container py-6 text-xs text-muted-foreground">
+            <a href="/datenschutz" className="underline">Datenschutz</a>
+          </footer>
         </Providers>
       </body>
     </html>

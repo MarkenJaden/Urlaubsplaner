@@ -39,6 +39,13 @@ export function isChristmasHalfDay(key: string): boolean {
   return key.endsWith('-12-24') || key.endsWith('-12-31')
 }
 
+/** 24.12. ↔ 31.12. of the same year; null for every other date. */
+export function christmasPartner(key: string): string | null {
+  if (key.endsWith('-12-24')) return `${key.slice(0, 4)}-12-31`
+  if (key.endsWith('-12-31')) return `${key.slice(0, 4)}-12-24`
+  return null
+}
+
 /** All dates covered by the holidays (end date inclusive). */
 export function holidayDateSet(holidays: Holiday[]): Set<string> {
   const dates = new Set<string>()
@@ -92,6 +99,29 @@ export function remainingWorkDays(year: number, entries: DatedEntry[], options: 
 /** Budget for a year: per-year value, then the legacy single value, then 30. */
 export function vacationBudget(preferences: { vacationDaysPerYear?: Record<string | number, number>; vacationDays?: number }, year: number): number {
   return preferences.vacationDaysPerYear?.[year] ?? preferences.vacationDays ?? 30
+}
+
+export type FlexUnit = 'days' | 'hours'
+
+export interface FlexPreferences {
+  flexUnit?: FlexUnit
+  flexHoursPerDay?: number
+  flexBudgetPerYear?: Record<string | number, number>
+}
+
+export interface FlexSummary {
+  unit: FlexUnit
+  /** Gleittage in days, or the hours they consume. */
+  used: number
+  /** Configured allowance for the year, undefined when none is set. */
+  total?: number
+}
+
+/** Gleitzeit used against the yearly allowance, in the configured unit. */
+export function summarizeFlex(gleittage: number, preferences: FlexPreferences, year: number): FlexSummary {
+  const unit = preferences.flexUnit ?? 'days'
+  const used = unit === 'hours' ? gleittage * (preferences.flexHoursPerDay ?? 8) : gleittage
+  return { unit, used, total: preferences.flexBudgetPerYear?.[year] }
 }
 
 /** German display of possibly fractional day counts, e.g. 12,5. */

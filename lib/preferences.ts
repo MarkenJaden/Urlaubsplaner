@@ -5,8 +5,13 @@ const booleanKeys = new Set(['showHeatmap', 'showPublicHolidays', 'showSchoolHol
 // Location values that a patch may clear with null (e.g. after a country change).
 const clearableKeys = new Set(['subdivision', 'holidayGroup'])
 
-function validBudget(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 366
+function validBudget(value: unknown, max = 366): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= max
+}
+
+function validBudgetPerYear(value: unknown, max: number): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  return Object.entries(value).every(([year, amount]) => /^\d{4}$/.test(year) && Number(year) >= 1900 && Number(year) <= 2200 && validBudget(amount, max))
 }
 
 /**
@@ -23,10 +28,12 @@ export function parsePreferences(input: unknown): PreferencesPatch | null {
     else if (key === 'subdivision' || key === 'holidayGroup') { if (!isRegionCode(value)) return null }
     else if (key === 'country') { if (!isCountryCode(value)) return null }
     else if (key === 'vacationDays') { if (!validBudget(value)) return null }
-    else if (key === 'vacationDaysPerYear') {
-      if (!value || typeof value !== 'object' || Array.isArray(value)) return null
-      if (Object.entries(value).some(([year, days]) => !/^\d{4}$/.test(year) || Number(year) < 1900 || Number(year) > 2200 || !validBudget(days))) return null
-    } else if (key === 'compareSubdivisions') {
+    else if (key === 'vacationDaysPerYear') { if (!validBudgetPerYear(value, 366)) return null }
+    // Gleitzeit may be kept in hours: 366 days × 24 h is the upper bound.
+    else if (key === 'flexBudgetPerYear') { if (!validBudgetPerYear(value, 8784)) return null }
+    else if (key === 'flexUnit') { if (value !== 'days' && value !== 'hours') return null }
+    else if (key === 'flexHoursPerDay') { if (!validBudget(value, 24) || value === 0) return null }
+    else if (key === 'compareSubdivisions') {
       if (!Array.isArray(value) || value.length > 100 || value.some(code => !isRegionCode(code))) return null
     } else if (key === 'selectedCountries') {
       if (!Array.isArray(value) || value.length > 60 || value.some(code => !isCountryCode(code))) return null
@@ -51,6 +58,7 @@ export function normalizePreferences(preferences: UserPreferences): UserPreferen
 export function mergePreferences(current: UserPreferences, patch: PreferencesPatch): UserPreferences {
   const merged: Record<string, unknown> = { ...current, ...patch }
   if (patch.vacationDaysPerYear) merged.vacationDaysPerYear = { ...current.vacationDaysPerYear, ...patch.vacationDaysPerYear }
+  if (patch.flexBudgetPerYear) merged.flexBudgetPerYear = { ...current.flexBudgetPerYear, ...patch.flexBudgetPerYear }
   for (const [key, value] of Object.entries(patch)) if (value === null) delete merged[key]
   return normalizePreferences(merged as UserPreferences)
 }

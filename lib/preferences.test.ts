@@ -41,3 +41,17 @@ describe('personal plan validation', () => {
     expect(parseEntry({ date: '2026-01-01', type: 'admin' })).toBeNull()
   })
 })
+
+describe('Gleitzeit preferences', () => {
+  it('accepts allowances in days or hours and rejects invalid values', () => {
+    expect(parsePreferences({ flexUnit: 'hours', flexHoursPerDay: 7.5, flexBudgetPerYear: { 2026: 120 } })).toEqual({ flexUnit: 'hours', flexHoursPerDay: 7.5, flexBudgetPerYear: { 2026: 120 } })
+    expect(parsePreferences({ flexUnit: 'weeks' })).toBeNull()
+    expect(parsePreferences({ flexHoursPerDay: 0 })).toBeNull()
+    expect(parsePreferences({ flexHoursPerDay: 25 })).toBeNull()
+    expect(parsePreferences({ flexBudgetPerYear: { 2026: -1 } })).toBeNull()
+    expect(parsePreferences({ flexBudgetPerYear: { 2026: 9000 } })).toBeNull()
+  })
+  it('merges allowances per year', () => {
+    expect(mergePreferences({ flexBudgetPerYear: { 2026: 10 } }, { flexBudgetPerYear: { 2027: 12 } })).toEqual({ flexBudgetPerYear: { 2026: 10, 2027: 12 } })
+  })
+})

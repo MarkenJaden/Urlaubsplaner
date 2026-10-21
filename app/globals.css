@@ -76,3 +76,16 @@
     transform: none;
   }
 }
+
+/* "Respekt" pop-up for very large vacation allowances. */
+@keyframes respect-pop {
+  0% { opacity: 0; transform: scale(0.6); }
+  20% { opacity: 1; transform: scale(1.1); }
+  35% { transform: scale(1); }
+  80% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.95); }
+}
+.respect-pop > span { animation: respect-pop 1.8s ease-out forwards; }
+@media (prefers-reduced-motion: reduce) {
+  .respect-pop > span { animation: none; }
+}

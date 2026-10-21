@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef } from 'react'
-import { ChevronLeft, ChevronRight, Sparkles, Download, Upload, Printer, Settings2, MoreHorizontal, Clipboard, FileJson, CalendarDays, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Sparkles, Download, Upload, Printer, Settings2, MoreHorizontal, Clipboard, FileJson, CalendarDays, Trash2, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -18,7 +18,7 @@ import {
   exportToJSON, exportToICS, parseImportFile,
   exportConfigJSON, parseConfigJSON,
 } from '@/lib/export'
-import { formatDays } from '@/lib/vacation-accounting'
+import { formatDays, type FlexSummary } from '@/lib/vacation-accounting'
 
 interface ToolbarProps {
   year: number
@@ -35,8 +35,10 @@ interface ToolbarProps {
   onToggleBridgeDays: (val: boolean) => void
   vacationDaysUsed: number
   vacationDaysTotal: number
-  gleittageCount: number
+  flex: FlexSummary
   remainingWorkDays: number
+  canUndo: boolean
+  onUndo: () => void
   entries: VacationEntry[]
   preferences: Record<string, unknown>
   localConfig?: LocalConfig | null
@@ -53,7 +55,7 @@ export function Toolbar({
   showSchoolHolidays, onToggleSchoolHolidays,
   showBridgeDays, onToggleBridgeDays,
   vacationDaysUsed, vacationDaysTotal,
-  gleittageCount, remainingWorkDays,
+  flex, remainingWorkDays, canUndo, onUndo,
   entries, preferences, localConfig,
   onOpenSuggestions, onImport, onImportConfig, onReset,
 }: ToolbarProps) {
@@ -172,7 +174,10 @@ export function Toolbar({
 
       {/* Actions */}
       <TooltipProvider delayDuration={0}>
-        <div className="grid grid-cols-[1fr_2.75rem] gap-2 md:flex md:items-center">
+        <div className="grid grid-cols-[2.75rem_1fr_2.75rem] gap-2 md:flex md:items-center">
+          <Button size="icon" variant="outline" onClick={onUndo} disabled={!canUndo} aria-label="Rückgängig" title="Letzte Änderung rückgängig machen">
+            <Undo2 className="h-4 w-4" />
+          </Button>
           <Button size="sm" variant="outline" onClick={onOpenSuggestions}>
             <Sparkles className="h-4 w-4" />
             Planen
@@ -238,8 +243,10 @@ export function Toolbar({
           <span className="text-xs text-muted-foreground">({formatDays(remaining)} übrig)</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">Gleittage:</span>
-          <Badge variant="secondary">{gleittageCount}</Badge>
+          <span className="text-muted-foreground">{flex.unit === 'hours' ? 'Gleitstunden:' : 'Gleittage:'}</span>
+          <Badge variant={flex.total !== undefined && flex.used > flex.total ? 'destructive' : 'secondary'}>
+            {formatDays(flex.used)}{flex.total !== undefined && `/${formatDays(flex.total)}`}{flex.unit === 'hours' && ' h'}
+          </Badge>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-muted-foreground">Arbeitstage:</span>

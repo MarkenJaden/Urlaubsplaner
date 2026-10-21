@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { holidayDateSet, remainingWorkDays, summarizeVacation, vacationBudget, vacationDayCost } from './vacation-accounting'
+import { christmasPartner, holidayDateSet, remainingWorkDays, summarizeFlex, summarizeVacation, vacationBudget, vacationDayCost } from './vacation-accounting'
 import type { Holiday } from '@/types'
 
 const holiday = (startDate: string, endDate = startDate): Holiday => ({ id: startDate, startDate, endDate, type: 'Public', name: [{ language: 'DE', text: 'Feiertag' }], nationwide: true })
@@ -53,5 +53,24 @@ describe('planned and remaining vacation days', () => {
     expect(vacationBudget({ vacationDaysPerYear: { 2026: 25 }, vacationDays: 28 }, 2026)).toBe(25)
     expect(vacationBudget({ vacationDaysPerYear: { 2026: 25 }, vacationDays: 28 }, 2027)).toBe(28)
     expect(vacationBudget({}, 2027)).toBe(30)
+  })
+})
+
+describe('christmas half days', () => {
+  it('pairs 24.12. with 31.12. of the same year and nothing else', () => {
+    expect(christmasPartner('2026-12-24')).toBe('2026-12-31')
+    expect(christmasPartner('2027-12-31')).toBe('2027-12-24')
+    expect(christmasPartner('2026-12-25')).toBeNull()
+  })
+})
+
+describe('Gleitzeit allowance', () => {
+  it('counts Gleittage in days by default and has no allowance until one is set', () => {
+    expect(summarizeFlex(3, {}, 2026)).toEqual({ unit: 'days', used: 3, total: undefined })
+    expect(summarizeFlex(3, { flexBudgetPerYear: { 2026: 10, 2027: 5 } }, 2026)).toEqual({ unit: 'days', used: 3, total: 10 })
+  })
+  it('converts Gleittage to hours with the configured working day', () => {
+    expect(summarizeFlex(3, { flexUnit: 'hours', flexBudgetPerYear: { 2026: 80 } }, 2026)).toEqual({ unit: 'hours', used: 24, total: 80 })
+    expect(summarizeFlex(2, { flexUnit: 'hours', flexHoursPerDay: 7.5 }, 2026).used).toBe(15)
   })
 })

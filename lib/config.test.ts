@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest'
-import { applyConfigPatch, configToEntries, defaultConfig, loadConfig, mergeImportedEntries, saveConfig, toggleEntry } from './config'
+import { applyConfigPatch, configToEntries, defaultConfig, loadConfig, mergeImportedEntries, saveConfig, toggleEntry, diffEntries } from './config'
 
 beforeEach(() => localStorage.clear())
 
@@ -36,5 +36,16 @@ describe('guest settings', () => {
   it('assigns date-only entries to their calendar year in every time zone', () => {
     const config = { ...defaultConfig(), entries: [{ date: '2026-01-01', type: 'vacation' }, { date: '2025-12-31', type: 'vacation' }] }
     expect(configToEntries(config, 2026).map(e => e.date)).toEqual(['2026-01-01T00:00:00.000Z'])
+  })
+})
+
+describe('undo of synchronized plans', () => {
+  it('removes entries added since the snapshot and restores removed ones', () => {
+    const current = [{ id: 'a', date: '2026-05-04T00:00:00.000Z', type: 'vacation' }, { id: 'b', date: '2026-05-05T00:00:00.000Z', type: 'vacation' }]
+    const snapshot = [{ date: '2026-05-04', type: 'vacation' }, { date: '2026-05-06', type: 'note', title: 'Arzt' }]
+    expect(diffEntries(current, snapshot)).toEqual({ remove: [current[1]], add: [snapshot[1]] })
+  })
+  it('treats the same date with another type as a different entry', () => {
+    expect(diffEntries([{ date: '2026-05-04', type: 'gleittag' }], [{ date: '2026-05-04', type: 'vacation' }])).toEqual({ remove: [{ date: '2026-05-04', type: 'gleittag' }], add: [{ date: '2026-05-04', type: 'vacation' }] })
   })
 })

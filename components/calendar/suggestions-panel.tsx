@@ -7,9 +7,16 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
 import type { VacationSuggestionBlock, PlanningPreferences } from '@/lib/vacation-suggester'
 import { DEFAULT_PREFERENCES } from '@/lib/vacation-suggester'
-import { format, parseISO } from 'date-fns'
+import { format, getISOWeek, parseISO } from 'date-fns'
 import { de } from 'date-fns/locale'
 import type { EntryType } from '@/types'
+import { formatDays } from '@/lib/vacation-accounting'
+
+function weekLabel(dates: string[]): string {
+  const weeks = [...new Set(dates.map(d => getISOWeek(parseISO(d))))]
+  if (weeks.length === 0) return ''
+  return weeks.length === 1 ? `KW ${weeks[0]}` : `KW ${weeks[0]}–${weeks[weeks.length - 1]}`
+}
 
 interface SuggestionsPanelProps {
   open: boolean
@@ -47,6 +54,9 @@ export function SuggestionsPanel({
   const [suggestions, setSuggestions] = useState<VacationSuggestionBlock[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Once single blocks are picked, "Alle übernehmen" would add the rest too, so it is hidden.
+  const [pickedSingle, setPickedSingle] = useState(false)
+  const used = totalDays - remainingDays
   // Follow the half-day setting of the plan whenever the dialog opens.
   useEffect(() => { if (open) setPrefs(p => ({ ...p, halfDaysChristmas })) }, [open, halfDaysChristmas])
   const existingVacationSet = useMemo(() => new Set(existingVacationDates), [existingVacationDates])
@@ -58,6 +68,7 @@ export function SuggestionsPanel({
   const handleGenerate = async () => {
     setLoading(true)
     setError(null)
+    setPickedSingle(false)
     try {
       const params = new URLSearchParams({
         country,
@@ -94,6 +105,7 @@ export function SuggestionsPanel({
   const handleApplyOne = (idx: number) => {
     const missingDates = getMissingVacationDays(suggestions[idx])
     if (missingDates.length === 0) return
+    setPickedSingle(true)
     onApply(missingDates, 'vacation', false)
   }
 
@@ -101,8 +113,12 @@ export function SuggestionsPanel({
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogTitle className="mb-1 pr-10 text-xl font-bold leading-tight tracking-normal">✨ Optimaler Urlaubsplan</DialogTitle>
-        <p className="text-sm text-muted-foreground mb-4">
+        <p className="text-sm text-muted-foreground mb-2">
           Konfiguriere deine Präferenzen und lass den Planer optimale Urlaubsblöcke berechnen.
+        </p>
+        <p role="status" className="mb-4 text-sm">
+          Verbraucht: <strong>{formatDays(used)}</strong> von {formatDays(totalDays)} Tagen ·{' '}
+          <span className={remainingDays < 0 ? 'font-medium text-destructive' : 'text-muted-foreground'}>{formatDays(remainingDays)} übrig</span>
         </p>
 
         {/* Preferences */}
@@ -167,6 +183,7 @@ export function SuggestionsPanel({
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 flex flex-wrap items-center gap-2">
                         <span className="text-sm font-medium">{s.label}</span>
+                        <span className="text-xs text-muted-foreground">{weekLabel(s.vacationDays)}</span>
                         <Badge variant={s.efficiency >= 2 ? 'default' : 'secondary'} className="text-xs">
                           {s.efficiency.toFixed(1)}x Effizienz
                         </Badge>
@@ -176,7 +193,7 @@ export function SuggestionsPanel({
                       </p>
                       <ul className="text-xs text-muted-foreground space-y-0.5">
                         {s.vacationDays.map(d => (
-                          <li key={d}>{format(parseISO(d), 'dd.MM.yyyy (EEEE)', { locale: de })}</li>
+                          <li key={d}>{format(parseISO(d), 'dd.MM.yyyy (EEEE)', { locale: de })} · KW {getISOWeek(parseISO(d))}</li>
                         ))}
                       </ul>
                     </div>
@@ -193,9 +210,9 @@ export function SuggestionsPanel({
                 )
               })}
             </div>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-              <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">Schließen</Button>
-              <Button onClick={handleApplyAll} className="w-full sm:w-auto">Alle übernehmen</Button>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              {!pickedSingle && <Button variant="outline" onClick={handleApplyAll} className="w-full sm:w-auto">Alle übernehmen</Button>}
+              <Button onClick={onClose} className="w-full sm:w-auto">Schließen</Button>
             </div>
           </>
         )}

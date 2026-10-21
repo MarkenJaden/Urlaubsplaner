@@ -13,6 +13,8 @@ export interface DayInfo {
   bridgeDayInfo?: BridgeDay
   entry?: VacationEntry
   comparisonStates?: string[]
+  /** Horizontal centre of the hovered cell in the viewport; keeps the info panel off that side. */
+  anchorX?: number
 }
 
 interface DayCellProps {
@@ -106,9 +108,10 @@ export function DayCell({
     entry: vacation ?? gleittag ?? note ?? undefined,
   })
 
-  const handleMouseEnter = () => {
+  const handleMouseEnter = (event: React.MouseEvent<HTMLButtonElement>) => {
     if (window.matchMedia('(hover: none)').matches) return
-    onHover?.(buildDayInfo())
+    const rect = event.currentTarget.getBoundingClientRect()
+    onHover?.({ ...buildDayInfo(), anchorX: rect.left + rect.width / 2 })
   }
 
   const handleMouseLeave = () => onHover?.(null)
