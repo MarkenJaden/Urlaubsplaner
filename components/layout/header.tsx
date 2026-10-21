@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Settings, LogOut, LogIn } from 'lucide-react'
+import { ThemeToggle } from './theme-toggle'
 
 interface HeaderProps {
   isLoggedIn?: boolean
@@ -26,6 +27,7 @@ export function Header({ isLoggedIn }: HeaderProps) {
                   <Settings className="h-4 w-4" />
                 </Link>
               </Button>
+              <ThemeToggle />
               <Button
                 variant="ghost"
                 size="icon"
@@ -36,12 +38,15 @@ export function Header({ isLoggedIn }: HeaderProps) {
               </Button>
             </>
           ) : (
-            <Button variant="ghost" size="sm" className="px-2 sm:px-3" asChild>
-              <Link href="/login">
-                <LogIn className="h-4 w-4" />
-                Anmelden
-              </Link>
-            </Button>
+            <>
+              <ThemeToggle />
+              <Button variant="ghost" size="sm" className="px-2 sm:px-3" asChild>
+                <Link href="/login">
+                  <LogIn className="h-4 w-4" />
+                  Anmelden
+                </Link>
+              </Button>
+            </>
           )}
         </nav>
       </div>

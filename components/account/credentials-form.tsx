@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
-import { KeyRound, UserRound, ArrowRight, ShieldCheck } from 'lucide-react'
+import { KeyRound, ArrowRight, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 export function CredentialsForm({ mode, legacyLoginEnabled = false }: { mode: 'login' | 'register' | 'recover'; legacyLoginEnabled?: boolean }) {
@@ -40,7 +40,7 @@ export function CredentialsForm({ mode, legacyLoginEnabled = false }: { mode: 'l
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
       <div className="w-full max-w-md space-y-6 rounded-2xl border bg-card p-6 shadow-sm sm:p-8">
-        <Link href="/" className="inline-flex items-center gap-2 font-semibold text-primary"><UserRound className="h-5 w-5" /> Urlaubsplaner</Link>
+        <Link href="/" className="inline-flex items-center gap-2 font-semibold"><img src="/icon.svg" alt="" className="h-6 w-6" /> Urlaubsplaner</Link>
         <div><h1 className="text-2xl font-semibold tracking-tight">{heading}</h1><p className="mt-2 text-sm text-muted-foreground">Dein Urlaub und deine Einstellungen auf allen Geräten.</p></div>
         {error && <p role="alert" className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
         {recoveryKey ? (

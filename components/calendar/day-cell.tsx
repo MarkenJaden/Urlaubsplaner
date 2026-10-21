@@ -75,7 +75,7 @@ export function DayCell({
   if (showHeatmap && heatmapValue !== undefined && heatmapValue > 0) {
     const h = Math.round((1 - heatmapValue) * 120)
     heatmapStyle = {
-      backgroundColor: `hsla(${h}, 70%, 85%, ${Math.min(heatmapValue + 0.2, 0.8)})`,
+      backgroundColor: `hsl(${h} 70% var(--heat-lightness) / ${Math.min(heatmapValue + 0.2, 0.8)})`,
     }
   }
 
@@ -137,10 +137,10 @@ export function DayCell({
         vacation && !isOverBudget && 'bg-blue-500 text-white hover:bg-blue-600',
         vacation && isOverBudget && 'bg-red-500 text-white hover:bg-red-600',
         gleittag && !vacation && 'bg-purple-500 text-white hover:bg-purple-600',
-        note && !vacation && !gleittag && 'bg-gray-400 text-white hover:bg-gray-500',
-        publicHoliday && !hasEntry && 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-        schoolHoliday && !hasEntry && !publicHoliday && 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-        showBridgeDays && isBridgeDay && !hasEntry && !publicHoliday && 'ring-2 ring-orange-400 bg-orange-50 dark:bg-orange-900/20',
+        note && !vacation && !gleittag && 'bg-gray-400 text-white hover:bg-gray-500 dark:bg-slate-500 dark:hover:bg-slate-400',
+        publicHoliday && !hasEntry && 'bg-green-100 text-green-800 dark:bg-green-500/30 dark:text-green-200',
+        schoolHoliday && !hasEntry && !publicHoliday && 'bg-yellow-100 text-yellow-800 dark:bg-amber-400/25 dark:text-amber-100',
+        showBridgeDays && isBridgeDay && !hasEntry && !publicHoliday && 'ring-2 ring-orange-400 bg-orange-50 dark:bg-orange-400/20 dark:text-orange-100',
       )}
       style={!hasEntry && !publicHoliday && !schoolHoliday && !(showBridgeDays && isBridgeDay) ? heatmapStyle : {}}
       onClick={handleClick}
