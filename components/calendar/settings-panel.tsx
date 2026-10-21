@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { ChevronDown, ChevronUp, AlertTriangle, RefreshCw, Settings2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MultiCombobox } from '@/components/ui/combobox'
 import { LocationFields } from './location-fields'
 import type { ComboboxOption } from '@/components/ui/combobox'
 import { localizedName } from '@/lib/holiday-regions'
-import { formatDays } from '@/lib/vacation-accounting'
+import { formatDays, type FlexSummary, type FlexUnit } from '@/lib/vacation-accounting'
 import type { Subdivision, Country, HolidayGroup } from '@/types'
 
 interface SettingsPanelProps {
@@ -35,6 +35,11 @@ interface SettingsPanelProps {
   onHalfDaysChange: (v: boolean) => void
   vacationDaysUsed: number
   gleittageCount: number
+  flex: FlexSummary
+  flexHoursPerDay: number
+  onFlexUnitChange: (unit: FlexUnit) => void
+  onFlexHoursPerDayChange: (hours: number) => void
+  onFlexBudgetChange: (amount: number) => void
   remainingWorkDays: number
   defaultNoteText: string
   onDefaultNoteTextChange: (text: string) => void
@@ -56,12 +61,21 @@ export function SettingsPanel({
   countWeekendsAsVacation, onCountWeekendsChange,
   halfDaysChristmas, onHalfDaysChange,
   vacationDaysUsed, gleittageCount, remainingWorkDays,
+  flex, flexHoursPerDay, onFlexUnitChange, onFlexHoursPerDayChange, onFlexBudgetChange,
   defaultNoteText, onDefaultNoteTextChange,
   apiError, onRetryApi,
 }: SettingsPanelProps) {
   const [open, setOpen] = useState(true)
   // Lets the field be emptied while typing without saving 0 as the budget.
   const [budgetDraft, setBudgetDraft] = useState<string | null>(null)
+  const [flexDraft, setFlexDraft] = useState<string | null>(null)
+  // Short "Respekt" animation when someone enters a really big allowance.
+  const [respect, setRespect] = useState(0)
+  useEffect(() => {
+    if (!respect) return
+    const timer = setTimeout(() => setRespect(0), 1800)
+    return () => clearTimeout(timer)
+  }, [respect])
   const remaining = vacationDaysTotal - vacationDaysUsed
 
   const countryOptions: ComboboxOption[] = useMemo(() =>
@@ -72,6 +86,11 @@ export function SettingsPanel({
 
   return (
     <div className="rounded-lg border border-border bg-card">
+      {respect > 0 && (
+        <div key={respect} role="status" className="respect-pop pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+          <span className="rounded-2xl bg-card/95 px-6 py-4 text-3xl font-bold shadow-xl">Respekt 👊</span>
+        </div>
+      )}
       <button
         className="w-full flex items-center justify-between p-3 text-sm font-medium hover:bg-muted/50 transition-colors"
         onClick={() => setOpen(!open)}
@@ -156,9 +175,38 @@ export function SettingsPanel({
               <div className="mt-3 space-y-1">
                 <label htmlFor="vacation-days-total" className="block text-xs text-muted-foreground">Urlaubsanspruch (Tage)</label>
                 <input id="vacation-days-total" type="number" min={0} max={366} step={0.5} value={budgetDraft ?? String(vacationDaysTotal)}
-                  onChange={e => { setBudgetDraft(e.target.value); const days = e.target.valueAsNumber; if (Number.isFinite(days) && days >= 0 && days <= 366) onVacationDaysChange(days) }}
+                  onChange={e => {
+                    setBudgetDraft(e.target.value); const days = e.target.valueAsNumber
+                    if (!Number.isFinite(days) || days < 0 || days > 366) return
+                    if (days > 45 && vacationDaysTotal <= 45) setRespect(Date.now())
+                    onVacationDaysChange(days)
+                  }}
                   onBlur={() => setBudgetDraft(null)}
                   className="min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-right text-sm sm:w-24" />
+              </div>
+
+              <div className="mt-3 space-y-1">
+                <span className="block text-xs text-muted-foreground">Gleitzeit-Kontingent</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input id="flex-budget" type="number" min={0} max={flex.unit === 'hours' ? 8784 : 366} step={0.5} placeholder="—" aria-label="Gleitzeit-Kontingent"
+                    value={flexDraft ?? (flex.total !== undefined ? String(flex.total) : '')}
+                    onChange={e => { setFlexDraft(e.target.value); const amount = e.target.valueAsNumber; if (Number.isFinite(amount) && amount >= 0 && amount <= (flex.unit === 'hours' ? 8784 : 366)) onFlexBudgetChange(amount) }}
+                    onBlur={() => setFlexDraft(null)}
+                    className="min-h-11 w-24 rounded-md border border-input bg-background px-3 py-2 text-right text-sm" />
+                  <select aria-label="Einheit" value={flex.unit} onChange={e => onFlexUnitChange(e.target.value as FlexUnit)}
+                    className="min-h-11 rounded-md border border-input bg-background px-2 py-2 text-sm">
+                    <option value="days">Tage</option>
+                    <option value="hours">Stunden</option>
+                  </select>
+                </div>
+                {flex.unit === 'hours' && (
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                    Stunden pro Gleittag
+                    <input type="number" min={0.5} max={24} step={0.5} value={flexHoursPerDay}
+                      onChange={e => { const hours = e.target.valueAsNumber; if (Number.isFinite(hours) && hours > 0 && hours <= 24) onFlexHoursPerDayChange(hours) }}
+                      className="min-h-11 w-20 rounded-md border border-input bg-background px-2 py-2 text-right text-sm text-foreground" />
+                  </label>
+                )}
               </div>
 
               <div className="mt-3">
@@ -184,8 +232,11 @@ export function SettingsPanel({
                   <div className={`text-lg font-bold ${remaining < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatDays(remaining)}</div>
                 </div>
                 <div className="rounded-md bg-purple-50 dark:bg-purple-900/20 p-2">
-                  <div className="text-xs text-muted-foreground">Gleittage</div>
-                  <div className="text-lg font-bold text-purple-600">{gleittageCount}</div>
+                  <div className="text-xs text-muted-foreground">{flex.unit === 'hours' ? 'Gleitstunden' : 'Gleittage'}</div>
+                  <div className="text-lg font-bold text-purple-600">
+                    {flex.unit === 'hours' ? `${formatDays(flex.used)} h` : gleittageCount}
+                    {flex.total !== undefined && <span className="text-xs font-normal text-muted-foreground"> von {formatDays(flex.total)}{flex.unit === 'hours' && ' h'}</span>}
+                  </div>
                 </div>
                 <div className="rounded-md bg-orange-50 dark:bg-orange-900/20 p-2">
                   <div className="text-xs text-muted-foreground">Arbeitstage</div>

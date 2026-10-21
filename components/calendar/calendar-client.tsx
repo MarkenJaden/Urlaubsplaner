@@ -10,11 +10,11 @@ import { useVacations, useToggleVacation } from '@/hooks/use-vacations'
 import { useHolidays, useCompareHolidays, useCountries, useCountryHolidays } from '@/hooks/use-holidays'
 import { useHomeRegion } from '@/hooks/use-home-region'
 import { detectBridgeDays } from '@/lib/bridge-days'
-import { loadConfig, saveConfig, configToEntries, defaultConfig, applyConfigPatch, mergeImportedEntries, toggleEntry } from '@/lib/config'
+import { loadConfig, saveConfig, configToEntries, defaultConfig, applyConfigPatch, mergeImportedEntries, toggleEntry, diffEntries } from '@/lib/config'
 import { comparisonRegions, defaultComparisonSelection, localizedName } from '@/lib/holiday-regions'
 import { getSubdivisionAliases } from '@/lib/subdivision-aliases'
-import { holidayDateSet, remainingWorkDays as countRemainingWorkDays, summarizeVacation, vacationBudget } from '@/lib/vacation-accounting'
-import { X, Info, Cloud, PartyPopper, School, Palmtree, Clock, StickyNote, Route } from 'lucide-react'
+import { christmasPartner, holidayDateSet, remainingWorkDays as countRemainingWorkDays, summarizeFlex, summarizeVacation, vacationBudget } from '@/lib/vacation-accounting'
+import { X, Info, Cloud } from 'lucide-react'
 import { useProfile, useUpdatePreferences } from '@/hooks/use-profile'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
@@ -49,6 +49,13 @@ function getHolidayName(h: Holiday): string {
 
 type ConfigPatch = PreferencesPatch & { entries?: LocalConfig['entries'] }
 
+type PlannedEntry = { date: string; type: string; title?: string | null }
+/** State before an undoable change: one year of a synchronized plan, or the whole guest plan. */
+type UndoSnapshot = { scope: number | 'all'; entries: PlannedEntry[] }
+const UNDO_LIMIT = 20
+
+const plannedEntry = ({ date, type, title }: PlannedEntry): PlannedEntry => ({ date: date.slice(0, 10), type, ...(title ? { title } : {}) })
+
 function hasVisibleDayInfo(day: DayInfo | null): day is DayInfo {
   return Boolean(day?.publicHoliday || day?.schoolHoliday || day?.isBridgeDay || day?.entry || day?.comparisonStates?.length)
 }
@@ -57,22 +64,20 @@ function DayInfoDetails({ day }: { day: DayInfo }) {
   return (
     <>
       <p className="font-medium">{format(day.date, 'dd.MM.yyyy (EEEE)', { locale: de })}</p>
-      {day.publicHoliday && <p className="text-green-600"><PartyPopper className="mr-1 inline h-4 w-4" /> {day.publicHoliday}</p>}
-      {day.schoolHoliday && <p className="text-yellow-600"><School className="mr-1 inline h-4 w-4" /> {day.schoolHoliday}</p>}
+      {day.publicHoliday && <p className="text-green-600">🎉 {day.publicHoliday}</p>}
+      {day.schoolHoliday && <p className="text-yellow-600">🏫 {day.schoolHoliday}</p>}
       {day.isBridgeDay && day.bridgeDayInfo && (
         <div className="text-orange-500">
-          <p><Route className="mr-1 inline h-4 w-4" /> Brückentag</p>
+          <p>🌉 Brückentag</p>
           <p className="text-xs">Verbindet {day.bridgeDayInfo.connectsBeforeName} mit {day.bridgeDayInfo.connectsAfterName}</p>
           <p className="text-xs font-medium">1 Tag Urlaub → {day.bridgeDayInfo.freeDaysGained} Tage frei</p>
         </div>
       )}
-      {day.isBridgeDay && !day.bridgeDayInfo && <p className="text-orange-500"><Route className="mr-1 inline h-4 w-4" /> Brückentag</p>}
+      {day.isBridgeDay && !day.bridgeDayInfo && <p className="text-orange-500">🌉 Brückentag</p>}
       {Boolean(day.comparisonStates?.length) && <p className="mt-1 text-xs text-muted-foreground">Schulferien in {day.comparisonStates!.length} Bundesländern: {day.comparisonStates!.join(', ')}</p>}
       {day.entry && (
-        <p className="text-blue-500">
-          {day.entry.type === 'vacation' ? <><Palmtree className="mr-1 inline h-4 w-4" /> Urlaub</> :
-           day.entry.type === 'gleittag' ? <><Clock className="mr-1 inline h-4 w-4" /> Gleittag</> :
-           <><StickyNote className="mr-1 inline h-4 w-4" /> {day.entry.title ?? 'Notiz'}</>}
+        <p className={day.entry.type === 'vacation' ? 'text-blue-500' : day.entry.type === 'gleittag' ? 'text-purple-500' : 'text-muted-foreground'}>
+          {day.entry.type === 'vacation' ? '🌴 Urlaub' : day.entry.type === 'gleittag' ? '⏰ Gleittag' : `📝 ${day.entry.title ?? 'Notiz'}`}
         </p>
       )}
     </>
@@ -88,6 +93,8 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
   const [hoveredDay, setHoveredDay] = useState<DayInfo | null>(null)
   const [activeDayKey, setActiveDayKey] = useState<string | null>(null)
   const [defaultNoteText, setDefaultNoteText] = useState('')
+  const [undoStack, setUndoStack] = useState<UndoSnapshot[]>([])
+  const [undoBusy, setUndoBusy] = useState(false)
 
   useEffect(() => { if (!isLoggedIn) setConfig(loadConfig()) }, [isLoggedIn])
 
@@ -161,6 +168,7 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
   const overBudgetDates = summary.overBudget
   const vacationDaysUsed = summary.used
   const gleittageCount = entries.filter(e => e.type === 'gleittag').length
+  const flex = summarizeFlex(gleittageCount, config ?? {}, year)
   const remainingWorkDays = countRemainingWorkDays(year, entries, { holidayDates, countWeekendsAsVacation }, format(new Date(), 'yyyy-MM-dd'))
   const vacationDateSet = useMemo(
     () => new Set(entries.filter(e => e.type === 'vacation').map(e => e.date.split('T')[0])),
@@ -190,20 +198,48 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
     })
   }, [isLoggedIn])
 
+  const pushUndo = useCallback((snapshot: UndoSnapshot) => setUndoStack(stack => [...stack.slice(1 - UNDO_LIMIT), snapshot]), [])
+  // Before a change to the shown year: the year of a synchronized plan, or the whole guest plan.
+  const recordUndo = useCallback(() => pushUndo(isLoggedIn
+    ? { scope: year, entries: serverEntries.map(plannedEntry) }
+    : { scope: 'all', entries: (localConfig?.entries ?? []).map(plannedEntry) }), [pushUndo, isLoggedIn, year, serverEntries, localConfig])
+
+  const handleUndo = async () => {
+    const snapshot = undoStack.at(-1)
+    if (!snapshot) return
+    setUndoStack(stack => stack.slice(0, -1))
+    if (!isLoggedIn) { updateLocalEntries(() => snapshot.entries.map(e => ({ date: e.date, type: e.type, ...(e.title ? { title: e.title } : {}) }))); return }
+    setUndoBusy(true); setSyncMessage('')
+    try {
+      const response = await fetch(snapshot.scope === 'all' ? '/api/vacations' : `/api/vacations?year=${snapshot.scope}`)
+      if (!response.ok) throw new Error()
+      const { remove, add } = diffEntries(await response.json() as Array<PlannedEntry & { id: string }>, snapshot.entries)
+      for (const entry of remove) if (!(await fetch(`/api/vacations/${entry.id}`, { method: 'DELETE' })).ok) throw new Error()
+      if (add.length && !(await fetch('/api/vacations/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vacations: add }) })).ok) throw new Error()
+    } catch { setSyncMessage('Rückgängig machen fehlgeschlagen. Bitte erneut versuchen.') }
+    finally { setUndoBusy(false); await queryClient.invalidateQueries({ queryKey: ['vacations'] }) }
+  }
+
   const handleToggle = useCallback((date: Date, type: EntryType) => {
     const dateKey = getDateKey(date)
-    const matches = (e: { date: string; type: string }) => e.type === type && e.date.slice(0, 10) === dateKey
-    const saved = isLoggedIn ? entries.find(matches) : undefined
+    const matching = (key: string) => (e: { date: string; type: string }) => e.type === type && e.date.slice(0, 10) === key
     // Guests: search all years, days of the neighbouring year can be visible in the grid.
-    const existing = isLoggedIn ? saved : localConfig?.entries.find(matches)
+    const existing = isLoggedIn ? entries.find(matching(dateKey)) : localConfig?.entries.find(matching(dateKey))
     const title = !existing && type === 'note' ? defaultNoteText || prompt('Notiz-Text (optional):') || undefined : undefined
+    // With half days, 24.12. and 31.12. are planned together.
+    const partner = type === 'vacation' && halfDaysChristmas ? christmasPartner(dateKey) : null
+    const keys = partner ? [dateKey, partner] : [dateKey]
+    recordUndo()
     if (isLoggedIn) {
-      if (saved) removeMutation.mutate(saved.id)
-      else addMutation.mutate({ date: `${dateKey}T00:00:00.000Z`, type, title })
+      for (const key of keys) {
+        const saved = entries.find(matching(key))
+        if (existing && saved) removeMutation.mutate(saved.id)
+        else if (!existing && !saved) addMutation.mutate({ date: `${key}T00:00:00.000Z`, type, title })
+      }
     } else {
-      updateLocalEntries(current => toggleEntry(current, dateKey, type, title))
+      updateLocalEntries(current => keys.reduce((next, key) => Boolean(next.find(matching(key))) === Boolean(existing) ? toggleEntry(next, key, type, title) : next, current))
     }
-  }, [isLoggedIn, entries, localConfig, addMutation, removeMutation, updateLocalEntries, defaultNoteText])
+  }, [isLoggedIn, entries, localConfig, addMutation, removeMutation, updateLocalEntries, defaultNoteText, halfDaysChristmas, recordUndo])
 
   const importSavedData = async (vacations: unknown[], preferences?: Record<string, unknown>, successMessage = 'Plan übernommen. Die lokale Kopie bleibt erhalten.') => {
     setImportBusy(true); setSyncMessage('')
@@ -223,6 +259,7 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
     const wanted = new Set(dateKeys)
     // "Vorhandene überschreiben" replaces this year's vacation days; Gleittage and notes stay.
     const replaced = (entry: { date: string; type: string }) => replace && entry.type === type && entry.date.startsWith(`${year}-`) && !wanted.has(entry.date.slice(0, 10))
+    recordUndo()
 
     if (isLoggedIn) {
       for (const entry of serverEntries) if (replaced(entry)) removeMutation.mutate(entry.id)
@@ -254,9 +291,13 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
   }
 
   const handleReset = async () => {
-    if (!isLoggedIn) { updateConfig({ entries: [] }); return }
+    if (!isLoggedIn) { pushUndo({ scope: 'all', entries: (localConfig?.entries ?? []).map(plannedEntry) }); updateConfig({ entries: [] }); return }
     setSyncMessage('')
     try {
+      // The reset deletes every year, so undo needs the complete plan.
+      const before = await fetch('/api/vacations')
+      if (!before.ok) throw new Error()
+      pushUndo({ scope: 'all', entries: (await before.json() as PlannedEntry[]).map(plannedEntry) })
       const response = await fetch('/api/vacations', { method: 'DELETE' })
       if (!response.ok) throw new Error()
       setSyncMessage('Alle Planungen wurden gelöscht.')
@@ -359,6 +400,11 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
           onHalfDaysChange={(v) => updateConfig({ halfDaysChristmas: v })}
           vacationDaysUsed={vacationDaysUsed}
           gleittageCount={gleittageCount}
+          flex={flex}
+          flexHoursPerDay={config?.flexHoursPerDay ?? 8}
+          onFlexUnitChange={(unit) => updateConfig({ flexUnit: unit })}
+          onFlexHoursPerDayChange={(hours) => updateConfig({ flexHoursPerDay: hours })}
+          onFlexBudgetChange={(amount) => updateConfig({ flexBudgetPerYear: { [year]: amount } })}
           remainingWorkDays={remainingWorkDays}
           defaultNoteText={defaultNoteText}
           onDefaultNoteTextChange={setDefaultNoteText}
@@ -374,7 +420,9 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
           showSchoolHolidays={showSchoolHolidays} onToggleSchoolHolidays={(v) => updateConfig({ showSchoolHolidays: v })}
           showBridgeDays={showBridgeDays} onToggleBridgeDays={(v) => updateConfig({ showBridgeDays: v })}
           vacationDaysUsed={vacationDaysUsed} vacationDaysTotal={vacationDaysTotal}
-          gleittageCount={gleittageCount} remainingWorkDays={remainingWorkDays}
+          flex={flex} remainingWorkDays={remainingWorkDays}
+          canUndo={undoStack.length > 0 && !undoBusy && !importBusy && !addMutation.isPending && !removeMutation.isPending}
+          onUndo={() => void handleUndo()}
           entries={entries} preferences={isLoggedIn ? (prefs as Record<string, unknown>) : ((config ?? {}) as unknown as Record<string, unknown>)}
           localConfig={isLoggedIn ? null : config}
           onOpenSuggestions={() => setShowSuggestions(true)}
@@ -406,7 +454,7 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
         )}
 
         {hoveredDay && (
-          <div className="pointer-events-none fixed bottom-4 right-4 z-50 hidden max-w-xs rounded-lg border border-border bg-card p-3 text-sm text-card-foreground shadow-lg supports-[bottom:env(safe-area-inset-bottom)]:bottom-[calc(1rem+env(safe-area-inset-bottom))] md:block">
+          <div className={`pointer-events-none fixed bottom-4 ${hoveredDay.anchorX !== undefined && hoveredDay.anchorX > window.innerWidth / 2 ? 'left-4' : 'right-4'} z-50 hidden max-w-xs rounded-lg border border-border bg-card p-3 text-sm text-card-foreground shadow-lg supports-[bottom:env(safe-area-inset-bottom)]:bottom-[calc(1rem+env(safe-area-inset-bottom))] md:block`}>
             <DayInfoDetails day={hoveredDay} />
           </div>
         )}

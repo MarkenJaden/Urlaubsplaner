@@ -90,6 +90,12 @@ export interface LocalConfig {
   countWeekendsAsVacation: boolean
   halfDaysChristmas: boolean
   vacationDaysPerYear: Record<number, number>
+  /** Unit of the Gleitzeit allowance; defaults to days. */
+  flexUnit?: 'days' | 'hours'
+  /** Hours one Gleittag consumes when the allowance is kept in hours. */
+  flexHoursPerDay?: number
+  /** Gleitzeit allowance per year, in flexUnit. */
+  flexBudgetPerYear?: Record<number, number>
   entries: Array<{ date: string; type: string; title?: string }>
 }
 

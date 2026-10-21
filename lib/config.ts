@@ -96,6 +96,17 @@ export function mergeImportedEntries(current: LocalEntry[], incoming: Array<{ da
   return additions.length ? [...current, ...additions] : current
 }
 
+/**
+ * What has to change to turn `current` back into `target` (same date and type
+ * count as the same entry). Used by undo for synchronized plans.
+ */
+export function diffEntries<T extends { date: string; type: string }, U extends { date: string; type: string }>(current: T[], target: U[]): { remove: T[]; add: U[] } {
+  const key = (e: { date: string; type: string }) => `${e.date.slice(0, 10)}:${e.type}`
+  const targetKeys = new Set(target.map(key))
+  const currentKeys = new Set(current.map(key))
+  return { remove: current.filter(e => !targetKeys.has(key(e))), add: target.filter(e => !currentKeys.has(key(e))) }
+}
+
 /** Toggle one planned day: removes an existing entry of that type, otherwise adds it. */
 export function toggleEntry(current: LocalEntry[], date: string, type: string, title?: string): LocalEntry[] {
   const index = current.findIndex(e => e.type === type && e.date.slice(0, 10) === date)
