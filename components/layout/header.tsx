@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Settings, LogOut, LogIn } from 'lucide-react'
+import { ThemeToggle } from './theme-toggle'
 
 interface HeaderProps {
   isLoggedIn?: boolean
@@ -19,6 +20,7 @@ export function Header({ isLoggedIn }: HeaderProps) {
         </Link>
 
         <nav className="flex shrink-0 items-center gap-1 sm:gap-2">
+          <ThemeToggle />
           {isLoggedIn ? (
             <>
               <Button variant="ghost" size="icon" asChild title="Einstellungen" aria-label="Einstellungen">

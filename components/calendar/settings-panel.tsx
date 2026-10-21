@@ -225,22 +225,22 @@ export function SettingsPanel({
               <div className="grid grid-cols-2 gap-2">
                 <div className="rounded-md bg-blue-50 dark:bg-blue-900/20 p-2">
                   <div className="text-xs text-muted-foreground">Verplant</div>
-                  <div className="text-lg font-bold text-blue-600">{formatDays(vacationDaysUsed)}</div>
+                  <div className="text-lg font-bold text-blue-600 dark:text-blue-400">{formatDays(vacationDaysUsed)}</div>
                 </div>
                 <div className={`rounded-md p-2 ${remaining < 0 ? 'bg-red-50 dark:bg-red-900/20' : 'bg-green-50 dark:bg-green-900/20'}`}>
                   <div className="text-xs text-muted-foreground">Verbleibend</div>
-                  <div className={`text-lg font-bold ${remaining < 0 ? 'text-red-600' : 'text-green-600'}`}>{formatDays(remaining)}</div>
+                  <div className={`text-lg font-bold ${remaining < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>{formatDays(remaining)}</div>
                 </div>
                 <div className="rounded-md bg-purple-50 dark:bg-purple-900/20 p-2">
                   <div className="text-xs text-muted-foreground">{flex.unit === 'hours' ? 'Gleitstunden' : 'Gleittage'}</div>
-                  <div className="text-lg font-bold text-purple-600">
+                  <div className="text-lg font-bold text-purple-600 dark:text-purple-400">
                     {flex.unit === 'hours' ? `${formatDays(flex.used)} h` : gleittageCount}
                     {flex.total !== undefined && <span className="text-xs font-normal text-muted-foreground"> von {formatDays(flex.total)}{flex.unit === 'hours' && ' h'}</span>}
                   </div>
                 </div>
                 <div className="rounded-md bg-orange-50 dark:bg-orange-900/20 p-2">
                   <div className="text-xs text-muted-foreground">Arbeitstage</div>
-                  <div className="text-lg font-bold text-orange-600">{remainingWorkDays}</div>
+                  <div className="text-lg font-bold text-orange-600 dark:text-orange-400">{remainingWorkDays}</div>
                 </div>
               </div>
             </div>

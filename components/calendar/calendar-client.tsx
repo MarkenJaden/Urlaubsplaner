@@ -64,8 +64,8 @@ function DayInfoDetails({ day }: { day: DayInfo }) {
   return (
     <>
       <p className="font-medium">{format(day.date, 'dd.MM.yyyy (EEEE)', { locale: de })}</p>
-      {day.publicHoliday && <p className="text-green-600">🎉 {day.publicHoliday}</p>}
-      {day.schoolHoliday && <p className="text-yellow-600">🏫 {day.schoolHoliday}</p>}
+      {day.publicHoliday && <p className="text-green-600 dark:text-green-400">🎉 {day.publicHoliday}</p>}
+      {day.schoolHoliday && <p className="text-yellow-600 dark:text-yellow-400">🏫 {day.schoolHoliday}</p>}
       {day.isBridgeDay && day.bridgeDayInfo && (
         <div className="text-orange-500">
           <p>🌉 Brückentag</p>
@@ -487,9 +487,9 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-blue-500" /> Urlaub</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-500" /> Über Budget</span>
           <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-purple-500" /> Gleittag</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-100 border border-green-300" /> Feiertag</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-yellow-100 border border-yellow-300" /> Schulferien</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-orange-50 ring-2 ring-orange-400" /> Brückentag</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-100 border border-green-300 dark:bg-green-500/30 dark:border-green-500/50" /> Feiertag</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-yellow-100 border border-yellow-300 dark:bg-amber-400/25 dark:border-amber-400/50" /> Schulferien</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-orange-50 ring-2 ring-orange-400 dark:bg-orange-400/20" /> Brückentag</span>
         </div>
       </main>
     </div>
