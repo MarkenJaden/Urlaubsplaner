@@ -26,4 +26,7 @@ COPY scripts ./scripts
 USER nextjs
 EXPOSE 3000
 ENV PORT=3000
+# Docker sets HOSTNAME to the container id; listen on all interfaces so the
+# in-container health check can reach the server on localhost.
+ENV HOSTNAME=0.0.0.0
 CMD ["sh", "start.sh"]
