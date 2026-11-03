@@ -1,5 +1,5 @@
 import type { Holiday } from '@/types'
-import { parseISO, eachDayOfInterval, isWeekend, isSaturday, isSunday, format } from 'date-fns'
+import { parseISO, eachDayOfInterval, isSaturday, isSunday, format } from 'date-fns'
 
 export interface BridgeDay {
   date: string
@@ -10,13 +10,31 @@ export interface BridgeDay {
   freeDaysGained: number
 }
 
-function buildNonWorkDaySet(year: number, publicHolidays: Holiday[]): Set<string> {
+const WEEKDAY_NAMES_DE = [
+  'Sonntag',
+  'Montag (frei)',
+  'Dienstag (frei)',
+  'Mittwoch (frei)',
+  'Donnerstag (frei)',
+  'Freitag (frei)',
+  'Samstag',
+]
+
+function isOffWeekday(day: Date, workDays?: number[]): boolean {
+  const dow = day.getDay()
+  if (workDays && workDays.length > 0) {
+    return !workDays.includes(dow)
+  }
+  return dow === 0 || dow === 6
+}
+
+function buildNonWorkDaySet(year: number, publicHolidays: Holiday[], workDays?: number[]): Set<string> {
   const set = new Set<string>()
   const start = new Date(year, 0, 1)
   const end = new Date(year, 11, 31)
   const allDays = eachDayOfInterval({ start, end })
   for (const d of allDays) {
-    if (isWeekend(d)) set.add(format(d, 'yyyy-MM-dd'))
+    if (isOffWeekday(d, workDays)) set.add(format(d, 'yyyy-MM-dd'))
   }
   for (const h of publicHolidays) {
     const hStart = parseISO(h.startDate)
@@ -46,11 +64,11 @@ function getOffDayName(dateStr: string, holidayNames: Map<string, string>): stri
   const d = parseISO(dateStr)
   if (isSaturday(d)) return 'Samstag'
   if (isSunday(d)) return 'Sonntag'
-  return 'Wochenende'
+  return WEEKDAY_NAMES_DE[d.getDay()] ?? 'Wochenende'
 }
 
-export function detectBridgeDays(year: number, publicHolidays: Holiday[]): BridgeDay[] {
-  const nonWorkDays = buildNonWorkDaySet(year, publicHolidays)
+export function detectBridgeDays(year: number, publicHolidays: Holiday[], workDays?: number[]): BridgeDay[] {
+  const nonWorkDays = buildNonWorkDaySet(year, publicHolidays, workDays)
   const holidayNames = buildHolidayNameMap(publicHolidays)
   const result: BridgeDay[] = []
 

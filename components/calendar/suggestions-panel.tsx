@@ -5,13 +5,35 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
-import { X, Plus, Trash2, Sparkles, Calendar, Flame, Sun, Compass, SlidersHorizontal, ChevronDown, ChevronUp } from 'lucide-react'
+import {
+  X,
+  Plus,
+  Trash2,
+  Sparkles,
+  Calendar,
+  Flame,
+  Sun,
+  Compass,
+  SlidersHorizontal,
+  Ban,
+  Map as MapIcon,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react'
 import type { VacationSuggestionBlock, PlanningPreferences, PeriodPreference } from '@/lib/vacation-suggester'
-import { DEFAULT_PREFERENCES } from '@/lib/vacation-suggester'
+import { DEFAULT_PREFERENCES, recalculateSuggestionBlock } from '@/lib/vacation-suggester'
 import { format, getISOWeek, parseISO } from 'date-fns'
 import { de } from 'date-fns/locale'
-import type { EntryType, OptimizationGoal, SchoolHolidayStrategy, NoteHandling } from '@/types'
-import { formatDays } from '@/lib/vacation-accounting'
+import type {
+  EntryType,
+  OptimizationGoal,
+  SchoolHolidayStrategy,
+  NoteHandling,
+  PlanStartMode,
+  ExcludedDateRange,
+  Holiday,
+} from '@/types'
+import { formatDays, DEFAULT_WORK_DAYS } from '@/lib/vacation-accounting'
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 
@@ -19,6 +41,15 @@ function weekLabel(dates: string[]): string {
   const weeks = [...new Set(dates.map(d => getISOWeek(parseISO(d))))]
   if (weeks.length === 0) return ''
   return weeks.length === 1 ? `KW ${weeks[0]}` : `KW ${weeks[0]}–${weeks[weeks.length - 1]}`
+}
+
+function shiftIsoDate(dateStr: string, deltaDays: number, year: number): string {
+  const d = parseISO(dateStr)
+  const shifted = new Date(d.getTime() + deltaDays * 86400000)
+  const minD = new Date(year, 0, 1)
+  const maxD = new Date(year, 11, 31)
+  const clamped = shifted < minD ? minD : shifted > maxD ? maxD : shifted
+  return format(clamped, 'yyyy-MM-dd')
 }
 
 interface SuggestionsPanelProps {
@@ -31,10 +62,15 @@ interface SuggestionsPanelProps {
   remainingDays: number
   totalDays: number
   halfDaysChristmas: boolean
+  countWeekendsAsVacation?: boolean
+  workDays?: number[]
+  publicHolidays?: Holiday[]
+  schoolHolidays?: Holiday[]
   existingVacationDates: string[]
   noteDates: string[]
   onApply: (dates: string[], type: EntryType, replace: boolean) => void
   onRemove: (dates: string[]) => void
+  onOpenCalendarPreview?: (blocks: VacationSuggestionBlock[], overwrite: boolean) => void
   busy?: boolean
 }
 
@@ -48,22 +84,31 @@ export function SuggestionsPanel({
   remainingDays,
   totalDays,
   halfDaysChristmas,
+  countWeekendsAsVacation = false,
+  workDays = DEFAULT_WORK_DAYS,
+  publicHolidays = [],
+  schoolHolidays = [],
   existingVacationDates,
   noteDates,
   onApply,
   onRemove,
+  onOpenCalendarPreview,
   busy = false,
 }: SuggestionsPanelProps) {
-  const [prefs, setPrefs] = useState<PlanningPreferences>({ ...DEFAULT_PREFERENCES, halfDaysChristmas })
+  const [prefs, setPrefs] = useState<PlanningPreferences>({
+    ...DEFAULT_PREFERENCES,
+    halfDaysChristmas,
+    countWeekendsAsVacation,
+    workDays,
+  })
   const [overwrite, setOverwrite] = useState(false)
-  const [showAdvanced, setShowAdvanced] = useState(false)
   const [suggestions, setSuggestions] = useState<VacationSuggestionBlock[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [addedByBlock, setAddedByBlock] = useState<Record<number, string[]>>({})
   const [expandedBlock, setExpandedBlock] = useState<number | null>(null)
 
-  // New rule builder state
+  // Inclusion rule builder state
   const [ruleMode, setRuleMode] = useState<'months' | 'dates'>('months')
   const [ruleType, setRuleType] = useState<'must_have' | 'nice_to_have'>('must_have')
   const [ruleMonths, setRuleMonths] = useState<number[]>([7, 8])
@@ -73,17 +118,36 @@ export function SuggestionsPanel({
   const [ruleEndDate, setRuleEndDate] = useState<string>(`${year}-07-24`)
   const [ruleLabel, setRuleLabel] = useState<string>('')
 
+  // Excluded date range builder state
+  const [excludeStart, setExcludeStart] = useState<string>(`${year}-05-04`)
+  const [excludeEnd, setExcludeEnd] = useState<string>(`${year}-05-08`)
+  const [excludeLabel, setExcludeLabel] = useState<string>('')
+
   const pickedSingle = Object.keys(addedByBlock).length > 0
   const used = totalDays - remainingDays
   const availableBudget = Math.max(0, (overwrite ? totalDays : remainingDays) - (prefs.reserveDaysToKeep ?? 0))
 
+  const lastPlannedVacationDate = useMemo(() => {
+    const sorted = [...existingVacationDates].filter(d => d.startsWith(`${year}-`)).sort()
+    return sorted.length > 0 ? sorted[sorted.length - 1] : null
+  }, [existingVacationDates, year])
+
   useEffect(() => {
     if (open) {
-      setPrefs(p => ({ ...p, halfDaysChristmas }))
+      setPrefs(p => ({
+        ...p,
+        halfDaysChristmas,
+        countWeekendsAsVacation,
+        workDays,
+        customStartDate: p.customStartDate?.startsWith(`${year}-`) ? p.customStartDate : `${year}-01-01`,
+        customEndDate: p.customEndDate?.startsWith(`${year}-`) ? p.customEndDate : `${year}-12-31`,
+      }))
       setRuleStartDate(`${year}-07-13`)
       setRuleEndDate(`${year}-07-24`)
+      setExcludeStart(`${year}-05-04`)
+      setExcludeEnd(`${year}-05-08`)
     }
-  }, [open, halfDaysChristmas, year])
+  }, [open, halfDaysChristmas, countWeekendsAsVacation, workDays, year])
 
   const existingVacationSet = useMemo(() => new Set(existingVacationDates), [existingVacationDates])
 
@@ -107,6 +171,18 @@ export function SuggestionsPanel({
       preferSchoolHolidays: schoolStrategy === 'prefer',
       avoidSchoolHolidays: schoolStrategy === 'avoid' || schoolStrategy === 'avoid_heatmap',
       avoidAllStatesSchoolHolidays: schoolStrategy === 'avoid_heatmap',
+    }))
+  }
+
+  const updatePlanStartMode = (planStartMode: PlanStartMode) => {
+    setPrefs(p => ({
+      ...p,
+      planStartMode,
+      planFromToday: planStartMode === 'today',
+      customStartDate:
+        planStartMode === 'custom_date' && !p.customStartDate
+          ? `${year}-${String(new Date().getMonth() + 1).padStart(2, '0')}-01`
+          : p.customStartDate,
     }))
   }
 
@@ -163,6 +239,30 @@ export function SuggestionsPanel({
     }))
   }
 
+  const handleAddExcludeRange = () => {
+    if (!excludeStart || !excludeEnd || excludeStart > excludeEnd) return
+    const item: ExcludedDateRange = {
+      id: String(Date.now()),
+      startDate: excludeStart,
+      endDate: excludeEnd,
+      label:
+        excludeLabel.trim() ||
+        `Sperrzeitraum (${format(parseISO(excludeStart), 'dd.MM.')}–${format(parseISO(excludeEnd), 'dd.MM.')})`,
+    }
+    setPrefs(p => ({
+      ...p,
+      excludedDateRanges: [...(p.excludedDateRanges ?? []), item],
+    }))
+    setExcludeLabel('')
+  }
+
+  const handleRemoveExcludeRange = (index: number) => {
+    setPrefs(p => ({
+      ...p,
+      excludedDateRanges: (p.excludedDateRanges ?? []).filter((_, i) => i !== index),
+    }))
+  }
+
   const handleGenerate = async () => {
     setLoading(true)
     setError(null)
@@ -186,6 +286,35 @@ export function SuggestionsPanel({
       setError(e instanceof Error ? e.message : 'Unbekannter Fehler')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleAdjustBlock = (idx: number, mode: 'move' | 'start' | 'end', deltaDays: number) => {
+    const current = suggestions[idx]
+    if (!current || current.vacationDays.length === 0) return
+    const firstVac = current.vacationDays[0]
+    const lastVac = current.vacationDays[current.vacationDays.length - 1]
+    const nextStart = mode === 'move' || mode === 'start' ? shiftIsoDate(firstVac, deltaDays, year) : firstVac
+    const nextEnd = mode === 'move' || mode === 'end' ? shiftIsoDate(lastVac, deltaDays, year) : lastVac
+    if (nextStart > nextEnd) return
+
+    const updated = recalculateSuggestionBlock(
+      year,
+      nextStart,
+      nextEnd,
+      publicHolidays,
+      schoolHolidays,
+      existingVacationSet,
+      {
+        halfDaysChristmas: prefs.halfDaysChristmas,
+        countWeekendsAsVacation: prefs.countWeekendsAsVacation,
+        workDays: prefs.workDays,
+        overwrite,
+      },
+      current,
+    )
+    if (updated) {
+      setSuggestions(prev => prev.map((b, i) => (i === idx ? updated : b)))
     }
   }
 
@@ -223,6 +352,14 @@ export function SuggestionsPanel({
   const totalFreeDaysGained = useMemo(() => suggestions.reduce((sum, s) => sum + s.freeDaysGained, 0), [suggestions])
   const avgEfficiency = totalSuggestedCost > 0 ? totalFreeDaysGained / totalSuggestedCost : 0
 
+  const activeAdvancedCount =
+    (prefs.avoidMonths?.length ?? 0) +
+    (prefs.excludedDateRanges?.length ?? 0) +
+    (prefs.planStartMode && prefs.planStartMode !== 'today' ? 1 : 0) +
+    (prefs.maxBlocks ? 1 : 0) +
+    (prefs.minEfficiency ? 1 : 0) +
+    (prefs.requireMainVacationDays ? 1 : 0)
+
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -230,7 +367,7 @@ export function SuggestionsPanel({
           <Sparkles className="h-5 w-5 text-primary" /> Smart-Urlaubsplaner {year}
         </DialogTitle>
         <p className="text-sm text-muted-foreground mb-3">
-          Hole das absolute Maximum aus deinen Urlaubstagen, Feiertagen, Brückentagen und Wunschzeiträumen heraus.
+          Hole das absolute Maximum aus deinen Urlaubstagen ({(prefs.workDays ?? DEFAULT_WORK_DAYS).length}-Tage-Woche), Feiertagen, Brückentagen und Wunschzeiträumen heraus.
         </p>
 
         {/* Budget Status Bar */}
@@ -278,7 +415,7 @@ export function SuggestionsPanel({
           </div>
         </div>
 
-        {/* 2. Schulferien-Strategie (Konsistent, kein Widerspruch möglich!) */}
+        {/* 2. Schulferien-Strategie */}
         <div className="mb-4 space-y-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">2. Umgang mit Schulferien</span>
           <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
@@ -307,11 +444,11 @@ export function SuggestionsPanel({
           </div>
         </div>
 
-        {/* 3. Pflicht- & Wunschzeiträume (Individuelle Vorgaben) */}
+        {/* 3. Pflicht- & Wunschzeiträume (Einschlüsse) */}
         <div className="mb-4 rounded-xl border bg-muted/20 p-3 space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Calendar className="h-3.5 w-3.5" /> 3. Wunsch- & Pflicht-Zeiträume (Optional)
+              <Calendar className="h-3.5 w-3.5" /> 3. Wunsch- &amp; Pflicht-Zeiträume einschließen (Optional)
             </span>
             <div className="flex gap-1 text-xs">
               <button
@@ -326,7 +463,7 @@ export function SuggestionsPanel({
                 onClick={() => setRuleMode('dates')}
                 className={`rounded px-2 py-1 ${ruleMode === 'dates' ? 'bg-primary text-primary-foreground font-medium' : 'bg-muted text-muted-foreground'}`}
               >
-                Fester Zeitraum (Datum)
+                Exakter Zeitraum / Tage
               </button>
             </div>
           </div>
@@ -388,7 +525,7 @@ export function SuggestionsPanel({
                   className="min-w-[140px] flex-1 rounded border bg-background px-2 py-1.5 text-xs"
                 />
                 <Button type="button" size="sm" variant="secondary" onClick={handleAddRule}>
-                  <Plus className="h-3.5 w-3.5" /> Hinzufügen
+                  <Plus className="h-3.5 w-3.5" /> Einschließen
                 </Button>
               </div>
             </div>
@@ -439,7 +576,7 @@ export function SuggestionsPanel({
                 className="min-w-[130px] flex-1 rounded border bg-background px-2 py-1.5 text-xs"
               />
               <Button type="button" size="sm" variant="secondary" onClick={handleAddRule}>
-                <Plus className="h-3.5 w-3.5" /> Hinzufügen
+                <Plus className="h-3.5 w-3.5" /> Einschließen
               </Button>
             </div>
           )}
@@ -475,16 +612,15 @@ export function SuggestionsPanel({
           )}
         </div>
 
-        {/* 4. Grund-Toggles & Erweiterte Einstellungen */}
+        {/* 4. Grund-Toggles */}
         <div className="mb-4 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
           {([
             { key: 'preferBridgeDays', label: 'Brückentage bevorzugen' },
             { key: 'distributeEvenly', label: 'Gleichmäßig verteilen' },
             { key: 'halfDaysChristmas', label: '½ Tage Heiligabend/Silvester' },
-            { key: 'planFromToday', label: 'Ab heute planen' },
             { key: 'allowSingleDayBridges', label: 'Einzelne Brückentage erlauben' },
           ] as const).map(({ key, label }) => (
-            <label key={key} className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md px-1 text-xs sm:text-sm">
+            <label key={key} className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-1 text-xs sm:text-sm">
               <Switch
                 checked={Boolean(prefs[key])}
                 onCheckedChange={v => setPrefs(p => ({ ...p, [key]: v }))}
@@ -492,70 +628,152 @@ export function SuggestionsPanel({
               <span className="min-w-0">{label}</span>
             </label>
           ))}
-          <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md px-1 text-xs sm:text-sm">
+          <label className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md px-1 text-xs sm:text-sm">
             <Switch checked={overwrite} onCheckedChange={setOverwrite} />
             <span className="min-w-0">Vorhandene überschreiben</span>
           </label>
         </div>
 
-        <div className="mb-4 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
-          <label className="space-y-1">
-            <span className="text-muted-foreground block">Min. Tage/Block</span>
-            <input
-              type="number" min={1} max={30}
-              value={prefs.minDaysPerBlock}
-              onChange={e => setPrefs(p => ({ ...p, minDaysPerBlock: Math.max(1, Number(e.target.value)) }))}
-              className="min-h-10 w-full rounded border bg-background px-2 py-1.5 text-center text-sm"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-muted-foreground block">Max. Tage/Block</span>
-            <input
-              type="number" min={1} max={60}
-              value={prefs.maxDaysPerBlock ?? ''}
-              placeholder="∞"
-              onChange={e => setPrefs(p => ({ ...p, maxDaysPerBlock: e.target.value ? Number(e.target.value) : null }))}
-              className="min-h-10 w-full rounded border bg-background px-2 py-1.5 text-center text-sm"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-muted-foreground block">Reserve zurückhalten</span>
-            <input
-              type="number" min={0} max={30}
-              value={prefs.reserveDaysToKeep ?? 0}
-              onChange={e => setPrefs(p => ({ ...p, reserveDaysToKeep: Math.max(0, Number(e.target.value)) }))}
-              className="min-h-10 w-full rounded border bg-background px-2 py-1.5 text-center text-sm"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-muted-foreground block">Notizen im Kalender</span>
-            <select
-              value={prefs.noteHandling}
-              onChange={e => setPrefs(p => ({ ...p, noteHandling: e.target.value as NoteHandling }))}
-              className="min-h-10 w-full rounded border bg-background px-2 py-1.5 text-xs"
-            >
-              <option value="avoid">Bei Urlaub meiden</option>
-              <option value="prefer">Für Urlaub bevorzugen</option>
-              <option value="ignore">Ignorieren</option>
-            </select>
-          </label>
-        </div>
+        {/* 5. Aufklappbare Erweiterte Profi-Konfiguration (<details> / <summary>) */}
+        <details className="group mb-4 rounded-xl border bg-muted/20 p-3 text-xs">
+          <summary className="flex cursor-pointer list-none items-center justify-between font-semibold text-foreground">
+            <span className="flex items-center gap-2">
+              <SlidersHorizontal className="h-4 w-4 text-primary" />
+              Erweiterte Konfiguration: Planungs-Startdatum, Sperrzeiträume, Blockgrößen &amp; Effizienz
+              {activeAdvancedCount > 0 && (
+                <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">
+                  {activeAdvancedCount} aktiv
+                </span>
+              )}
+            </span>
+            <span className="text-muted-foreground transition-transform group-open:rotate-180">▼</span>
+          </summary>
 
-        {/* Collapsible: Monate ausschließen */}
-        <div className="mb-4">
-          <button
-            type="button"
-            onClick={() => setShowAdvanced(v => !v)}
-            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-            Monate ausschließen / Mindestabstand ({(prefs.avoidMonths?.length ?? 0) > 0 ? `${prefs.avoidMonths!.length} ausgeschlossen` : 'optional'})
-            {showAdvanced ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-          </button>
-          {showAdvanced && (
-            <div className="mt-2 rounded-lg border bg-muted/20 p-3 space-y-3 text-xs">
+          <div className="mt-3.5 space-y-4 border-t pt-3.5">
+            {/* A. Planungs-Zeitfenster / Startpunkt */}
+            <div className="space-y-2">
+              <span className="font-semibold text-foreground block">
+                Ab wann soll der Algorithmus das Maximum herausholen?
+              </span>
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-4">
+                {([
+                  { id: 'today', label: 'Ab heute', sub: 'Standard für laufendes Jahr' },
+                  { id: 'year_start', label: `Ab Jahresbeginn`, sub: `01.01.${year} – 31.12.${year}` },
+                  {
+                    id: 'after_last_vacation',
+                    label: 'Nach letztem Urlaub',
+                    sub: lastPlannedVacationDate ? `Ab nach dem ${format(parseISO(lastPlannedVacationDate), 'dd.MM.')}` : 'Noch kein Urlaub geplant',
+                  },
+                  { id: 'custom_date', label: 'Ab Wunsch-Datum', sub: 'Freier Start- & Endtag' },
+                ] as const).map(opt => {
+                  const active = (prefs.planStartMode ?? 'today') === opt.id
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => updatePlanStartMode(opt.id)}
+                      aria-pressed={active}
+                      className={`rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                        active ? 'border-primary bg-primary/10 font-medium ring-1 ring-primary' : 'bg-background hover:bg-muted/60'
+                      }`}
+                    >
+                      <div>{opt.label}</div>
+                      <div className="text-[10px] text-muted-foreground">{opt.sub}</div>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {(prefs.planStartMode === 'custom_date' || prefs.customEndDate) && (
+                <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-background p-2.5">
+                  <label className="flex items-center gap-1.5">
+                    <span className="text-muted-foreground">Startdatum:</span>
+                    <input
+                      type="date"
+                      min={`${year}-01-01`}
+                      max={`${year}-12-31`}
+                      value={prefs.customStartDate ?? `${year}-01-01`}
+                      onChange={e => setPrefs(p => ({ ...p, planStartMode: 'custom_date', customStartDate: e.target.value }))}
+                      className="rounded border bg-background px-2 py-1"
+                    />
+                  </label>
+                  <label className="flex items-center gap-1.5">
+                    <span className="text-muted-foreground">Planen bis (optional):</span>
+                    <input
+                      type="date"
+                      min={`${year}-01-01`}
+                      max={`${year}-12-31`}
+                      value={prefs.customEndDate ?? `${year}-12-31`}
+                      onChange={e => setPrefs(p => ({ ...p, customEndDate: e.target.value || null }))}
+                      className="rounded border bg-background px-2 py-1"
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* B. Exakte Sperrzeiträume & Tage ausschließen */}
+            <div className="space-y-2">
+              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                <Ban className="h-3.5 w-3.5 text-destructive" />
+                Genaue Tage oder Zeiträume ausschließen (Urlaubssperre / wichtige Termine)
+              </span>
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-background p-2.5">
+                <label className="flex items-center gap-1">
+                  <span className="text-muted-foreground">Von:</span>
+                  <input
+                    type="date"
+                    value={excludeStart}
+                    onChange={e => {
+                      setExcludeStart(e.target.value)
+                      if (e.target.value > excludeEnd) setExcludeEnd(e.target.value)
+                    }}
+                    className="rounded border bg-background px-2 py-1"
+                  />
+                </label>
+                <label className="flex items-center gap-1">
+                  <span className="text-muted-foreground">Bis:</span>
+                  <input
+                    type="date"
+                    value={excludeEnd}
+                    onChange={e => setExcludeEnd(e.target.value)}
+                    className="rounded border bg-background px-2 py-1"
+                  />
+                </label>
+                <input
+                  type="text"
+                  placeholder="Grund (z.B. Projekt-Phase, Messe)"
+                  value={excludeLabel}
+                  onChange={e => setExcludeLabel(e.target.value)}
+                  className="min-w-[140px] flex-1 rounded border bg-background px-2 py-1"
+                />
+                <Button type="button" size="sm" variant="outline" onClick={handleAddExcludeRange} className="h-7 text-xs">
+                  <Plus className="h-3.5 w-3.5" /> Zeitraum sperren
+                </Button>
+              </div>
+
+              {(prefs.excludedDateRanges?.length ?? 0) > 0 && (
+                <div className="space-y-1">
+                  {prefs.excludedDateRanges!.map((ex, idx) => (
+                    <div key={ex.id ?? idx} className="flex items-center justify-between rounded border border-destructive/30 bg-destructive/5 px-2.5 py-1">
+                      <span>
+                        <strong>{ex.label}</strong>: {format(parseISO(ex.startDate), 'dd.MM.yyyy')} – {format(parseISO(ex.endDate), 'dd.MM.yyyy')}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveExcludeRange(idx)}
+                        className="text-muted-foreground hover:text-destructive p-0.5"
+                        aria-label="Sperrzeitraum löschen"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div>
-                <span className="block text-muted-foreground mb-1.5">Keinen Urlaub in diesen Monaten vorschlagen:</span>
+                <span className="block text-muted-foreground mb-1">Oder ganze Monate ausschließen:</span>
                 <div className="flex flex-wrap gap-1">
                   {MONTH_NAMES.map((name, idx) => {
                     const m = idx + 1
@@ -575,20 +793,99 @@ export function SuggestionsPanel({
                   })}
                 </div>
               </div>
-              <label className="flex items-center gap-2">
-                <span className="text-muted-foreground">Mindestabstand zwischen zwei Urlaubsblöcken (Tage):</span>
+            </div>
+
+            {/* C. Block-Längen, Reserve, Mindestabstand, Mindest-Effizienz & Haupturlaub */}
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+              <label className="space-y-1">
+                <span className="text-muted-foreground block">Min. Tage/Block</span>
                 <input
-                  type="number"
-                  min={0}
-                  max={120}
-                  value={prefs.minGapDaysBetweenBlocks ?? 14}
-                  onChange={e => setPrefs(p => ({ ...p, minGapDaysBetweenBlocks: Math.max(0, Number(e.target.value)) }))}
-                  className="w-16 rounded border bg-background px-2 py-1 text-center"
+                  type="number" min={1} max={30}
+                  value={prefs.minDaysPerBlock}
+                  onChange={e => setPrefs(p => ({ ...p, minDaysPerBlock: Math.max(1, Number(e.target.value)) }))}
+                  className="min-h-9 w-full rounded border bg-background px-2 py-1 text-center"
                 />
               </label>
+              <label className="space-y-1">
+                <span className="text-muted-foreground block">Max. Tage/Block</span>
+                <input
+                  type="number" min={1} max={60}
+                  value={prefs.maxDaysPerBlock ?? ''}
+                  placeholder="∞"
+                  onChange={e => setPrefs(p => ({ ...p, maxDaysPerBlock: e.target.value ? Number(e.target.value) : null }))}
+                  className="min-h-9 w-full rounded border bg-background px-2 py-1 text-center"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-muted-foreground block">Reserve zurückhalten</span>
+                <input
+                  type="number" min={0} max={30}
+                  value={prefs.reserveDaysToKeep ?? 0}
+                  onChange={e => setPrefs(p => ({ ...p, reserveDaysToKeep: Math.max(0, Number(e.target.value)) }))}
+                  className="min-h-9 w-full rounded border bg-background px-2 py-1 text-center"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-muted-foreground block">Mindestabstand (Tage)</span>
+                <input
+                  type="number" min={0} max={120}
+                  value={prefs.minGapDaysBetweenBlocks ?? 14}
+                  onChange={e => setPrefs(p => ({ ...p, minGapDaysBetweenBlocks: Math.max(0, Number(e.target.value)) }))}
+                  className="min-h-9 w-full rounded border bg-background px-2 py-1 text-center"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-muted-foreground block">Max. Anzahl Urlaube</span>
+                <input
+                  type="number" min={1} max={25}
+                  value={prefs.maxBlocks ?? ''}
+                  placeholder="∞"
+                  onChange={e => setPrefs(p => ({ ...p, maxBlocks: e.target.value ? Math.max(1, Number(e.target.value)) : null }))}
+                  className="min-h-9 w-full rounded border bg-background px-2 py-1 text-center"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-muted-foreground block">Min. Effizienz-Faktor</span>
+                <select
+                  value={prefs.minEfficiency ?? ''}
+                  onChange={e => setPrefs(p => ({ ...p, minEfficiency: e.target.value ? Number(e.target.value) : null }))}
+                  className="min-h-9 w-full rounded border bg-background px-2 py-1"
+                >
+                  <option value="">Alle zulassen</option>
+                  <option value="1.5">Mind. 1,5x</option>
+                  <option value="2">Mind. 2,0x</option>
+                  <option value="2.5">Mind. 2,5x</option>
+                  <option value="3">Mind. 3,0x (nur Top-Brücken)</option>
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="text-muted-foreground block">Haupturlaub erzwingen</span>
+                <select
+                  value={prefs.requireMainVacationDays ?? ''}
+                  onChange={e => setPrefs(p => ({ ...p, requireMainVacationDays: e.target.value ? Number(e.target.value) : null }))}
+                  className="min-h-9 w-full rounded border bg-background px-2 py-1"
+                >
+                  <option value="">Automatisch</option>
+                  <option value="5">Mind. 1 Woche (5 UT)</option>
+                  <option value="8">Mind. 2 Wochen (8+ UT)</option>
+                  <option value="12">Mind. 3 Wochen (12+ UT)</option>
+                </select>
+              </label>
+              <label className="space-y-1">
+                <span className="text-muted-foreground block">Notizen im Kalender</span>
+                <select
+                  value={prefs.noteHandling}
+                  onChange={e => setPrefs(p => ({ ...p, noteHandling: e.target.value as NoteHandling }))}
+                  className="min-h-9 w-full rounded border bg-background px-2 py-1"
+                >
+                  <option value="avoid">Bei Urlaub meiden</option>
+                  <option value="prefer">Für Urlaub bevorzugen</option>
+                  <option value="ignore">Ignorieren</option>
+                </select>
+              </label>
             </div>
-          )}
-        </div>
+          </div>
+        </details>
 
         <Button onClick={handleGenerate} disabled={loading} className="w-full mb-4">
           {loading ? 'Optimaler Plan wird berechnet…' : '✨ Optimalen Urlaubsplan berechnen'}
@@ -598,16 +895,28 @@ export function SuggestionsPanel({
 
         {suggestions.length > 0 && (
           <>
-            {/* Gesamt-Zusammenfassung */}
+            {/* Gesamt-Zusammenfassung + Interaktive Kalender-Vorschau Button */}
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary/5 p-3 text-sm">
               <div>
                 <span className="font-semibold text-primary">Ergebnis:</span>{' '}
                 Aus <strong>{formatDays(totalSuggestedCost)} Urlaubstagen</strong> holst du{' '}
                 <strong className="text-green-600 dark:text-green-400">{totalFreeDaysGained} freie Tage</strong> heraus!
+                <span className="ml-2 text-xs text-muted-foreground">
+                  (Ø {avgEfficiency.toFixed(1)}x Effizienz · {suggestions.length} {suggestions.length === 1 ? 'Zeitraum' : 'Zeiträume'})
+                </span>
               </div>
-              <Badge variant="default" className="text-xs">
-                Ø {avgEfficiency.toFixed(1)}x Effizienz · {suggestions.length} {suggestions.length === 1 ? 'Zeitraum' : 'Zeiträume'}
-              </Badge>
+              {onOpenCalendarPreview && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  className="bg-teal-600 hover:bg-teal-700 text-white gap-1.5"
+                  onClick={() => onOpenCalendarPreview(suggestions, overwrite)}
+                >
+                  <MapIcon className="h-3.5 w-3.5" />
+                  Auf Kalender interaktiv ziehen &amp; prüfen
+                </Button>
+              )}
             </div>
 
             <div className="space-y-2.5 mb-4">
@@ -620,7 +929,7 @@ export function SuggestionsPanel({
                   : ''
 
                 return (
-                  <div key={i} className="flex flex-col gap-2.5 rounded-lg border bg-card p-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div key={s.id ?? i} className="flex flex-col gap-2.5 rounded-lg border bg-card p-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 flex flex-wrap items-center gap-2">
                         <span className="text-sm font-semibold">{s.label}</span>
@@ -639,15 +948,35 @@ export function SuggestionsPanel({
                         {spanText && <span className="text-muted-foreground font-normal"> ({spanText})</span>}
                       </p>
                       {s.reason && (
-                        <p className="text-xs text-muted-foreground mb-1">{s.reason}</p>
+                        <p className="text-xs text-muted-foreground mb-1.5">{s.reason}</p>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => setExpandedBlock(isExpanded ? null : i)}
-                        className="text-[11px] text-primary hover:underline"
-                      >
-                        {isExpanded ? 'Urlaubstage ausblenden ▲' : `Alle ${s.vacationDays.length} Urlaubstage anzeigen ▼`}
-                      </button>
+
+                      {/* Quick interactive resize/move controls right inside the dialog */}
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] pt-0.5">
+                        <div className="inline-flex items-center rounded border bg-muted/40 px-1 py-0.5 gap-0.5" title="Starttag verschieben">
+                          <span className="text-muted-foreground px-1">Start:</span>
+                          <button type="button" onClick={() => handleAdjustBlock(i, 'start', -1)} className="hover:bg-background rounded px-1 font-bold" title="1 Tag früher starten">−1T</button>
+                          <button type="button" onClick={() => handleAdjustBlock(i, 'start', 1)} className="hover:bg-background rounded px-1 font-bold" title="1 Tag später starten">+1T</button>
+                        </div>
+                        <div className="inline-flex items-center rounded border bg-muted/40 px-1 py-0.5 gap-0.5" title="Gesamten Block verschieben">
+                          <button type="button" onClick={() => handleAdjustBlock(i, 'move', -1)} className="hover:bg-background rounded px-1 flex items-center" title="Block 1 Tag nach vorne schieben"><ChevronLeft className="h-3 w-3" /></button>
+                          <span className="text-muted-foreground px-1">Schieben</span>
+                          <button type="button" onClick={() => handleAdjustBlock(i, 'move', 1)} className="hover:bg-background rounded px-1 flex items-center" title="Block 1 Tag nach hinten schieben"><ChevronRight className="h-3 w-3" /></button>
+                        </div>
+                        <div className="inline-flex items-center rounded border bg-muted/40 px-1 py-0.5 gap-0.5" title="Endtag verschieben">
+                          <span className="text-muted-foreground px-1">Ende:</span>
+                          <button type="button" onClick={() => handleAdjustBlock(i, 'end', -1)} className="hover:bg-background rounded px-1 font-bold" title="1 Tag kürzer">−1T</button>
+                          <button type="button" onClick={() => handleAdjustBlock(i, 'end', 1)} className="hover:bg-background rounded px-1 font-bold" title="1 Tag länger">+1T</button>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedBlock(isExpanded ? null : i)}
+                          className="ml-1 text-primary hover:underline"
+                        >
+                          {isExpanded ? 'Tage ausblenden ▲' : `Alle ${s.vacationDays.length} Tage ▼`}
+                        </button>
+                      </div>
+
                       {isExpanded && (
                         <ul className="mt-1.5 text-xs text-muted-foreground space-y-0.5 border-l-2 border-primary/30 pl-2">
                           {s.vacationDays.map(d => (
@@ -671,9 +1000,22 @@ export function SuggestionsPanel({
                 )
               })}
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <Button variant="outline" onClick={handleApplyAll} disabled={busy} className="w-full sm:w-auto">Alle übernehmen</Button>
-              <Button onClick={onClose} className="w-full sm:w-auto">Schließen</Button>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+              {onOpenCalendarPreview && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenCalendarPreview(suggestions, overwrite)}
+                  className="w-full sm:w-auto gap-1.5 border-teal-500/50 text-teal-700 dark:text-teal-300"
+                >
+                  <MapIcon className="h-4 w-4" />
+                  Auf dem Kalender einblenden &amp; ziehen
+                </Button>
+              )}
+              <div className="flex flex-col gap-2 sm:flex-row sm:ml-auto">
+                <Button variant="outline" onClick={handleApplyAll} disabled={busy} className="w-full sm:w-auto">Alle übernehmen</Button>
+                <Button onClick={onClose} className="w-full sm:w-auto">Schließen</Button>
+              </div>
             </div>
           </>
         )}

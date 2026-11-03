@@ -16,7 +16,18 @@ import { detectBridgeDays } from '@/lib/bridge-days'
 import { loadConfig, saveConfig, configToEntries, defaultConfig, applyConfigPatch, mergeImportedEntries, toggleEntry, diffEntries } from '@/lib/config'
 import { comparisonRegions, defaultComparisonSelection, localizedName } from '@/lib/holiday-regions'
 import { getSubdivisionAliases } from '@/lib/subdivision-aliases'
-import { christmasPartner, holidayDateSet, remainingWorkDays as countRemainingWorkDays, summarizeFlex, summarizeVacation, vacationBudget } from '@/lib/vacation-accounting'
+import {
+  christmasPartner,
+  holidayDateSet,
+  isOffDayKey,
+  DEFAULT_WORK_DAYS,
+  formatDays,
+  remainingWorkDays as countRemainingWorkDays,
+  summarizeFlex,
+  summarizeVacation,
+  vacationBudget,
+} from '@/lib/vacation-accounting'
+import { recalculateSuggestionBlock, type VacationSuggestionBlock } from '@/lib/vacation-suggester'
 import { decodeSharePayload, type ImportData } from '@/lib/export'
 import {
   X,
@@ -29,12 +40,17 @@ import {
   Edit3,
   Keyboard,
   HelpCircle,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { useProfile, useUpdatePreferences } from '@/hooks/use-profile'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { parsePreferences, parseEntry, countryChangePatch } from '@/lib/preferences'
-import { parseISO, format } from 'date-fns'
+import { parseISO, format, eachDayOfInterval, differenceInCalendarDays } from 'date-fns'
 import { de } from 'date-fns/locale'
 import type { EntryType, Holiday, LocalConfig, PreferencesPatch, SharedPlanOverlay } from '@/types'
 import type { DayInfo } from '@/components/calendar/day-cell'
@@ -65,6 +81,15 @@ function getHolidayName(h: Holiday): string {
   return localizedName(h.name)
 }
 
+function shiftIsoDate(dateStr: string, deltaDays: number, year: number): string {
+  const d = parseISO(dateStr)
+  const shifted = new Date(d.getTime() + deltaDays * 86400000)
+  const minD = new Date(year, 0, 1)
+  const maxD = new Date(year, 11, 31)
+  const clamped = shifted < minD ? minD : shifted > maxD ? maxD : shifted
+  return format(clamped, 'yyyy-MM-dd')
+}
+
 type ConfigPatch = PreferencesPatch & { entries?: LocalConfig['entries'] }
 
 type PlannedEntry = { date: string; type: string; title?: string | null }
@@ -81,7 +106,8 @@ function hasVisibleDayInfo(day: DayInfo | null): day is DayInfo {
     day?.isBridgeDay ||
     day?.entry ||
     day?.comparisonStates?.length ||
-    day?.sharedItems?.length
+    day?.sharedItems?.length ||
+    day?.suggestionPreview
   )
 }
 
@@ -89,6 +115,15 @@ function DayInfoDetails({ day }: { day: DayInfo }) {
   return (
     <>
       <p className="font-medium">{format(day.date, 'dd.MM.yyyy (EEEE)', { locale: de })}</p>
+      {day.suggestionPreview && (
+        <div className="my-1 rounded-md border border-teal-500/40 bg-teal-500/10 p-1.5 text-xs text-teal-700 dark:text-teal-300">
+          <p className="font-semibold">✨ Vorschlag: {day.suggestionPreview.label}</p>
+          <p>
+            {formatDays(day.suggestionPreview.cost)} UT → <strong>{day.suggestionPreview.freeDaysGained} Tage frei</strong> ({day.suggestionPreview.efficiency.toFixed(1)}x Effizienz)
+          </p>
+          <p className="text-[10px] opacity-85">Ziehe ◀ / ▶ an den Enden oder verschiebe den Block direkt im Kalender.</p>
+        </div>
+      )}
       {day.publicHoliday && <p className="text-green-600 dark:text-green-400">🎉 {day.publicHoliday}</p>}
       {day.schoolHoliday && <p className="text-sky-600 dark:text-sky-400 font-medium">🏫 Eigene Schulferien: {day.schoolHoliday}</p>}
       {day.isBridgeDay && day.bridgeDayInfo && (
@@ -150,6 +185,11 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
   const [collabMode, setCollabMode] = useState<'overlay' | 'edit'>('overlay')
   const [guestEntriesCount, setGuestEntriesCount] = useState(0)
   const [guestImportDismissed, setGuestImportDismissed] = useState(false)
+
+  // Interactive Calendar Suggestion Preview state
+  const [previewSuggestions, setPreviewSuggestions] = useState<VacationSuggestionBlock[]>([])
+  const [previewOverwrite, setPreviewOverwrite] = useState(false)
+  const [selectedPreviewIndex, setSelectedPreviewIndex] = useState(0)
 
   useEffect(() => {
     const loaded = loadConfig()
@@ -384,6 +424,7 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
   const showBridgeDays = config?.showBridgeDays ?? true
   const halfDaysChristmas = config?.halfDaysChristmas ?? true
   const countWeekendsAsVacation = config?.countWeekendsAsVacation ?? false
+  const workDays = useMemo(() => config?.workDays ?? DEFAULT_WORK_DAYS, [config?.workDays])
   const vacationDaysTotal = vacationBudget(config ?? {}, year)
 
   const { data: countriesData = [] } = useCountries()
@@ -460,8 +501,8 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
 
   const bridgeDays = useMemo(() => {
     if (!showBridgeDays || publicHolidays.length === 0) return []
-    return detectBridgeDays(year, publicHolidays)
-  }, [year, publicHolidays, showBridgeDays])
+    return detectBridgeDays(year, publicHolidays, workDays)
+  }, [year, publicHolidays, showBridgeDays, workDays])
 
   const bridgeDaySet = useMemo(() => new Set(bridgeDays.map(b => b.date)), [bridgeDays])
 
@@ -476,14 +517,14 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
   // One cost definition for "verplant", "verbleibend", over budget and suggestions.
   const holidayDates = useMemo(() => holidayDateSet(publicHolidays), [publicHolidays])
   const summary = useMemo(
-    () => summarizeVacation(entries, vacationDaysTotal, { holidayDates, halfDaysChristmas, countWeekendsAsVacation }),
-    [entries, vacationDaysTotal, holidayDates, halfDaysChristmas, countWeekendsAsVacation]
+    () => summarizeVacation(entries, vacationDaysTotal, { holidayDates, halfDaysChristmas, countWeekendsAsVacation, workDays }),
+    [entries, vacationDaysTotal, holidayDates, halfDaysChristmas, countWeekendsAsVacation, workDays]
   )
   const overBudgetDates = summary.overBudget
   const vacationDaysUsed = summary.used
   const gleittageCount = entries.filter(e => e.type === 'gleittag').length
   const flex = summarizeFlex(gleittageCount, config ?? {}, year)
-  const remainingWorkDays = countRemainingWorkDays(year, entries, { holidayDates, countWeekendsAsVacation }, format(new Date(), 'yyyy-MM-dd'))
+  const remainingWorkDays = countRemainingWorkDays(year, entries, { holidayDates, countWeekendsAsVacation, workDays }, format(new Date(), 'yyyy-MM-dd'))
   const vacationDateSet = useMemo(
     () => new Set(entries.filter(e => e.type === 'vacation').map(e => e.date.split('T')[0])),
     [entries]
@@ -590,6 +631,18 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
     showSubscribeDialog,
   ])
 
+  const importSavedData = useCallback(async (vacations: unknown[], preferences?: Record<string, unknown>, successMessage = 'Plan übernommen. Die lokale Kopie bleibt erhalten.') => {
+    setImportBusy(true); setSyncMessage('')
+    try {
+      const response = await fetch('/api/vacations/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vacations, preferences }) })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error)
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ['vacations'] }), queryClient.invalidateQueries({ queryKey: ['profile'] })])
+      if (successMessage) setSyncMessage(successMessage)
+    } catch (error) { setSyncMessage(error instanceof Error ? error.message : 'Import fehlgeschlagen.') }
+    finally { setImportBusy(false) }
+  }, [queryClient])
+
   const handleToggle = useCallback((date: Date, type: EntryType) => {
     const dateKey = getDateKey(date)
 
@@ -637,17 +690,79 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
     }
   }, [activeCollab, collabMode, isLoggedIn, entries, localConfig, addMutation, removeMutation, updateLocalEntries, defaultNoteText, halfDaysChristmas, recordUndo])
 
-  const importSavedData = async (vacations: unknown[], preferences?: Record<string, unknown>, successMessage = 'Plan übernommen. Die lokale Kopie bleibt erhalten.') => {
-    setImportBusy(true); setSyncMessage('')
-    try {
-      const response = await fetch('/api/vacations/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vacations, preferences }) })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error)
-      await Promise.all([queryClient.invalidateQueries({ queryKey: ['vacations'] }), queryClient.invalidateQueries({ queryKey: ['profile'] })])
-      setSyncMessage(successMessage)
-    } catch (error) { setSyncMessage(error instanceof Error ? error.message : 'Import fehlgeschlagen.') }
-    finally { setImportBusy(false) }
-  }
+  // Multi-day Drag-to-Select & Shift+Click range handler for vacation, gleittag, and multi-day notes/events
+  const handleSelectRange = useCallback((startDateKey: string, endDateKey: string, type: EntryType) => {
+    const firstKey = startDateKey < endDateKey ? startDateKey : endDateKey
+    const lastKey = startDateKey < endDateKey ? endDateKey : startDateKey
+    const allRangeKeys = eachDayOfInterval({
+      start: parseISO(firstKey),
+      end: parseISO(lastKey),
+    }).map(d => format(d, 'yyyy-MM-dd'))
+
+    // For vacation and gleittag, skip public holidays and non-working weekdays unless countWeekendsAsVacation is enabled
+    const targetKeys =
+      type === 'note'
+        ? allRangeKeys
+        : allRangeKeys.filter(
+            k =>
+              !holidayDates.has(k) &&
+              (countWeekendsAsVacation || !isOffDayKey(k, workDays)),
+          )
+
+    if (targetKeys.length === 0) return
+
+    const sourceList = isLoggedIn ? entries : (localConfig?.entries ?? [])
+    const existingSet = new Set(
+      sourceList.filter(e => e.type === type).map(e => e.date.slice(0, 10)),
+    )
+    const allAlreadyPlanned = targetKeys.every(k => existingSet.has(k))
+
+    recordUndo()
+
+    if (allAlreadyPlanned) {
+      // Remove the selected range
+      const removeSet = new Set(targetKeys)
+      if (isLoggedIn) {
+        for (const entry of serverEntries) {
+          if (entry.type === type && removeSet.has(entry.date.slice(0, 10))) {
+            removeMutation.mutate(entry.id)
+          }
+        }
+      } else {
+        updateLocalEntries(current =>
+          current.filter(e => !(e.type === type && removeSet.has(e.date.slice(0, 10)))),
+        )
+      }
+      return
+    }
+
+    // Adding range
+    let noteTitle: string | undefined
+    if (type === 'note') {
+      const rangeLabel = `${format(parseISO(firstKey), 'dd.MM.')} – ${format(parseISO(lastKey), 'dd.MM.')} (${targetKeys.length} Tage)`
+      const entered = defaultNoteText || prompt(`Notiz / Event-Text für ${rangeLabel}:`)
+      if (entered === null) return
+      noteTitle = entered.trim() || 'Event'
+    }
+
+    const missingKeys = targetKeys.filter(k => !existingSet.has(k))
+    if (missingKeys.length === 0) return
+
+    if (isLoggedIn) {
+      void importSavedData(
+        missingKeys.map(date => ({ date, type, ...(noteTitle ? { title: noteTitle } : {}) })),
+        undefined,
+        `${missingKeys.length} ${type === 'vacation' ? 'Urlaubstage' : type === 'gleittag' ? 'Gleittage' : 'Notiz-Tage'} hinzugefügt.`,
+      )
+    } else {
+      updateLocalEntries(current =>
+        mergeImportedEntries(
+          current,
+          missingKeys.map(date => ({ date, type, ...(noteTitle ? { title: noteTitle } : {}) })),
+        ),
+      )
+    }
+  }, [holidayDates, countWeekendsAsVacation, workDays, isLoggedIn, entries, localConfig, recordUndo, serverEntries, removeMutation, updateLocalEntries, defaultNoteText, importSavedData])
 
   const handleApplySuggestions = (dates: string[], type: EntryType, replace = false) => {
     const dateKeys = [...new Set(dates.map(date => date.split('T')[0]))]
@@ -713,7 +828,6 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
     if (!isLoggedIn) { pushUndo({ scope: 'all', entries: (localConfig?.entries ?? []).map(plannedEntry) }); updateConfig({ entries: [] }); return }
     setSyncMessage('')
     try {
-      // The reset deletes every year, so undo needs the complete plan.
       const before = await fetch('/api/vacations')
       if (!before.ok) throw new Error()
       pushUndo({ scope: 'all', entries: (await before.json() as PlannedEntry[]).map(plannedEntry) })
@@ -737,6 +851,83 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
     }
     return merged
   }, [publicHolidays, allCountryHolidays])
+
+  // Interactive Suggestion Preview Drag & Resize Handler on the Calendar
+  const handleDragPreviewBlock = useCallback(
+    (
+      index: number,
+      mode: 'move' | 'resize-start' | 'resize-end',
+      targetDateKey: string,
+      anchorDateKey: string,
+    ) => {
+      setPreviewSuggestions(prev => {
+        const current = prev[index]
+        if (!current || current.vacationDays.length === 0) return prev
+        const firstVac = current.vacationDays[0]
+        const lastVac = current.vacationDays[current.vacationDays.length - 1]
+        let nextStart = firstVac
+        let nextEnd = lastVac
+
+        if (mode === 'resize-start') {
+          nextStart = targetDateKey <= lastVac ? targetDateKey : lastVac
+        } else if (mode === 'resize-end') {
+          nextEnd = targetDateKey >= firstVac ? targetDateKey : firstVac
+        } else {
+          const delta = differenceInCalendarDays(parseISO(targetDateKey), parseISO(anchorDateKey))
+          if (delta === 0) return prev
+          nextStart = shiftIsoDate(firstVac, delta, year)
+          nextEnd = shiftIsoDate(lastVac, delta, year)
+        }
+
+        const recalculated = recalculateSuggestionBlock(
+          year,
+          nextStart,
+          nextEnd,
+          combinedPublicHolidays,
+          schoolHolidays,
+          vacationDateSet,
+          {
+            halfDaysChristmas,
+            countWeekendsAsVacation,
+            workDays,
+            overwrite: previewOverwrite,
+          },
+          current,
+        )
+        if (!recalculated) return prev
+        return prev.map((b, i) => (i === index ? recalculated : b))
+      })
+    },
+    [year, combinedPublicHolidays, schoolHolidays, vacationDateSet, halfDaysChristmas, countWeekendsAsVacation, workDays, previewOverwrite],
+  )
+
+  const handleNudgePreviewBlock = (index: number, mode: 'move' | 'start' | 'end', deltaDays: number) => {
+    const current = previewSuggestions[index]
+    if (!current || current.vacationDays.length === 0) return
+    const firstVac = current.vacationDays[0]
+    const lastVac = current.vacationDays[current.vacationDays.length - 1]
+    const nextStart = mode === 'move' || mode === 'start' ? shiftIsoDate(firstVac, deltaDays, year) : firstVac
+    const nextEnd = mode === 'move' || mode === 'end' ? shiftIsoDate(lastVac, deltaDays, year) : lastVac
+    if (nextStart > nextEnd) return
+    const recalculated = recalculateSuggestionBlock(
+      year,
+      nextStart,
+      nextEnd,
+      combinedPublicHolidays,
+      schoolHolidays,
+      vacationDateSet,
+      {
+        halfDaysChristmas,
+        countWeekendsAsVacation,
+        workDays,
+        overwrite: previewOverwrite,
+      },
+      current,
+    )
+    if (recalculated) {
+      setPreviewSuggestions(prev => prev.map((b, i) => (i === index ? recalculated : b)))
+    }
+  }
 
   // Build map of dateKey -> shared plan entries from visible overlays (when not in edit mode for that same token)
   const sharedOverlayMap = useMemo(() => {
@@ -782,6 +973,11 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
   const hasSyncError = profile.isError || entriesError || updatePreferences.isError || addMutation.isError || removeMutation.isError
   const isSavingOrLoading = profile.isLoading || entriesLoading || updatePreferences.isPending || addMutation.isPending || removeMutation.isPending
 
+  const activePreviewBlock = previewSuggestions[selectedPreviewIndex] ?? previewSuggestions[0] ?? null
+  const previewTotalCost = useMemo(() => previewSuggestions.reduce((s, b) => s + b.cost, 0), [previewSuggestions])
+  const previewTotalFree = useMemo(() => previewSuggestions.reduce((s, b) => s + b.freeDaysGained, 0), [previewSuggestions])
+  const previewAvgEff = previewTotalCost > 0 ? previewTotalFree / previewTotalCost : 0
+
   return (
     <div className="min-h-screen bg-background">
       <Header isLoggedIn={isLoggedIn} />
@@ -792,10 +988,20 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
         remainingDays={vacationDaysTotal - vacationDaysUsed}
         totalDays={vacationDaysTotal}
         halfDaysChristmas={halfDaysChristmas}
+        countWeekendsAsVacation={countWeekendsAsVacation}
+        workDays={workDays}
+        publicHolidays={combinedPublicHolidays}
+        schoolHolidays={schoolHolidays}
         existingVacationDates={existingVacationDates}
         noteDates={existingNoteDates}
         onApply={handleApplySuggestions}
         onRemove={handleRemoveSuggestion}
+        onOpenCalendarPreview={(blocks, overwrite) => {
+          setPreviewSuggestions(blocks)
+          setPreviewOverwrite(overwrite)
+          setSelectedPreviewIndex(0)
+          setShowSuggestions(false)
+        }}
         busy={importBusy || addMutation.isPending || removeMutation.isPending}
       />
 
@@ -1069,6 +1275,8 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
           onCountriesChange={(codes) => updateConfig({ selectedCountries: codes })}
           vacationDaysTotal={vacationDaysTotal}
           onVacationDaysChange={(n) => updateConfig({ vacationDaysPerYear: { [year]: n } })}
+          workDays={workDays}
+          onWorkDaysChange={(days) => updateConfig({ workDays: days })}
           countWeekendsAsVacation={countWeekendsAsVacation}
           onCountWeekendsChange={(v) => updateConfig({ countWeekendsAsVacation: v })}
           halfDaysChristmas={halfDaysChristmas}
@@ -1111,6 +1319,147 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
           onReset={handleReset}
         />
 
+        {/* Interactive Calendar Suggestion Preview & Live Drag Bar */}
+        {previewSuggestions.length > 0 && (
+          <div className="sticky top-14 z-40 rounded-xl border-2 border-teal-500/70 bg-card/95 p-3 shadow-lg backdrop-blur space-y-2.5 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge className="bg-teal-600 text-white hover:bg-teal-600">
+                  <Sparkles className="mr-1 h-3 w-3" /> Interaktive Kalender-Vorschau
+                </Badge>
+                <span className="font-medium">
+                  Gesamt: <strong>{formatDays(previewTotalCost)} Urlaubstage</strong> →{' '}
+                  <strong className="text-teal-600 dark:text-teal-400">{previewTotalFree} freie Tage</strong>{' '}
+                  (Ø {previewAvgEff.toFixed(1)}x Effizienz)
+                </span>
+                <span className="hidden lg:inline text-muted-foreground">
+                  · Ziehe <strong>◀ / ▶</strong> an den Enden im Kalender zum Kürzen/Verlängern oder ziehe die Mitte zum Verschieben!
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs"
+                  onClick={() => setShowSuggestions(true)}
+                >
+                  <SlidersHorizontal className="mr-1 h-3.5 w-3.5" />
+                  Optionen
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-7 text-xs bg-teal-600 hover:bg-teal-700 text-white"
+                  onClick={() => {
+                    const allDates = [...new Set(previewSuggestions.flatMap(s => s.vacationDays))]
+                    handleApplySuggestions(allDates, 'vacation', previewOverwrite)
+                    setPreviewSuggestions([])
+                  }}
+                >
+                  <Check className="mr-1 h-3.5 w-3.5" />
+                  Alle {previewSuggestions.length} übernehmen
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs"
+                  onClick={() => setPreviewSuggestions([])}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Beenden
+                </Button>
+              </div>
+            </div>
+
+            {/* Block Selector Pills */}
+            <div className="flex flex-wrap items-center gap-1.5 border-t pt-2">
+              {previewSuggestions.map((b, idx) => {
+                const active = idx === selectedPreviewIndex
+                return (
+                  <button
+                    key={b.id ?? idx}
+                    type="button"
+                    onClick={() => setSelectedPreviewIndex(idx)}
+                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 transition-colors ${
+                      active
+                        ? 'border-teal-600 bg-teal-600/15 font-semibold text-teal-800 dark:text-teal-200 ring-1 ring-teal-500'
+                        : 'bg-background hover:bg-muted'
+                    }`}
+                  >
+                    <span>{b.label}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      ({formatDays(b.cost)} UT → {b.freeDaysGained}T · {b.efficiency.toFixed(1)}x)
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Active Block Live Inspector & Controls */}
+            {activePreviewBlock && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-teal-700 dark:text-teal-300">
+                    {activePreviewBlock.label}:
+                  </span>
+                  <span>
+                    {format(parseISO(activePreviewBlock.startDate), 'dd.MM.yyyy')} – {format(parseISO(activePreviewBlock.endDate), 'dd.MM.yyyy')}
+                  </span>
+                  <Badge variant="secondary" className="text-[11px]">
+                    {formatDays(activePreviewBlock.cost)} Urlaubstage → {activePreviewBlock.freeDaysGained} Tage frei ({activePreviewBlock.efficiency.toFixed(1)}x)
+                  </Badge>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="inline-flex items-center rounded border bg-background px-1 py-0.5 gap-0.5">
+                    <span className="text-muted-foreground px-1">Start:</span>
+                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'start', -1)} className="hover:bg-muted rounded px-1.5 font-bold">−1T</button>
+                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'start', 1)} className="hover:bg-muted rounded px-1.5 font-bold">+1T</button>
+                  </div>
+                  <div className="inline-flex items-center rounded border bg-background px-1 py-0.5 gap-0.5">
+                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'move', -1)} className="hover:bg-muted rounded px-1 flex items-center"><ChevronLeft className="h-3.5 w-3.5" /></button>
+                    <span className="text-muted-foreground px-1">Verschieben</span>
+                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'move', 1)} className="hover:bg-muted rounded px-1 flex items-center"><ChevronRight className="h-3.5 w-3.5" /></button>
+                  </div>
+                  <div className="inline-flex items-center rounded border bg-background px-1 py-0.5 gap-0.5">
+                    <span className="text-muted-foreground px-1">Ende:</span>
+                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'end', -1)} className="hover:bg-muted rounded px-1.5 font-bold">−1T</button>
+                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'end', 1)} className="hover:bg-muted rounded px-1.5 font-bold">+1T</button>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-7 px-2.5 text-xs bg-teal-600 hover:bg-teal-700 text-white"
+                    onClick={() => {
+                      handleApplySuggestions(activePreviewBlock.vacationDays, 'vacation', false)
+                      setPreviewSuggestions(prev => prev.filter((_, i) => i !== selectedPreviewIndex))
+                      setSelectedPreviewIndex(0)
+                    }}
+                  >
+                    <Check className="mr-1 h-3.5 w-3.5" />
+                    Übernehmen
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                    onClick={() => {
+                      setPreviewSuggestions(prev => prev.filter((_, i) => i !== selectedPreviewIndex))
+                      setSelectedPreviewIndex(0)
+                    }}
+                  >
+                    <X className="mr-1 h-3.5 w-3.5" />
+                    Verwerfen
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {entriesLoading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {Array.from({ length: 12 }).map((_, i) => (
@@ -1121,6 +1470,7 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
           <YearView
             year={year} entries={entries}
             publicHolidays={combinedPublicHolidays} schoolHolidays={schoolHolidays}
+            workDays={workDays}
             compareHolidays={comparison.holidays}
             compareLabels={compareSubdivisions.map(code => subdivisionsData.find((s: { code: string }) => s.code === code)?.name?.find((n: { language: string }) => n.language === 'DE')?.text ?? code)}
             showHeatmap={showHeatmap} showPublicHolidays={showPublicHolidays} showSchoolHolidays={showSchoolHolidays}
@@ -1128,7 +1478,13 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
             showBridgeDays={showBridgeDays} showOtherMonthDays={showOtherMonthDays}
             overBudgetDates={overBudgetDates}
             overlays={sharedOverlays}
-            onToggle={handleToggle} selectedType={selectedType}
+            previewSuggestions={previewSuggestions}
+            selectedPreviewIndex={selectedPreviewIndex}
+            onSelectPreviewBlock={setSelectedPreviewIndex}
+            onDragPreviewBlock={handleDragPreviewBlock}
+            onToggle={handleToggle}
+            onSelectRange={handleSelectRange}
+            selectedType={selectedType}
             onHover={setHoveredDay}
             onSelectDate={(date) => setActiveDayKey(getDateKey(date))}
           />
@@ -1174,7 +1530,9 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
             </div>
             <div className="hidden sm:flex items-center gap-2 text-[11px] text-muted-foreground">
               <Keyboard className="h-3.5 w-3.5" />
-              <span>Tastenkürzel: <kbd className="rounded border bg-muted px-1 py-0.5">U</kbd> Urlaub · <kbd className="rounded border bg-muted px-1 py-0.5">G</kbd> Gleittag · <kbd className="rounded border bg-muted px-1 py-0.5">N</kbd> Notiz · <kbd className="rounded border bg-muted px-1 py-0.5">P</kbd> Optimaler Plan</span>
+              <span>
+                Mehrfachauswahl: <strong>Gedrückt halten &amp; ziehen</strong> oder <kbd className="rounded border bg-muted px-1 py-0.5">Shift</kbd>+Klick · Kürzel: <kbd className="rounded border bg-muted px-1 py-0.5">U</kbd> <kbd className="rounded border bg-muted px-1 py-0.5">G</kbd> <kbd className="rounded border bg-muted px-1 py-0.5">N</kbd> <kbd className="rounded border bg-muted px-1 py-0.5">P</kbd>
+              </span>
             </div>
           </div>
 
@@ -1212,7 +1570,7 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
           <summary className="flex cursor-pointer list-none items-center justify-between font-medium text-foreground">
             <span className="flex items-center gap-2">
               <HelpCircle className="h-4 w-4 text-primary" />
-              Tipps zur optimalen Urlaubsplanung {year}, Brückentage & Häufige Fragen
+              Tipps zur optimalen Urlaubsplanung {year}, Brückentage &amp; Häufige Fragen
             </span>
             <span className="text-xs text-muted-foreground group-open:rotate-180 transition-transform">▼</span>
           </summary>
@@ -1220,25 +1578,25 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
             <div className="space-y-1.5">
               <h3 className="font-semibold text-foreground flex items-center gap-1.5">
                 <Sparkles className="h-3.5 w-3.5 text-primary" />
-                Maximale freie Tage durch Brückentage
+                Maximale freie Tage durch Brückentage &amp; 4-Tage-Woche
               </h3>
               <p>
-                Mit dem Button <strong>„Optimaler Plan“</strong> (Taste <kbd className="rounded border px-1">P</kbd>) analysiert der smarte Algorithmus alle gesetzlichen Feiertage, Wochenenden und Schulferien deines Bundeslandes. So holst du aus deinem Urlaubsanspruch oft mehr als doppelt so viele zusammenhängende freie Tage heraus.
+                Mit dem Button <strong>„Planen“</strong> (Taste <kbd className="rounded border px-1">P</kbd>) analysiert der smarte Algorithmus alle gesetzlichen Feiertage, deine individuellen Arbeitstage (z.B. 5-Tage- oder 4-Tage-Woche) und Schulferien. Du kannst die Vorschläge anschließend direkt auf dem Kalender verschieben oder an den Enden länger/kürzer ziehen.
               </p>
             </div>
             <div className="space-y-1.5">
               <h3 className="font-semibold text-foreground flex items-center gap-1.5">
                 <Share2 className="h-3.5 w-3.5 text-primary" />
-                Urlaub teilen & gemeinsam planen
+                Mehrfachauswahl &amp; gemeinsam planen
               </h3>
               <p>
-                Über <strong>„Teilen“</strong> erstellst du mit einem Klick einen Link für Partner, Familie oder Kollegen. Andere können deine Urlaubstage als farbige Ebene im eigenen Kalender einblenden oder – bei erteilter Freigabe – gemeinsam mit dir denselben Plan bearbeiten.
+                Halte die Maustaste auf einem Tag gedrückt und ziehe über mehrere Tage (oder nutze <kbd className="rounded border px-1">Shift</kbd> + Klick), um ganze Zeiträume als Urlaub, Gleittag oder mehrtägige Notiz/Event einzutragen. Über <strong>„Teilen“</strong> kannst du Pläne mit Familie oder Kollegen vergleichen und gemeinsam bearbeiten.
               </p>
             </div>
             <div className="space-y-1.5">
               <h3 className="font-semibold text-foreground flex items-center gap-1.5">
                 <CalendarPlus className="h-3.5 w-3.5 text-primary" />
-                Google Kalender, Outlook & Vorgesetzte
+                Google Kalender, Outlook &amp; Vorgesetzte
               </h3>
               <p>
                 Binde deinen Urlaubsplan per Direkt-Button in <strong>Google Kalender</strong>, Apple Kalender oder Outlook ein und entscheide selbst, ob Feiertage, Schulferien oder Notizen enthalten sein sollen. Für deinen Urlaubsantrag beim Arbeitgeber gibt es fertige E-Mail-, Tabellen- und Chat-Vorlagen zum Kopieren.

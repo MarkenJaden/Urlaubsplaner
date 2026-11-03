@@ -3,24 +3,36 @@
 import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   eachDayOfInterval, isSameMonth, isToday, isBefore,
-  startOfDay, isWeekend, format,
+  startOfDay, format,
 } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { DayCell } from './day-cell'
-import type { DayInfo, SharedDayItem } from './day-cell'
+import type { DayInfo, SharedDayItem, SuggestionPreviewDayInfo } from './day-cell'
 import type { VacationEntry, Holiday, EntryType } from '@/types'
 import type { BridgeDay } from '@/lib/bridge-days'
+import { DEFAULT_WORK_DAYS } from '@/lib/vacation-accounting'
 
-const WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+const WEEKDAY_HEADER = [
+  { label: 'Mo', dow: 1 },
+  { label: 'Di', dow: 2 },
+  { label: 'Mi', dow: 3 },
+  { label: 'Do', dow: 4 },
+  { label: 'Fr', dow: 5 },
+  { label: 'Sa', dow: 6 },
+  { label: 'So', dow: 0 },
+] as const
 
 interface MonthGridProps {
   date: Date
   entries: VacationEntry[]
   publicHolidays: Holiday[]
   schoolHolidays: Holiday[]
+  workDays?: number[]
   heatmapData?: Map<string, number>
   comparisonByDate?: Map<string, string[]>
   sharedByDate?: Map<string, SharedDayItem[]>
+  suggestionPreviewByDate?: Map<string, SuggestionPreviewDayInfo>
+  dragSelectedDates?: Set<string>
   showHeatmap: boolean
   bridgeDaySet: Set<string>
   bridgeDayMap: Map<string, BridgeDay>
@@ -28,6 +40,7 @@ interface MonthGridProps {
   showOtherMonthDays: boolean
   overBudgetDates: Set<string>
   onToggle: (date: Date, type: EntryType) => void
+  onCellPointerDown?: (dateKey: string, event: React.PointerEvent<HTMLButtonElement>) => void
   selectedType: EntryType
   onHover?: (info: DayInfo | null) => void
   onSelectDate?: (date: Date) => void
@@ -35,9 +48,12 @@ interface MonthGridProps {
 
 export function MonthGrid({
   date, entries, publicHolidays, schoolHolidays,
-  heatmapData, comparisonByDate, sharedByDate, showHeatmap, bridgeDaySet, bridgeDayMap,
+  workDays = DEFAULT_WORK_DAYS,
+  heatmapData, comparisonByDate, sharedByDate,
+  suggestionPreviewByDate, dragSelectedDates,
+  showHeatmap, bridgeDaySet, bridgeDayMap,
   showBridgeDays, showOtherMonthDays, overBudgetDates,
-  onToggle, selectedType, onHover, onSelectDate,
+  onToggle, onCellPointerDown, selectedType, onHover, onSelectDate,
 }: MonthGridProps) {
   const today = startOfDay(new Date())
   const monthStart = startOfMonth(date)
@@ -46,6 +62,7 @@ export function MonthGrid({
   const calEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
   const days = eachDayOfInterval({ start: calStart, end: calEnd })
   const monthName = format(date, 'MMMM yyyy', { locale: de })
+  const activeWorkDays = workDays.length > 0 ? workDays : DEFAULT_WORK_DAYS
 
   return (
     <div className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-border/70 bg-card/60 p-2.5 shadow-2xs">
@@ -53,13 +70,23 @@ export function MonthGrid({
         {monthName}
       </h3>
       <div className="grid min-w-0 grid-cols-7 gap-1 sm:gap-0.5">
-        {WEEKDAY_LABELS.map(d => (
-          <div key={d} className="py-0.5 text-center text-[11px] font-medium text-muted-foreground sm:text-[10px]">
-            {d}
-          </div>
-        ))}
+        {WEEKDAY_HEADER.map(({ label, dow }) => {
+          const isOff = !activeWorkDays.includes(dow)
+          return (
+            <div
+              key={label}
+              className={`py-0.5 text-center text-[11px] font-medium sm:text-[10px] ${
+                isOff ? 'text-muted-foreground/60 italic' : 'text-muted-foreground'
+              }`}
+              title={isOff ? 'Arbeitsfreier Wochentag (Wochenende)' : 'Arbeitstag'}
+            >
+              {label}
+            </div>
+          )
+        })}
         {days.map(day => {
           const key = format(day, 'yyyy-MM-dd')
+          const isOffWeekday = !activeWorkDays.includes(day.getDay())
           return (
             <DayCell
               key={day.toISOString()}
@@ -67,9 +94,11 @@ export function MonthGrid({
               entries={entries}
               publicHolidays={publicHolidays}
               schoolHolidays={schoolHolidays}
-              isWeekend={isWeekend(day)}
+              isWeekend={isOffWeekday}
               isToday={isToday(day)}
               isOtherMonth={!isSameMonth(day, date)}
+              isDragSelected={Boolean(dragSelectedDates?.has(key))}
+              suggestionPreview={suggestionPreviewByDate?.get(key)}
               heatmapValue={heatmapData?.get(key)}
               comparisonStates={comparisonByDate?.get(key)}
               sharedItems={sharedByDate?.get(key)}
@@ -81,6 +110,7 @@ export function MonthGrid({
               showBridgeDays={showBridgeDays}
               showOtherMonthDays={showOtherMonthDays}
               onToggle={onToggle}
+              onCellPointerDown={onCellPointerDown}
               selectedType={selectedType}
               onHover={onHover}
               onSelectDate={onSelectDate}

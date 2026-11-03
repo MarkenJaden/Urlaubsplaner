@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { suggestVacation, DEFAULT_PREFERENCES } from './vacation-suggester'
+import { suggestVacation, recalculateSuggestionBlock, DEFAULT_PREFERENCES } from './vacation-suggester'
 import type { Holiday } from '@/types'
 
 const samplePublicHolidays: Holiday[] = [
@@ -132,5 +132,82 @@ describe('suggestVacation smart optimizer', () => {
     )
     const allDates = blocks.flatMap(b => b.vacationDays)
     expect(allDates.some(d => d.startsWith('2026-01-') || d.startsWith('2026-11-') || d.startsWith('2026-12-'))).toBe(false)
+  })
+
+  it('respects 4-day workweek (Mon-Thu) where Friday is already free', () => {
+    const blocks = suggestVacation(
+      2026,
+      samplePublicHolidays,
+      sampleSchoolHolidays,
+      new Set(),
+      12,
+      new Set(),
+      {
+        ...DEFAULT_PREFERENCES,
+        planStartMode: 'year_start',
+        workDays: [1, 2, 3, 4], // Monday to Thursday
+      },
+      false,
+    )
+    const allDates = blocks.flatMap(b => b.vacationDays)
+    // No suggested vacation day should be a Friday (day of week === 5)
+    for (const dateStr of allDates) {
+      const [y, m, d] = dateStr.split('-').map(Number)
+      const dow = new Date(y, m - 1, d).getDay()
+      expect(dow).not.toBe(5)
+    }
+  })
+
+  it('respects planStartMode: after_last_vacation and excludedDateRanges', () => {
+    const existingVacation = new Set(['2026-05-04', '2026-05-05', '2026-05-06'])
+    const blocks = suggestVacation(
+      2026,
+      samplePublicHolidays,
+      sampleSchoolHolidays,
+      existingVacation,
+      15,
+      new Set(),
+      {
+        ...DEFAULT_PREFERENCES,
+        planStartMode: 'after_last_vacation',
+        excludedDateRanges: [
+          { startDate: '2026-06-01', endDate: '2026-06-30', label: 'Urlaubssperre Juni' },
+        ],
+      },
+      false,
+    )
+    const allDates = blocks.flatMap(b => b.vacationDays)
+    expect(allDates.every(d => d > '2026-05-06')).toBe(true)
+    expect(allDates.some(d => d.startsWith('2026-06-'))).toBe(false)
+  })
+
+  it('recalculates suggestion block stats when resizing or moving on calendar', () => {
+    const baseBlock = {
+      vacationDays: ['2026-05-15'],
+      freeDaysGained: 4,
+      cost: 1,
+      efficiency: 4,
+      label: 'Brückentag',
+      startDate: '2026-05-15',
+      endDate: '2026-05-15',
+    }
+    // Extend from Monday 2026-05-11 to Friday 2026-05-15 (where Thursday 2026-05-14 is Christi Himmelfahrt)
+    const updated = recalculateSuggestionBlock(
+      2026,
+      '2026-05-11',
+      '2026-05-15',
+      samplePublicHolidays,
+      sampleSchoolHolidays,
+      new Set(),
+      {
+        halfDaysChristmas: false,
+        workDays: [1, 2, 3, 4, 5],
+      },
+      baseBlock,
+    )
+    expect(updated).not.toBeNull()
+    expect(updated?.cost).toBe(4) // Mon, Tue, Wed, Fri (Thu is holiday)
+    expect(updated?.freeDaysGained).toBe(9) // Sat May 9 to Sun May 17 = 9 consecutive days off
+    expect(updated?.efficiency).toBe(2.25)
   })
 })

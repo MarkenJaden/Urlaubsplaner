@@ -14,6 +14,13 @@ describe('vacation day cost', () => {
     expect(vacationDayCost('2026-05-02', options)).toBe(0)
     expect(vacationDayCost('2026-05-04', options)).toBe(1)
   })
+  it('supports a 4-day workweek (Mon-Thu) where Friday is an off-day', () => {
+    const fourDayOptions = { ...options, workDays: [1, 2, 3, 4] }
+    // 2026-05-08 is a Friday -> costs 0 in a Mon-Thu 4-day week
+    expect(vacationDayCost('2026-05-08', fourDayOptions)).toBe(0)
+    // 2026-05-07 is a Thursday -> costs 1
+    expect(vacationDayCost('2026-05-07', fourDayOptions)).toBe(1)
+  })
   it('charges weekends when they are working days, but never public holidays', () => {
     const weekends = { ...options, countWeekendsAsVacation: true }
     expect(vacationDayCost('2026-05-02', weekends)).toBe(1)

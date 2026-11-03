@@ -5,13 +5,17 @@ import type { Holiday } from '@/types'
 // Dates are handled as yyyy-MM-dd keys in UTC so the browser time zone cannot
 // shift an entry to the neighbouring day.
 
+export const DEFAULT_WORK_DAYS = [1, 2, 3, 4, 5]
+
 export interface AccountingOptions {
   /** Public holidays of the home region; they never cost a vacation day. */
   holidayDates: Set<string>
   /** 24.12. and 31.12. cost half a day. */
   halfDaysChristmas: boolean
-  /** Weekends are working days: marking them costs a vacation day. */
+  /** Weekends/off-days are working days: marking them costs a vacation day. */
   countWeekendsAsVacation: boolean
+  /** Active working weekdays (0=Sun, 1=Mon, ..., 6=Sat). Defaults to Mon–Fri [1,2,3,4,5]. */
+  workDays?: number[]
 }
 
 type DatedEntry = { date: string; type: string }
@@ -32,6 +36,18 @@ function addDays(key: string, days: number): string {
 
 export function isWeekendKey(key: string): boolean {
   const day = utcDate(key).getUTCDay()
+  return day === 0 || day === 6
+}
+
+/**
+ * Checks if a calendar date is a regular non-working weekday according to the
+ * user's configured work schedule (e.g. Friday–Sunday for a Mon–Thu 4-day week).
+ */
+export function isOffDayKey(key: string, workDays?: number[]): boolean {
+  const day = utcDate(key).getUTCDay()
+  if (workDays && workDays.length > 0) {
+    return !workDays.includes(day)
+  }
   return day === 0 || day === 6
 }
 
@@ -58,7 +74,7 @@ export function holidayDateSet(holidays: Holiday[]): Set<string> {
 
 export function vacationDayCost(key: string, options: AccountingOptions): number {
   if (options.holidayDates.has(key)) return 0
-  if (isWeekendKey(key) && !options.countWeekendsAsVacation) return 0
+  if (isOffDayKey(key, options.workDays) && !options.countWeekendsAsVacation) return 0
   return options.halfDaysChristmas && isChristmasHalfDay(key) ? 0.5 : 1
 }
 
@@ -83,14 +99,19 @@ export function summarizeVacation(entries: DatedEntry[], totalDays: number, opti
 }
 
 /** Working days from today (or 1 January) to 31 December not yet covered by vacation or Gleittag. */
-export function remainingWorkDays(year: number, entries: DatedEntry[], options: Pick<AccountingOptions, 'holidayDates' | 'countWeekendsAsVacation'>, today: string): number {
+export function remainingWorkDays(
+  year: number,
+  entries: DatedEntry[],
+  options: Pick<AccountingOptions, 'holidayDates' | 'countWeekendsAsVacation' | 'workDays'>,
+  today: string,
+): number {
   const first = `${year}-01-01`, last = `${year}-12-31`
   const start = today > first ? today : first
   const taken = new Set(entries.filter(e => e.type === 'vacation' || e.type === 'gleittag').map(e => dateKey(e.date)))
   let count = 0
   for (let key = start; key <= last; key = addDays(key, 1)) {
     if (options.holidayDates.has(key) || taken.has(key)) continue
-    if (isWeekendKey(key) && !options.countWeekendsAsVacation) continue
+    if (isOffDayKey(key, options.workDays) && !options.countWeekendsAsVacation) continue
     count++
   }
   return count

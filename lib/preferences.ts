@@ -29,6 +29,15 @@ function validBudgetPerYear(value: unknown, max: number): boolean {
   return Object.entries(value).every(([year, amount]) => /^\d{4}$/.test(year) && Number(year) >= 1900 && Number(year) <= 2200 && validBudget(amount, max))
 }
 
+function validWorkDays(value: unknown): value is number[] {
+  return (
+    Array.isArray(value) &&
+    value.length >= 1 &&
+    value.length <= 7 &&
+    value.every(d => typeof d === 'number' && Number.isInteger(d) && d >= 0 && d <= 6)
+  )
+}
+
 /**
  * Validates a preference patch. Codes are format-checked here; whether a code
  * exists is checked by the holiday API, and normalizePreferences() drops codes
@@ -48,6 +57,11 @@ export function parsePreferences(input: unknown): PreferencesPatch | null {
     else if (key === 'flexBudgetPerYear') { if (!validBudgetPerYear(value, 8784)) return null }
     else if (key === 'flexUnit') { if (value !== 'days' && value !== 'hours') return null }
     else if (key === 'flexHoursPerDay') { if (!validBudget(value, 24) || value === 0) return null }
+    else if (key === 'workDays') {
+      if (!validWorkDays(value)) return null
+      result[key] = [...new Set(value)].sort((a, b) => a - b)
+      continue
+    }
     else if (key === 'compareSubdivisions') {
       if (!Array.isArray(value) || value.length > 100 || value.some(code => !isRegionCode(code))) return null
     } else if (key === 'selectedCountries') {

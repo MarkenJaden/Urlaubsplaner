@@ -1,6 +1,13 @@
-import type { Holiday, OptimizationGoal, SchoolHolidayStrategy, NoteHandling } from '@/types'
-import { parseISO, eachDayOfInterval, isWeekend, format, getMonth, differenceInCalendarDays } from 'date-fns'
-import { isChristmasHalfDay } from './vacation-accounting'
+import type {
+  Holiday,
+  OptimizationGoal,
+  SchoolHolidayStrategy,
+  NoteHandling,
+  PlanStartMode,
+  ExcludedDateRange,
+} from '@/types'
+import { parseISO, eachDayOfInterval, format, getMonth, differenceInCalendarDays } from 'date-fns'
+import { isChristmasHalfDay, DEFAULT_WORK_DAYS } from './vacation-accounting'
 import { localizedName } from './holiday-regions'
 
 export interface PeriodPreference {
@@ -33,10 +40,20 @@ export interface PlanningPreferences {
   halfDaysChristmas: boolean
   planFromToday: boolean
   countWeekendsAsVacation?: boolean
+  /** Active working weekdays (0=Sun, 1=Mon, ..., 6=Sat). Defaults to [1, 2, 3, 4, 5]. */
+  workDays?: number[]
+  planStartMode?: PlanStartMode
+  customStartDate?: string | null
+  customEndDate?: string | null
+  excludedDateRanges?: ExcludedDateRange[]
+  maxBlocks?: number | null
+  minEfficiency?: number | null
+  requireMainVacationDays?: number | null
   periodPreferences: PeriodPreference[]
 }
 
 export interface VacationSuggestionBlock {
+  id?: string
   vacationDays: string[] // yyyy-MM-dd (only workdays that cost vacation)
   startDate: string // yyyy-MM-dd (first free day including surrounding weekend/holiday)
   endDate: string // yyyy-MM-dd (last free day including surrounding weekend/holiday)
@@ -69,6 +86,14 @@ export const DEFAULT_PREFERENCES: PlanningPreferences = {
   halfDaysChristmas: true,
   planFromToday: true,
   countWeekendsAsVacation: false,
+  workDays: DEFAULT_WORK_DAYS,
+  planStartMode: 'today',
+  customStartDate: null,
+  customEndDate: null,
+  excludedDateRanges: [],
+  maxBlocks: null,
+  minEfficiency: null,
+  requireMainVacationDays: null,
   periodPreferences: [],
 }
 
@@ -76,16 +101,25 @@ function addDaysDate(d: Date, n: number): Date {
   return new Date(d.getTime() + n * 86400000)
 }
 
-function buildNonWorkSet(
+function isOffWeekday(day: Date, workDays?: number[]): boolean {
+  const dow = day.getDay()
+  if (workDays && workDays.length > 0) {
+    return !workDays.includes(dow)
+  }
+  return dow === 0 || dow === 6
+}
+
+export function buildNonWorkSet(
   startDate: Date,
   endDate: Date,
   publicHolidays: Holiday[],
   countWeekendsAsVacation = false,
+  workDays?: number[],
 ): Set<string> {
   const set = new Set<string>()
   if (!countWeekendsAsVacation) {
     for (const d of eachDayOfInterval({ start: startDate, end: endDate })) {
-      if (isWeekend(d)) set.add(format(d, 'yyyy-MM-dd'))
+      if (isOffWeekday(d, workDays)) set.add(format(d, 'yyyy-MM-dd'))
     }
   }
   for (const h of publicHolidays) {
@@ -175,7 +209,7 @@ interface Candidate {
   matchedMustHaveIndex: number | null
 }
 
-function expandFreeSpan(
+export function expandFreeSpan(
   firstWorkDay: string,
   lastWorkDay: string,
   freeSet: Set<string>,
@@ -240,7 +274,7 @@ function buildSmartLabelAndReason(
     return {
       label: hName ? `Brückentag ${hName}` : `Brückentag ${firstMonth}`,
       reason: hName
-        ? `Verbindet ${hName} mit dem Wochenende (${freeDaysGained} Tage frei am Stück)`
+        ? `Verbindet ${hName} mit freien Tagen (${freeDaysGained} Tage frei am Stück)`
         : `1 Urlaubstag für ${freeDaysGained} zusammenhängende freie Tage`,
       category: 'bridge',
     }
@@ -268,8 +302,102 @@ function buildSmartLabelAndReason(
 
   return {
     label: `Erholungswoche (${spanLabel})`,
-    reason: `${cost} Urlaubstage für ${freeDaysGained} freie Tage inkl. Wochenenden`,
+    reason: `${cost} Urlaubstage für ${freeDaysGained} freie Tage inkl. arbeitsfreier Tage`,
     category: 'relax',
+  }
+}
+
+/**
+ * Recalculates a suggestion block live when the user resizes or drags it on the calendar.
+ */
+export function recalculateSuggestionBlock(
+  year: number,
+  rawStartDate: string,
+  rawEndDate: string,
+  publicHolidays: Holiday[],
+  schoolHolidays: Holiday[],
+  existingVacationDates: Set<string>,
+  options: {
+    halfDaysChristmas: boolean
+    countWeekendsAsVacation?: boolean
+    workDays?: number[]
+    overwrite?: boolean
+  },
+  existingBlock?: Partial<VacationSuggestionBlock>,
+): VacationSuggestionBlock | null {
+  const yearStart = new Date(year, 0, 1)
+  const yearEnd = new Date(year, 11, 31)
+  const sDate = parseISO(rawStartDate < rawEndDate ? rawStartDate : rawEndDate)
+  const eDate = parseISO(rawStartDate < rawEndDate ? rawEndDate : rawStartDate)
+  const clampedStart = sDate < yearStart ? yearStart : sDate > yearEnd ? yearEnd : sDate
+  const clampedEnd = eDate > yearEnd ? yearEnd : eDate < yearStart ? yearStart : eDate
+  if (clampedStart > clampedEnd) return null
+
+  const baseNonWorkDays = buildNonWorkSet(
+    yearStart,
+    yearEnd,
+    publicHolidays,
+    options.countWeekendsAsVacation,
+    options.workDays,
+  )
+  const existingSet = options.overwrite ? new Set<string>() : existingVacationDates
+  const effectiveNonWorkDays = new Set([...baseNonWorkDays, ...existingSet])
+  const holidayNameByDate = buildHolidayNameByDate(publicHolidays)
+  const shDates = buildDateSet(schoolHolidays)
+
+  const allDaysInRange = eachDayOfInterval({ start: clampedStart, end: clampedEnd }).map(d =>
+    format(d, 'yyyy-MM-dd'),
+  )
+  const vacationDays = allDaysInRange.filter(
+    d => !baseNonWorkDays.has(d) && !existingSet.has(d),
+  )
+
+  if (vacationDays.length === 0) return null
+
+  const firstWork = vacationDays[0]
+  const lastWork = vacationDays[vacationDays.length - 1]
+  // Any day inside [firstWork, lastWork] that is either a new vacation day or non-workday is free
+  const spanFreeSet = new Set([...effectiveNonWorkDays, ...vacationDays])
+  const { spanStart, spanEnd, freeDaysGained } = expandFreeSpan(
+    firstWork,
+    lastWork,
+    spanFreeSet,
+    yearStart,
+    yearEnd,
+  )
+
+  const cost = vacationDays.reduce(
+    (sum, d) => sum + getDayCost(d, options.halfDaysChristmas),
+    0,
+  )
+  const efficiency = cost > 0 ? freeDaysGained / cost : 0
+  const holidaysIncluded = collectHolidaysInSpan(spanStart, spanEnd, holidayNameByDate)
+  const schoolOverlapCount = vacationDays.filter(d => shDates.has(d)).length
+  const inSchoolHolidays = schoolOverlapCount / vacationDays.length >= 0.5
+
+  const { label, reason, category } = buildSmartLabelAndReason(
+    vacationDays,
+    spanStart,
+    spanEnd,
+    freeDaysGained,
+    cost,
+    holidaysIncluded,
+    inSchoolHolidays,
+  )
+
+  return {
+    id: existingBlock?.id,
+    vacationDays,
+    startDate: spanStart,
+    endDate: spanEnd,
+    freeDaysGained,
+    cost,
+    efficiency,
+    label,
+    reason,
+    category,
+    holidaysIncluded,
+    inSchoolHolidays,
   }
 }
 
@@ -293,15 +421,47 @@ export function suggestVacation(
   const yearStart = new Date(year, 0, 1)
   const yearEnd = new Date(year, 11, 31)
   const today = new Date()
-  const startDate = prefs.planFromToday && today.getFullYear() === year
-    ? new Date(Math.max(new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime(), yearStart.getTime()))
-    : yearStart
 
-  if (startDate > yearEnd) return []
+  // Resolve planning start date based on planStartMode / planFromToday
+  let startDate = yearStart
+  const mode: PlanStartMode = prefs.planStartMode ?? (prefs.planFromToday ? 'today' : 'year_start')
 
-  const baseNonWorkDays = buildNonWorkSet(yearStart, yearEnd, publicHolidays, prefs.countWeekendsAsVacation)
+  if (mode === 'custom_date' && prefs.customStartDate && /^\d{4}-\d{2}-\d{2}$/.test(prefs.customStartDate)) {
+    const parsed = parseISO(prefs.customStartDate)
+    startDate = parsed < yearStart ? yearStart : parsed
+  } else if (mode === 'after_last_vacation') {
+    const sortedExisting = [...existingVacationDates]
+      .filter(d => d.startsWith(`${year}-`))
+      .sort()
+    if (sortedExisting.length > 0) {
+      const lastPlanned = parseISO(sortedExisting[sortedExisting.length - 1])
+      startDate = addDaysDate(lastPlanned, 1)
+    } else if (today.getFullYear() === year) {
+      startDate = new Date(Math.max(new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime(), yearStart.getTime()))
+    }
+  } else if (mode === 'today' && prefs.planFromToday !== false && today.getFullYear() === year) {
+    startDate = new Date(Math.max(new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime(), yearStart.getTime()))
+  }
+
+  let endDate = yearEnd
+  if (prefs.customEndDate && /^\d{4}-\d{2}-\d{2}$/.test(prefs.customEndDate)) {
+    const parsedEnd = parseISO(prefs.customEndDate)
+    if (parsedEnd <= yearEnd && parsedEnd >= startDate) {
+      endDate = parsedEnd
+    }
+  }
+
+  if (startDate > endDate) return []
+
+  const baseNonWorkDays = buildNonWorkSet(
+    yearStart,
+    yearEnd,
+    publicHolidays,
+    prefs.countWeekendsAsVacation,
+    prefs.workDays,
+  )
   const existingSet = overwriteExisting ? new Set<string>() : new Set(existingVacationDates)
-  // Free days include weekends, public holidays, and (when extending) already planned vacation days
+  // Free days include weekends/off-days, public holidays, and (when extending) already planned vacation days
   const effectiveNonWorkDays = new Set([...baseNonWorkDays, ...existingSet])
   const holidayNameByDate = buildHolidayNameByDate(publicHolidays)
   const shDates = buildDateSet(schoolHolidays)
@@ -312,10 +472,22 @@ export function suggestVacation(
     }
   }
 
+  // Excluded date ranges (blackout periods)
+  const excludedDatesSet = new Set<string>()
+  for (const ex of prefs.excludedDateRanges ?? []) {
+    if (ex.startDate && ex.endDate && ex.startDate <= ex.endDate) {
+      const exStart = parseISO(ex.startDate)
+      const exEnd = parseISO(ex.endDate)
+      for (const d of eachDayOfInterval({ start: exStart, end: exEnd })) {
+        excludedDatesSet.add(format(d, 'yyyy-MM-dd'))
+      }
+    }
+  }
+
   // Step 1: Collect elementary contiguous workday segments between non-workdays
   const segments: WorkSegment[] = []
   let cur = new Date(startDate)
-  while (cur <= yearEnd) {
+  while (cur <= endDate) {
     const curStr = format(cur, 'yyyy-MM-dd')
     if (effectiveNonWorkDays.has(curStr)) {
       cur = addDaysDate(cur, 1)
@@ -324,7 +496,7 @@ export function suggestVacation(
     const workDays: string[] = []
     const segStart = new Date(cur)
     let temp = new Date(cur)
-    while (temp <= yearEnd && !effectiveNonWorkDays.has(format(temp, 'yyyy-MM-dd'))) {
+    while (temp <= endDate && !effectiveNonWorkDays.has(format(temp, 'yyyy-MM-dd'))) {
       workDays.push(format(temp, 'yyyy-MM-dd'))
       temp = addDaysDate(temp, 1)
     }
@@ -335,6 +507,7 @@ export function suggestVacation(
   const maxBlock = prefs.maxDaysPerBlock ?? 20
   const minBlock = Math.max(1, prefs.minDaysPerBlock ?? 1)
   const allowSingle = prefs.allowSingleDayBridges ?? true
+  const minEfficiency = prefs.minEfficiency && prefs.minEfficiency > 1 ? prefs.minEfficiency : null
 
   // Helper to evaluate and create a Candidate from a list of workdays
   const createCandidate = (
@@ -344,6 +517,11 @@ export function suggestVacation(
   ): Candidate | null => {
     const newVacationDays = workDays.filter(d => !existingSet.has(d) && !baseNonWorkDays.has(d))
     if (newVacationDays.length === 0) return null
+
+    // Enforce excluded dates / blackout periods
+    if (excludedDatesSet.size > 0 && newVacationDays.some(d => excludedDatesSet.has(d))) {
+      return null
+    }
 
     // Enforce min/max block size unless it's a mandatory rule
     if (matchedMustHaveIndex === null) {
@@ -367,6 +545,11 @@ export function suggestVacation(
     )
     const effectiveCostForRatio = newVacationDays.length === 1 ? Math.max(1, cost) : cost
     const efficiency = effectiveCostForRatio > 0 ? freeDaysGained / effectiveCostForRatio : 0
+
+    if (matchedMustHaveIndex === null && minEfficiency !== null && efficiency < minEfficiency) {
+      return null
+    }
+
     const holidaysIncluded = collectHolidaysInSpan(spanStart, spanEnd, holidayNameByDate)
     const schoolOverlapCount = newVacationDays.filter(d => shDates.has(d)).length
     const schoolHolidayRatio = schoolOverlapCount / newVacationDays.length
@@ -496,7 +679,7 @@ export function suggestVacation(
     let combinedWorkDays = [...seg.workDays]
     for (let j = i + 1; j < Math.min(i + 4, segments.length); j++) {
       const gapDays = differenceInCalendarDays(segments[j].start, segments[j - 1].end) - 1
-      // Only bridge across contiguous non-workday gaps (weekends / public holidays)
+      // Only bridge across contiguous non-workday gaps (weekends / off-days / public holidays)
       if (gapDays > 6) break
       combinedWorkDays = [...combinedWorkDays, ...segments[j].workDays]
       if (combinedWorkDays.length > maxBlock) break
@@ -508,6 +691,7 @@ export function suggestVacation(
   const selected: Candidate[] = []
   let budget = effectiveBudget
   const usedDates = new Set<string>()
+  const maxBlocksLimit = prefs.maxBlocks && prefs.maxBlocks > 0 ? prefs.maxBlocks : null
 
   const mustHaveRules = (prefs.periodPreferences ?? []).filter(
     p => p.type === 'exact_range' || p.type === 'must_have',
@@ -516,6 +700,7 @@ export function suggestVacation(
   for (let rIdx = 0; rIdx < mustHaveRules.length; rIdx++) {
     const rule = mustHaveRules[rIdx]
     if (budget <= 0) break
+    if (maxBlocksLimit !== null && selected.length >= maxBlocksLimit) break
 
     if (rule.type === 'exact_range' && rule.startDate && rule.endDate) {
       const rStart = parseISO(rule.startDate)
@@ -523,10 +708,9 @@ export function suggestVacation(
       if (rStart <= rEnd) {
         const rangeWorkDays = eachDayOfInterval({ start: rStart, end: rEnd })
           .map(d => format(d, 'yyyy-MM-dd'))
-          .filter(d => !effectiveNonWorkDays.has(d) && !usedDates.has(d))
+          .filter(d => !effectiveNonWorkDays.has(d) && !usedDates.has(d) && !excludedDatesSet.has(d))
 
         if (rule.exactDays && rule.exactDays > 0 && rule.exactDays < rangeWorkDays.length) {
-          // Find best sliding window of length rule.exactDays inside rangeWorkDays
           let bestWindow: Candidate | null = null
           for (let startIdx = 0; startIdx <= rangeWorkDays.length - rule.exactDays; startIdx++) {
             const sub = rangeWorkDays.slice(startIdx, startIdx + rule.exactDays)
@@ -555,7 +739,6 @@ export function suggestVacation(
 
     // Must-have month / duration rule
     const targetDays = rule.exactDays && rule.exactDays > 0 ? rule.exactDays : Math.max(1, rule.minDuration || 5)
-    // Also generate custom exact-length windows inside segments of the requested months if needed
     for (let i = 0; i < segments.length; i++) {
       let pool: string[] = []
       for (let j = i; j < Math.min(i + 5, segments.length); j++) {
@@ -608,7 +791,13 @@ export function suggestVacation(
     c => !c.vacationDays.some(d => usedDates.has(d)),
   )
 
-  let hasLongVacation = selected.some(s => s.vacationDays.length >= 8 || s.freeDaysGained >= 14)
+  const requiredMainDays = prefs.requireMainVacationDays && prefs.requireMainVacationDays > 0
+    ? prefs.requireMainVacationDays
+    : 8
+
+  let hasLongVacation = selected.some(
+    s => s.vacationDays.length >= requiredMainDays || s.freeDaysGained >= 14,
+  )
   let hasSummerVacation = selected.some(s => {
     const mid = s.vacationDays[Math.floor(s.vacationDays.length / 2)]
     const m = getMonth(parseISO(mid))
@@ -618,20 +807,28 @@ export function suggestVacation(
   const minGap = prefs.distributeEvenly ? Math.max(7, prefs.minGapDaysBetweenBlocks ?? 14) : 0
 
   while (candidates.length > 0 && budget > 0) {
+    if (maxBlocksLimit !== null && selected.length >= maxBlocksLimit) break
+
     candidates = candidates.filter(c => c.cost <= budget && !c.vacationDays.some(d => usedDates.has(d)))
     if (candidates.length === 0) break
 
     for (const c of candidates) {
       c.dynamicScore = c.baseScore
 
+      if (
+        (goal === 'balanced' || goal === 'long_breaks' || Boolean(prefs.requireMainVacationDays)) &&
+        !hasLongVacation &&
+        (prefs.maxDaysPerBlock === null || prefs.maxDaysPerBlock >= requiredMainDays) &&
+        c.vacationDays.length >= requiredMainDays
+      ) {
+        c.dynamicScore *= prefs.requireMainVacationDays ? 2.2 : 1.45
+      }
+
       if (goal === 'balanced' || goal === 'long_breaks') {
-        if (!hasLongVacation && (prefs.maxDaysPerBlock === null || prefs.maxDaysPerBlock >= 8) && c.vacationDays.length >= 8) {
-          c.dynamicScore *= 1.45
-        }
         if (!hasSummerVacation && mustHaveRules.length === 0) {
           const mid = c.vacationDays[Math.floor(c.vacationDays.length / 2)]
           const m = getMonth(parseISO(mid))
-          if (m >= 5 && m <= 7 && c.vacationDays.length >= 5) c.dynamicScore *= 1.25
+          if (m >= 5 && m <= 7 && c.vacationDays.length >= 4) c.dynamicScore *= 1.25
         }
       }
 
@@ -666,7 +863,7 @@ export function suggestVacation(
       selected.push(best)
       budget -= best.cost
       best.vacationDays.forEach(d => usedDates.add(d))
-      if (best.vacationDays.length >= 8 || best.freeDaysGained >= 14) hasLongVacation = true
+      if (best.vacationDays.length >= requiredMainDays || best.freeDaysGained >= 14) hasLongVacation = true
       const mid = best.vacationDays[Math.floor(best.vacationDays.length / 2)]
       if (getMonth(parseISO(mid)) >= 5 && getMonth(parseISO(mid)) <= 7) hasSummerVacation = true
     }
@@ -674,7 +871,8 @@ export function suggestVacation(
 
   return selected
     .sort((a, b) => a.vacationDays[0].localeCompare(b.vacationDays[0]))
-    .map(op => ({
+    .map((op, index) => ({
+      id: `sug-${index}-${op.vacationDays[0]}`,
       vacationDays: op.vacationDays,
       startDate: op.spanStart,
       endDate: op.spanEnd,

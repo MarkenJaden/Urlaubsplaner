@@ -50,6 +50,7 @@ export function defaultConfig(): LocalConfig {
     showOtherMonthDays: false,
     countWeekendsAsVacation: false,
     halfDaysChristmas: true,
+    workDays: [1, 2, 3, 4, 5],
     vacationDaysPerYear: {},
     entries: [],
   }

@@ -7,8 +7,18 @@ import { MultiCombobox } from '@/components/ui/combobox'
 import { LocationFields } from './location-fields'
 import type { ComboboxOption } from '@/components/ui/combobox'
 import { localizedName } from '@/lib/holiday-regions'
-import { formatDays, type FlexSummary, type FlexUnit } from '@/lib/vacation-accounting'
+import { formatDays, DEFAULT_WORK_DAYS, type FlexSummary, type FlexUnit } from '@/lib/vacation-accounting'
 import type { Subdivision, Country, HolidayGroup } from '@/types'
+
+const WEEKDAYS_CONFIG = [
+  { day: 1, short: 'Mo', full: 'Montag' },
+  { day: 2, short: 'Di', full: 'Dienstag' },
+  { day: 3, short: 'Mi', full: 'Mittwoch' },
+  { day: 4, short: 'Do', full: 'Donnerstag' },
+  { day: 5, short: 'Fr', full: 'Freitag' },
+  { day: 6, short: 'Sa', full: 'Samstag' },
+  { day: 0, short: 'So', full: 'Sonntag' },
+] as const
 
 interface SettingsPanelProps {
   country: string
@@ -29,6 +39,8 @@ interface SettingsPanelProps {
   onCountriesChange: (codes: string[]) => void
   vacationDaysTotal: number
   onVacationDaysChange: (n: number) => void
+  workDays?: number[]
+  onWorkDaysChange?: (days: number[]) => void
   countWeekendsAsVacation: boolean
   onCountWeekendsChange: (v: boolean) => void
   halfDaysChristmas: boolean
@@ -55,6 +67,13 @@ function getCountryName(c: Country): string {
   return localizedName(c.name, c.isoCode)
 }
 
+function sameDays(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false
+  const sortedA = [...a].sort((x, y) => x - y)
+  const sortedB = [...b].sort((x, y) => x - y)
+  return sortedA.every((v, i) => v === sortedB[i])
+}
+
 export function SettingsPanel({
   country, onCountryChange,
   subdivisions, subdivision, onSubdivisionChange,
@@ -62,6 +81,7 @@ export function SettingsPanel({
   compareOptions, compareSubdivisions, onCompareChange, defaultCompareSelection,
   countries, selectedCountries, onCountriesChange,
   vacationDaysTotal, onVacationDaysChange,
+  workDays = DEFAULT_WORK_DAYS, onWorkDaysChange,
   countWeekendsAsVacation, onCountWeekendsChange,
   halfDaysChristmas, onHalfDaysChange,
   showOtherMonthDays = false, onShowOtherMonthDaysChange,
@@ -91,6 +111,16 @@ export function SettingsPanel({
 
   const allRegionsLabel = country === 'DE' && defaultCompareSelection.length === 16 ? 'Alle 16 Bundesländer' : 'Alle Regionen'
 
+  const toggleWorkDay = (day: number) => {
+    if (!onWorkDaysChange) return
+    const exists = workDays.includes(day)
+    if (exists && workDays.length <= 1) return // Keep at least 1 workday
+    const next = exists
+      ? workDays.filter(d => d !== day)
+      : [...workDays, day].sort((a, b) => a - b)
+    onWorkDaysChange(next)
+  }
+
   return (
     <div className="rounded-xl border border-border bg-card shadow-2xs">
       {respect > 0 && (
@@ -103,7 +133,7 @@ export function SettingsPanel({
         onClick={() => setOpen(!open)}
         aria-expanded={open}
       >
-        <span className="flex items-center gap-2"><Settings2 className="h-4 w-4 text-primary" /> Einstellungen, Standort & Statistik</span>
+        <span className="flex items-center gap-2"><Settings2 className="h-4 w-4 text-primary" /> Einstellungen, Arbeitszeit, Standort & Statistik</span>
         {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
       </button>
 
@@ -164,9 +194,9 @@ export function SettingsPanel({
               )}
             </div>
 
-            {/* Spalte 2: Berechnungsoptionen */}
-            <div className="space-y-2 rounded-lg border border-border/60 bg-muted/15 p-3">
-              <h4 className="font-semibold text-foreground text-xs uppercase tracking-wider">Kontingent & Berechnung</h4>
+            {/* Spalte 2: Berechnungsoptionen & Arbeitszeitmodell */}
+            <div className="space-y-2.5 rounded-lg border border-border/60 bg-muted/15 p-3">
+              <h4 className="font-semibold text-foreground text-xs uppercase tracking-wider">Kontingent & Arbeitszeit</h4>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div className="space-y-1">
@@ -208,21 +238,78 @@ export function SettingsPanel({
                 </label>
               )}
 
-              <div className="pt-1 space-y-1">
-                <label className="flex min-h-9 cursor-pointer items-center gap-2 py-0.5">
+              {/* Arbeitszeitmodell / Arbeitstage (z.B. 4-Tage-Woche) */}
+              {onWorkDaysChange && (
+                <div className="space-y-1.5 rounded-lg border border-border/60 bg-background/60 p-2.5">
+                  <div className="flex flex-wrap items-center justify-between gap-1">
+                    <span className="text-xs font-medium text-foreground">Arbeitswoche ({workDays.length}-Tage-Woche)</span>
+                    <div className="flex flex-wrap gap-1">
+                      {([
+                        { label: 'Mo–Fr (5T)', days: [1, 2, 3, 4, 5] },
+                        { label: 'Mo–Do (4T)', days: [1, 2, 3, 4] },
+                        { label: 'Di–Fr (4T)', days: [2, 3, 4, 5] },
+                      ] as const).map(preset => {
+                        const active = sameDays(workDays, [...preset.days])
+                        return (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            onClick={() => onWorkDaysChange([...preset.days])}
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors ${
+                              active
+                                ? 'bg-primary text-primary-foreground'
+                                : 'border bg-muted/60 text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1 pt-0.5">
+                    {WEEKDAYS_CONFIG.map(({ day, short, full }) => {
+                      const active = workDays.includes(day)
+                      return (
+                        <button
+                          key={day}
+                          type="button"
+                          onClick={() => toggleWorkDay(day)}
+                          aria-pressed={active}
+                          aria-label={`Arbeitstag ${full}`}
+                          title={`${full}: ${active ? 'Arbeitstag' : 'Frei (Wochenende)'}`}
+                          className={`h-7 rounded text-xs font-medium transition-colors ${
+                            active
+                              ? 'bg-primary text-primary-foreground shadow-2xs'
+                              : 'border border-dashed bg-muted/40 text-muted-foreground hover:bg-muted'
+                          }`}
+                        >
+                          {short}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-tight">
+                    Abgewählte Tage (z.B. Fr–So bei einer 4-Tage-Woche) gelten als arbeitsfrei und kosten keinen Urlaubstag.
+                  </p>
+                </div>
+              )}
+
+              <div className="pt-0.5 space-y-1">
+                <label className="flex min-h-8 cursor-pointer items-center gap-2 py-0.5">
                   <input type="checkbox" checked={halfDaysChristmas}
                     onChange={e => onHalfDaysChange(e.target.checked)} className="h-4 w-4 rounded accent-primary" />
                   <span className="text-xs">24./31.12. als halbe Tage zählen (0,5)</span>
                 </label>
 
-                <label className="flex min-h-9 cursor-pointer items-center gap-2 py-0.5">
+                <label className="flex min-h-8 cursor-pointer items-center gap-2 py-0.5">
                   <input type="checkbox" checked={countWeekendsAsVacation}
                     onChange={e => onCountWeekendsChange(e.target.checked)} className="h-4 w-4 rounded accent-primary" />
                   <span className="text-xs">Wochenende als Urlaubstage zählen</span>
                 </label>
 
                 {onShowOtherMonthDaysChange && (
-                  <label className="flex min-h-9 cursor-pointer items-center gap-2 py-0.5">
+                  <label className="flex min-h-8 cursor-pointer items-center gap-2 py-0.5">
                     <input type="checkbox" checked={showOtherMonthDays}
                       onChange={e => onShowOtherMonthDaysChange(e.target.checked)} className="h-4 w-4 rounded accent-primary" />
                     <span className="text-xs">Randtage der Nachbarmonate im Gitter zeigen</span>
@@ -230,11 +317,11 @@ export function SettingsPanel({
                 )}
               </div>
 
-              <div className="pt-1">
+              <div className="pt-0.5">
                 <label htmlFor="default-note-text" className="text-xs text-muted-foreground block mb-1">Standard-Notiztext</label>
                 <input id="default-note-text" type="text" placeholder="z.B. Homeoffice, Arzt, Geburtstag" value={defaultNoteText}
                   onChange={e => onDefaultNoteTextChange(e.target.value)}
-                  className="min-h-10 w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs" />
+                  className="min-h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs" />
               </div>
             </div>
 

@@ -104,6 +104,8 @@ export interface LocalConfig {
   showOtherMonthDays: boolean
   countWeekendsAsVacation: boolean
   halfDaysChristmas: boolean
+  /** Active working weekdays (0=Sun, 1=Mon, ..., 6=Sat). Defaults to [1, 2, 3, 4, 5]. */
+  workDays?: number[]
   vacationDaysPerYear: Record<number, number>
   /** Unit of the Gleitzeit allowance; defaults to days. */
   flexUnit?: 'days' | 'hours'
@@ -121,6 +123,15 @@ export type NoteHandling = 'avoid' | 'prefer' | 'ignore'
 export type SchoolHolidayStrategy = 'neutral' | 'prefer' | 'avoid' | 'avoid_heatmap'
 
 export type OptimizationGoal = 'balanced' | 'max_efficiency' | 'long_breaks' | 'distributed'
+
+export type PlanStartMode = 'today' | 'year_start' | 'after_last_vacation' | 'custom_date'
+
+export interface ExcludedDateRange {
+  id?: string
+  startDate: string
+  endDate: string
+  label?: string
+}
 
 export interface PeriodPreference {
   id?: string
@@ -151,6 +162,14 @@ export interface PlanningPreferences {
   reserveDaysToKeep?: number
   allowSingleDayBridges?: boolean
   avoidMonths?: number[]
+  workDays?: number[]
+  planStartMode?: PlanStartMode
+  customStartDate?: string | null
+  customEndDate?: string | null
+  excludedDateRanges?: ExcludedDateRange[]
+  maxBlocks?: number | null
+  minEfficiency?: number | null
+  requireMainVacationDays?: number | null
   periodPreferences: PeriodPreference[]
 }
 
@@ -172,5 +191,13 @@ export const DEFAULT_PLANNING_PREFS: PlanningPreferences = {
   reserveDaysToKeep: 0,
   allowSingleDayBridges: true,
   avoidMonths: [],
+  workDays: [1, 2, 3, 4, 5],
+  planStartMode: 'today',
+  customStartDate: null,
+  customEndDate: null,
+  excludedDateRanges: [],
+  maxBlocks: null,
+  minEfficiency: null,
+  requireMainVacationDays: null,
   periodPreferences: [],
 }

@@ -29,6 +29,11 @@ describe('personal plan validation', () => {
     expect(parsePreferences({ vacationDaysPerYear: { 2026: -1 } })).toBeNull()
     expect(parsePreferences({ vacationDaysPerYear: { 2026: 0 } })).toEqual({ vacationDaysPerYear: { 2026: 0 } })
   })
+  it('validates custom workDays (e.g. 4-day week)', () => {
+    expect(parsePreferences({ workDays: [4, 1, 2, 3, 1] })).toEqual({ workDays: [1, 2, 3, 4] })
+    expect(parsePreferences({ workDays: [] })).toBeNull()
+    expect(parsePreferences({ workDays: [7] })).toBeNull()
+  })
   it('counts duplicate comparison state codes only once', () => {
     expect(parsePreferences({ compareSubdivisions: ['DE-NW', 'DE-NW', 'DE-BW'] })).toEqual({ compareSubdivisions: ['DE-NW', 'DE-BW'] })
   })

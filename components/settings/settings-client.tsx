@@ -12,8 +12,26 @@ import { useCountries } from '@/hooks/use-holidays'
 import { useHomeRegion } from '@/hooks/use-home-region'
 import { useProfile, useUpdatePreferences } from '@/hooks/use-profile'
 import { countryChangePatch } from '@/lib/preferences'
-import { CalendarDays, Copy, Check, RefreshCw, MapPin, ExternalLink, ShieldCheck } from 'lucide-react'
+import { DEFAULT_WORK_DAYS } from '@/lib/vacation-accounting'
+import { CalendarDays, Copy, Check, RefreshCw, MapPin, ExternalLink, ShieldCheck, Briefcase } from 'lucide-react'
 import type { UserPreferences, UserProfile } from '@/types'
+
+const WEEKDAYS_CONFIG = [
+  { day: 1, short: 'Mo', full: 'Montag' },
+  { day: 2, short: 'Di', full: 'Dienstag' },
+  { day: 3, short: 'Mi', full: 'Mittwoch' },
+  { day: 4, short: 'Do', full: 'Donnerstag' },
+  { day: 5, short: 'Fr', full: 'Freitag' },
+  { day: 6, short: 'Sa', full: 'Samstag' },
+  { day: 0, short: 'So', full: 'Sonntag' },
+] as const
+
+function sameDays(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false
+  const sortedA = [...a].sort((x, y) => x - y)
+  const sortedB = [...b].sort((x, y) => x - y)
+  return sortedA.every((v, i) => v === sortedB[i])
+}
 
 interface SettingsClientProps {
   calendarToken: string
@@ -36,6 +54,7 @@ export function SettingsClient({ calendarToken, preferences, username, email, ha
   useEffect(() => setOrigin(window.location.origin), [])
   const home = useHomeRegion(prefs)
   const { data: countries = [] } = useCountries()
+  const workDays = prefs.workDays ?? DEFAULT_WORK_DAYS
   const regionLabel = home.country === 'DE' ? 'meines Bundeslands' : 'meiner Region'
   const calendarUrl = `${origin}/api/calendar/${profile.data?.calendarToken ?? token}/feed.ics`
   const subscriptionUrl = calendarUrl.replace(/^https?:/, 'webcal:')
@@ -60,10 +79,19 @@ export function SettingsClient({ calendarToken, preferences, username, email, ha
     finally { setBusy(false) }
   }
 
+  function toggleWorkDay(day: number) {
+    const exists = workDays.includes(day)
+    if (exists && workDays.length <= 1) return
+    const next = exists
+      ? workDays.filter(d => d !== day)
+      : [...workDays, day].sort((a, b) => a - b)
+    updatePrefs.mutate({ workDays: next })
+  }
+
   return <div className="min-h-screen bg-background">
     <Header isLoggedIn />
     <main className="container mx-auto max-w-2xl space-y-6 px-4 py-6 sm:py-8">
-      <div><Link href="/" className="text-sm text-primary hover:underline">← Zurück zum Kalender</Link><h1 className="mt-2 text-2xl font-semibold tracking-tight">Dein Urlaubsplaner</h1><p className="mt-1 text-sm text-muted-foreground">Konto, Region und Kalender-Verbindung.</p></div>
+      <div><Link href="/" className="text-sm text-primary hover:underline">← Zurück zum Kalender</Link><h1 className="mt-2 text-2xl font-semibold tracking-tight">Dein Urlaubsplaner</h1><p className="mt-1 text-sm text-muted-foreground">Konto, Arbeitszeit, Region und Kalender-Verbindung.</p></div>
       {(error || profile.isError || updatePrefs.isError) && <p role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">{error || 'Einstellungen konnten nicht geladen oder gespeichert werden. Prüfe deine Verbindung und Anmeldung.'} <Link className="underline" href="/login">Anmelden</Link></p>}
       <section className="rounded-xl border bg-card p-4 sm:p-6">
         <h2 className="mb-3 flex items-center gap-2 text-lg font-semibold"><MapPin className="h-5 w-5" /> Meine Region</h2>
@@ -77,6 +105,59 @@ export function SettingsClient({ calendarToken, preferences, username, email, ha
         {home.isError && <Button variant="outline" onClick={() => home.retry()}>Regionen erneut laden</Button>}
         <p className="mt-2 text-xs text-muted-foreground">Wird mit deinen Geräten synchronisiert und für Ferien und Feiertage im Abo verwendet.</p>
       </section>
+
+      <section className="space-y-4 rounded-xl border bg-card p-4 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-lg font-semibold"><Briefcase className="h-5 w-5" /> Meine Arbeitswoche ({workDays.length}-Tage-Woche)</h2>
+          <div className="flex flex-wrap gap-1.5">
+            {([
+              { label: '5-Tage (Mo–Fr)', days: [1, 2, 3, 4, 5] },
+              { label: '4-Tage (Mo–Do)', days: [1, 2, 3, 4] },
+              { label: '4-Tage (Di–Fr)', days: [2, 3, 4, 5] },
+              { label: '6-Tage (Mo–Sa)', days: [1, 2, 3, 4, 5, 6] },
+            ] as const).map(preset => {
+              const active = sameDays(workDays, [...preset.days])
+              return (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => updatePrefs.mutate({ workDays: [...preset.days] })}
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                    active ? 'bg-primary text-primary-foreground' : 'border bg-muted/60 text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Wähle deine regulären Arbeitstage aus. Nicht ausgewählte Wochentage (z.B. Freitag bis Sonntag bei einer 4-Tage-Woche) werden im Kalender als Wochenende dargestellt, kosten keinen Urlaubstag und werden bei der Brückentage- &amp; Smart-Planung automatisch als freie Tage berücksichtigt.
+        </p>
+        <div className="grid grid-cols-7 gap-2">
+          {WEEKDAYS_CONFIG.map(({ day, short, full }) => {
+            const active = workDays.includes(day)
+            return (
+              <button
+                key={day}
+                type="button"
+                onClick={() => toggleWorkDay(day)}
+                aria-pressed={active}
+                title={`${full}: ${active ? 'Arbeitstag' : 'Frei (Wochenende)'}`}
+                className={`min-h-11 rounded-lg text-sm font-medium transition-colors ${
+                  active
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'border border-dashed bg-muted/40 text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                {short}
+              </button>
+            )
+          })}
+        </div>
+      </section>
+
       <section className="space-y-4 rounded-xl border bg-card p-4 sm:p-6">
         <h2 className="flex items-center gap-2 text-lg font-semibold"><CalendarDays className="h-5 w-5" /> Kalender automatisch aktualisieren</h2>
         <p className="text-sm text-muted-foreground">Abonniere deinen Plan einmal. Neue oder gelöschte Urlaubstage erscheinen beim nächsten Abruf in deiner Kalender-App.</p>
