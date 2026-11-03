@@ -142,9 +142,6 @@ export default function RootLayout({
                   Kontakt
                 </Link>
                 <CookieSettingsButton />
-                <Link href="/admin" className="underline hover:text-foreground transition-colors">
-                  Admin
-                </Link>
               </nav>
             </div>
           </footer>

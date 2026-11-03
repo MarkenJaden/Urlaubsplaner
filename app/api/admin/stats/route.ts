@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { getUserFromSession } from '@/lib/user'
-import { isUserAdmin, canClaimInitialAdmin } from '@/lib/admin'
+import {
+  isUserAdmin,
+  getSafeAdminOAuthSettings,
+  saveAdminOAuthSettings,
+} from '@/lib/admin'
+import { validOrigin } from '@/lib/request'
 import { subDays } from 'date-fns'
 
 export async function GET() {
@@ -14,11 +19,20 @@ export async function GET() {
   const user = await getUserFromSession(session)
   const admin = isUserAdmin(user)
   if (!admin) {
-    const claimable = await canClaimInitialAdmin()
     return NextResponse.json(
-      { error: 'Kein Admin-Zugriff.', canClaimAdmin: claimable },
+      {
+        error:
+          'Zugriff verweigert. Nur das Administrator-Konto („markenjaden“) hat Zugriff auf das Admin-Dashboard.',
+      },
       { status: 403 }
     )
+  }
+
+  if (!user.isAdmin) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { isAdmin: true },
+    }).catch(() => undefined)
   }
 
   const now = new Date()
@@ -42,6 +56,7 @@ export async function GET() {
     dailyStats,
     contactMessages,
     visitorRegions,
+    oauthSettings,
   ] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { vacations: { some: {} } } }),
@@ -74,6 +89,7 @@ export async function GET() {
       orderBy: { _count: { subdivision: 'desc' } },
       take: 10,
     }),
+    getSafeAdminOAuthSettings(),
   ])
 
   return NextResponse.json({
@@ -113,33 +129,44 @@ export async function GET() {
       isRead: m.status === 'read',
       createdAt: m.createdAt,
     })),
+    oauthSettings,
     umamiUrl: 'https://umami.urlaubsplaner.me',
   })
 }
 
 export async function POST(request: Request) {
+  if (!validOrigin(request)) {
+    return NextResponse.json({ error: 'Ungültige Anfrage.' }, { status: 403 })
+  }
+
   const session = await auth()
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Nicht angemeldet.' }, { status: 401 })
   }
 
   const user = await getUserFromSession(session)
-  const body = await request.json()
-
-  if (body?.action === 'claim_admin') {
-    const claimable = await canClaimInitialAdmin()
-    if (!claimable && !isUserAdmin(user)) {
-      return NextResponse.json({ error: 'Es existiert bereits ein Administrator.' }, { status: 403 })
-    }
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { isAdmin: true },
-    })
-    return NextResponse.json({ ok: true })
+  if (!isUserAdmin(user)) {
+    return NextResponse.json(
+      { error: 'Zugriff verweigert. Nur für „markenjaden“ freigegeben.' },
+      { status: 403 }
+    )
   }
 
-  if (!isUserAdmin(user)) {
-    return NextResponse.json({ error: 'Kein Admin-Zugriff.' }, { status: 403 })
+  const body = await request.json()
+
+  if (body?.action === 'save_oauth' && body.oauth && typeof body.oauth === 'object') {
+    await saveAdminOAuthSettings({
+      googleEnabled: Boolean(body.oauth.googleEnabled),
+      googleClientId: typeof body.oauth.googleClientId === 'string' ? body.oauth.googleClientId : '',
+      googleClientSecret:
+        typeof body.oauth.googleClientSecret === 'string' ? body.oauth.googleClientSecret : undefined,
+      githubEnabled: Boolean(body.oauth.githubEnabled),
+      githubClientId: typeof body.oauth.githubClientId === 'string' ? body.oauth.githubClientId : '',
+      githubClientSecret:
+        typeof body.oauth.githubClientSecret === 'string' ? body.oauth.githubClientSecret : undefined,
+    })
+    const oauthSettings = await getSafeAdminOAuthSettings()
+    return NextResponse.json({ ok: true, oauthSettings })
   }
 
   if (body?.action === 'toggle_message_read' && typeof body.id === 'string') {

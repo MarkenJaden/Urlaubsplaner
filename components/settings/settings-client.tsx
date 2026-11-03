@@ -19,10 +19,11 @@ interface SettingsClientProps {
   calendarToken: string
   preferences: Record<string, unknown>
   username?: string | null
+  email?: string | null
   hasLocalAccount: boolean
 }
 
-export function SettingsClient({ calendarToken, preferences, username, hasLocalAccount }: SettingsClientProps) {
+export function SettingsClient({ calendarToken, preferences, username, email, hasLocalAccount }: SettingsClientProps) {
   const profile = useProfile()
   const prefs = (profile.data?.preferences ?? preferences) as UserPreferences
   const updatePrefs = useUpdatePreferences()
@@ -128,7 +129,11 @@ export function SettingsClient({ calendarToken, preferences, username, hasLocalA
         <p className="flex items-start gap-2 text-xs text-muted-foreground"><ShieldCheck className="h-4 w-4 shrink-0" /> Wer diesen Link kennt, kann die freigegebenen Kalenderdaten lesen. Gib ihn nur in deinen Kalender-Apps ein.</p>
         <Button variant="ghost" disabled={busy} onClick={rotateToken}><RefreshCw className="h-4 w-4" /> Kalender-Link erneuern</Button>
       </section>
-      <AccountPanel username={profile.data?.username ?? username} hasLocalAccount={profile.data?.hasLocalAccount ?? hasLocalAccount} />
+      <AccountPanel
+        username={profile.data?.username ?? username}
+        email={profile.data?.email ?? email}
+        hasLocalAccount={profile.data?.hasLocalAccount ?? hasLocalAccount}
+      />
       <p role="status" className="text-xs text-muted-foreground">{updatePrefs.isPending ? 'Einstellungen werden gespeichert…' : 'Änderungen werden automatisch gespeichert.'}</p>
     </main>
   </div>

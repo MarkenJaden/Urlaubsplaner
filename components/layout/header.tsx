@@ -4,13 +4,18 @@ import Link from 'next/link'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Settings, LogOut, LogIn, BarChart3 } from 'lucide-react'
+import { useProfile } from '@/hooks/use-profile'
 import { ThemeToggle } from './theme-toggle'
 
 interface HeaderProps {
   isLoggedIn?: boolean
+  isAdmin?: boolean
 }
 
-export function Header({ isLoggedIn }: HeaderProps) {
+export function Header({ isLoggedIn, isAdmin }: HeaderProps) {
+  const profile = useProfile(Boolean(isLoggedIn))
+  const showAdmin = Boolean(isAdmin ?? profile.data?.isAdmin)
+
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center justify-between gap-3">
@@ -22,11 +27,13 @@ export function Header({ isLoggedIn }: HeaderProps) {
         <nav className="flex shrink-0 items-center gap-1 sm:gap-2">
           {isLoggedIn ? (
             <>
-              <Button variant="ghost" size="icon" asChild title="Admin-Dashboard" aria-label="Admin-Dashboard">
-                <Link href="/admin">
-                  <BarChart3 className="h-4 w-4" />
-                </Link>
-              </Button>
+              {showAdmin && (
+                <Button variant="ghost" size="icon" asChild title="Admin-Dashboard" aria-label="Admin-Dashboard">
+                  <Link href="/admin">
+                    <BarChart3 className="h-4 w-4" />
+                  </Link>
+                </Button>
+              )}
               <Button variant="ghost" size="icon" asChild title="Einstellungen" aria-label="Einstellungen">
                 <Link href="/settings">
                   <Settings className="h-4 w-4" />

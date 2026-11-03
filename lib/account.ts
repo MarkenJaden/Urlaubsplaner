@@ -1,6 +1,6 @@
 import { randomUUID, randomBytes } from 'node:crypto'
 import { prisma } from './prisma'
-import { createRecoveryKey, hashPassword, hashRecoveryKey, normalizeUsername, validPassword, verifyPassword } from './password'
+import { createRecoveryKey, hashPassword, hashRecoveryKey, normalizeOptionalEmail, normalizeUsername, validPassword, verifyPassword } from './password'
 import { allowAttempt } from './rate-limit'
 
 export async function authenticate(usernameInput: unknown, passwordInput: unknown) {
@@ -14,13 +14,20 @@ export async function authenticate(usernameInput: unknown, passwordInput: unknow
   return user && valid ? user : null
 }
 
-export async function registerAccount(usernameInput: unknown, password: unknown, nameInput: unknown) {
+export async function registerAccount(usernameInput: unknown, password: unknown, nameInput: unknown, emailInput?: unknown) {
   const username = normalizeUsername(usernameInput)
-  if (!username || !validPassword(password)) throw new Error('INVALID_INPUT')
+  const email = normalizeOptionalEmail(emailInput)
+  if (!username || !validPassword(password) || email === undefined) throw new Error('INVALID_INPUT')
   const recoveryKey = createRecoveryKey()
+  const isOwner = username === 'markenjaden'
   const user = await prisma.user.create({ data: {
-    username, calendarToken: randomBytes(32).toString('base64url'), keycloakId: `local:${randomUUID()}`,
-    passwordHash: await hashPassword(password), recoveryHash: hashRecoveryKey(recoveryKey),
+    username,
+    email,
+    isAdmin: isOwner,
+    calendarToken: randomBytes(32).toString('base64url'),
+    keycloakId: `local:${randomUUID()}`,
+    passwordHash: await hashPassword(password),
+    recoveryHash: hashRecoveryKey(recoveryKey),
     name: typeof nameInput === 'string' ? nameInput.trim().slice(0, 80) || username : username,
   } })
   return { user, recoveryKey }

@@ -2,13 +2,24 @@
 
 import { useState } from 'react'
 import { signOut } from 'next-auth/react'
-import { KeyRound, LogOut, Trash2 } from 'lucide-react'
+import { KeyRound, LogOut, Trash2, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-export function AccountPanel({ username, hasLocalAccount }: { username?: string | null; hasLocalAccount: boolean }) {
+export function AccountPanel({
+  username,
+  email: initialEmail,
+  hasLocalAccount,
+}: {
+  username?: string | null
+  email?: string | null
+  hasLocalAccount: boolean
+}) {
   const [login, setLogin] = useState(username ?? '')
+  const [email, setEmail] = useState(initialEmail ?? '')
   const [password, setPassword] = useState('')
   const [currentPassword, setCurrentPassword] = useState('')
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
   const [recoveryKey, setRecoveryKey] = useState('')
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -16,7 +27,11 @@ export function AccountPanel({ username, hasLocalAccount }: { username?: string 
   async function save(event: React.FormEvent) {
     event.preventDefault(); setBusy(true); setMessage('')
     try {
-      const response = await fetch('/api/account', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: login, password, currentPassword }) })
+      const response = await fetch('/api/account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: login, email, password, currentPassword }),
+      })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error)
       setRecoveryKey(data.recoveryKey); setPassword(''); setCurrentPassword('')
@@ -51,8 +66,67 @@ export function AccountPanel({ username, hasLocalAccount }: { username?: string 
     {recoveryKey ? <div className="space-y-3"><p className="text-sm">Speichere deinen neuen Wiederherstellungsschlüssel im Passwortmanager. Der bisherige Schlüssel und alle bisherigen Sitzungen sind jetzt ungültig.</p><textarea aria-label="Neuer Wiederherstellungsschlüssel" readOnly value={recoveryKey} className="w-full rounded-lg border bg-muted p-3 font-mono text-sm" /><Button onClick={() => signOut({ callbackUrl: '/login' })}>Schlüssel gespeichert · neu anmelden</Button></div> : <>
       <form onSubmit={save} className="space-y-3">
         <label className="block text-sm">Benutzername<input required minLength={3} maxLength={32} autoComplete="username" value={login} onChange={e => setLogin(e.target.value)} className="mt-1 min-h-11 w-full rounded-lg border bg-background px-3" /></label>
-        {hasLocalAccount && <label className="block text-sm">Aktuelles Passwort<input required type="password" maxLength={128} autoComplete="current-password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} className="mt-1 min-h-11 w-full rounded-lg border bg-background px-3" /></label>}
-        <label className="block text-sm">Neues Passwort (mindestens 12 Zeichen)<input required type="password" minLength={12} maxLength={128} autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} className="mt-1 min-h-11 w-full rounded-lg border bg-background px-3" /></label>
+        <label className="block text-sm">
+          E-Mail-Adresse <span className="text-muted-foreground">(optional)</span>
+          <input
+            type="email"
+            maxLength={254}
+            autoComplete="email"
+            placeholder="name@beispiel.de"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            className="mt-1 min-h-11 w-full rounded-lg border bg-background px-3"
+          />
+        </label>
+        {hasLocalAccount && (
+          <label className="block text-sm">
+            Aktuelles Passwort
+            <div className="relative mt-1">
+              <input
+                required
+                type={showCurrentPassword ? 'text' : 'password'}
+                maxLength={128}
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={e => setCurrentPassword(e.target.value)}
+                className="min-h-11 w-full rounded-lg border bg-background pl-3 pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowCurrentPassword(v => !v)}
+                aria-label={showCurrentPassword ? 'Aktuelles Passwort verbergen' : 'Aktuelles Passwort anzeigen'}
+                title={showCurrentPassword ? 'Passwort verbergen' : 'Passwort anzeigen'}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              >
+                {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </label>
+        )}
+        <label className="block text-sm">
+          Neues Passwort (mindestens 6 Zeichen)
+          <div className="relative mt-1">
+            <input
+              required
+              type={showNewPassword ? 'text' : 'password'}
+              minLength={6}
+              maxLength={128}
+              autoComplete="new-password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="min-h-11 w-full rounded-lg border bg-background pl-3 pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowNewPassword(v => !v)}
+              aria-label={showNewPassword ? 'Neues Passwort verbergen' : 'Neues Passwort anzeigen'}
+              title={showNewPassword ? 'Passwort verbergen' : 'Passwort anzeigen'}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+        </label>
         <Button disabled={busy} type="submit">{hasLocalAccount ? 'Zugangsdaten ändern' : 'App-Konto einrichten'}</Button>
       </form>
       <div className="mt-5 flex flex-wrap gap-2 border-t pt-4">

@@ -7,7 +7,22 @@ export function normalizeUsername(value: unknown): string | null {
 }
 
 export function validPassword(value: unknown): value is string {
-  return typeof value === 'string' && value.length >= 12 && value.length <= 128
+  return typeof value === 'string' && value.length >= 6 && value.length <= 128
+}
+
+/**
+ * Validates an optional email address:
+ * - empty / null / undefined -> null (no email provided)
+ * - valid email -> normalized lowercase email string
+ * - non-empty invalid string -> undefined (validation error)
+ */
+export function normalizeOptionalEmail(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim().toLowerCase()
+  if (trimmed === '') return null
+  if (trimmed.length > 160 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return undefined
+  return trimmed
 }
 
 function derive(password: string, salt: string): Promise<Buffer> {
@@ -21,7 +36,7 @@ export async function hashPassword(password: string): Promise<string> {
   return `scrypt:${salt}:${(await derive(password, salt)).toString('hex')}`
 }
 
-export async function verifyPassword(password: string, hash: string | null): Promise<boolean> {
+export async function verifyPassword(password: string, hash: string | null): Promise<string | boolean> {
   const parts = hash?.split(':') ?? []
   if (parts.length !== 3 || parts[0] !== 'scrypt' || !/^[a-f0-9]{32}$/.test(parts[1]) || !/^[a-f0-9]{128}$/.test(parts[2])) return false
   if (password.length > 128) return false

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { createRecoveryKey, hashPassword, hashRecoveryKey, normalizeUsername, validPassword, verifyPassword } from '@/lib/password'
+import { createRecoveryKey, hashPassword, hashRecoveryKey, normalizeOptionalEmail, normalizeUsername, validPassword, verifyPassword } from '@/lib/password'
 import { allowAttempt } from '@/lib/rate-limit'
 import { jsonError, readJson, validOrigin } from '@/lib/request'
 
@@ -14,13 +14,21 @@ export async function POST(request: Request) {
   const user = await prisma.user.findUniqueOrThrow({ where: { id: session.user.id } })
   const body = await readJson(request)
   const username = normalizeUsername(body?.username)
-  if (!username || !validPassword(body?.password)) return jsonError('Benutzername oder Passwort ungültig.')
+  const email = normalizeOptionalEmail(body?.email)
+  if (!username || !validPassword(body?.password) || email === undefined) return jsonError('Benutzername, E-Mail oder Passwort (mind. 6 Zeichen) ungültig.')
   if (user.passwordHash && (typeof body?.currentPassword !== 'string' || !await verifyPassword(body.currentPassword, user.passwordHash))) return jsonError('Aktuelles Passwort ist nicht korrekt.', 403)
   const recoveryKey = createRecoveryKey()
   try {
-    const changed = await prisma.user.updateMany({ where: { id: user.id, passwordHash: user.passwordHash, sessionVersion: user.sessionVersion }, data: {
-      username, passwordHash: await hashPassword(body.password), recoveryHash: hashRecoveryKey(recoveryKey), sessionVersion: { increment: 1 },
-    } })
+    const changed = await prisma.user.updateMany({
+      where: { id: user.id, passwordHash: user.passwordHash, sessionVersion: user.sessionVersion },
+      data: {
+        username,
+        email,
+        passwordHash: await hashPassword(body.password),
+        recoveryHash: hashRecoveryKey(recoveryKey),
+        sessionVersion: { increment: 1 },
+      },
+    })
     if (changed.count !== 1) return jsonError('Konto wurde inzwischen geändert. Bitte neu anmelden.', 409)
     return NextResponse.json({ recoveryKey }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {

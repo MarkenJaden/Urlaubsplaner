@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import {
   Users,
   UserCheck,
@@ -16,7 +17,21 @@ import {
   RefreshCw,
   ShieldAlert,
   MapPin,
+  KeyRound,
+  Eye,
+  EyeOff,
+  Copy,
+  Check,
 } from 'lucide-react'
+
+interface SafeOAuthSettings {
+  googleEnabled: boolean
+  googleClientId: string
+  hasGoogleSecret: boolean
+  githubEnabled: boolean
+  githubClientId: string
+  hasGithubSecret: boolean
+}
 
 interface AdminStatsResponse {
   overview: {
@@ -52,6 +67,7 @@ interface AdminStatsResponse {
     isRead: boolean
     createdAt: string
   }>
+  oauthSettings?: SafeOAuthSettings
   umamiUrl: string
 }
 
@@ -59,8 +75,42 @@ export function AdminDashboard() {
   const [data, setData] = useState<AdminStatsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [canClaimAdmin, setCanClaimAdmin] = useState(false)
-  const [claiming, setClaiming] = useState(false)
+  const [origin, setOrigin] = useState('https://urlaubsplaner.me')
+
+  // OAuth form states
+  const [googleEnabled, setGoogleEnabled] = useState(false)
+  const [googleClientId, setGoogleClientId] = useState('')
+  const [googleClientSecret, setGoogleClientSecret] = useState('')
+  const [hasGoogleSecret, setHasGoogleSecret] = useState(false)
+  const [showGoogleSecret, setShowGoogleSecret] = useState(false)
+
+  const [githubEnabled, setGithubEnabled] = useState(false)
+  const [githubClientId, setGithubClientId] = useState('')
+  const [githubClientSecret, setGithubClientSecret] = useState('')
+  const [hasGithubSecret, setHasGithubSecret] = useState(false)
+  const [showGithubSecret, setShowGithubSecret] = useState(false)
+
+  const [savingOAuth, setSavingOAuth] = useState(false)
+  const [oauthMessage, setOauthMessage] = useState('')
+  const [copiedCallback, setCopiedCallback] = useState<'google' | 'github' | null>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.origin) {
+      setOrigin(window.location.origin)
+    }
+  }, [])
+
+  const applyOAuthData = useCallback((oauth?: SafeOAuthSettings) => {
+    if (!oauth) return
+    setGoogleEnabled(oauth.googleEnabled)
+    setGoogleClientId(oauth.googleClientId)
+    setHasGoogleSecret(oauth.hasGoogleSecret)
+    setGoogleClientSecret('')
+    setGithubEnabled(oauth.githubEnabled)
+    setGithubClientId(oauth.githubClientId)
+    setHasGithubSecret(oauth.hasGithubSecret)
+    setGithubClientSecret('')
+  }, [])
 
   const fetchStats = useCallback(async () => {
     setLoading(true)
@@ -69,37 +119,60 @@ export function AdminDashboard() {
       const res = await fetch('/api/admin/stats')
       const body = await res.json()
       if (!res.ok) {
-        if (body.canClaimAdmin) {
-          setCanClaimAdmin(true)
-        }
         throw new Error(body.error || 'Zugriff verweigert.')
       }
       setData(body)
-      setCanClaimAdmin(false)
+      applyOAuthData(body.oauthSettings)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Fehler beim Laden der Statistiken.')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [applyOAuthData])
 
   useEffect(() => {
     void fetchStats()
   }, [fetchStats])
 
-  const handleClaimAdmin = async () => {
-    setClaiming(true)
+  const handleSaveOAuth = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSavingOAuth(true)
+    setOauthMessage('')
     try {
       const res = await fetch('/api/admin/stats', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'claim_admin' }),
+        body: JSON.stringify({
+          action: 'save_oauth',
+          oauth: {
+            googleEnabled,
+            googleClientId: googleClientId.trim(),
+            ...(googleClientSecret.trim() ? { googleClientSecret: googleClientSecret.trim() } : {}),
+            githubEnabled,
+            githubClientId: githubClientId.trim(),
+            ...(githubClientSecret.trim() ? { githubClientSecret: githubClientSecret.trim() } : {}),
+          },
+        }),
       })
-      if (res.ok) {
-        await fetchStats()
-      }
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error || 'Speichern fehlgeschlagen.')
+      applyOAuthData(body.oauthSettings)
+      setOauthMessage('Social-Login-Einstellungen erfolgreich gespeichert.')
+    } catch (err) {
+      setOauthMessage(err instanceof Error ? err.message : 'Fehler beim Speichern.')
     } finally {
-      setClaiming(false)
+      setSavingOAuth(false)
+    }
+  }
+
+  const copyCallbackUrl = async (provider: 'google' | 'github') => {
+    const url = `${origin}/api/auth/callback/${provider}`
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopiedCallback(provider)
+      setTimeout(() => setCopiedCallback(null), 2000)
+    } catch {
+      // ignore
     }
   }
 
@@ -139,16 +212,6 @@ export function AdminDashboard() {
           </div>
           <h1 className="text-xl font-bold">Admin-Dashboard</h1>
           <p className="text-sm text-muted-foreground">{error}</p>
-          {canClaimAdmin && (
-            <div className="space-y-2 rounded-xl border bg-muted/40 p-4 text-xs">
-              <p className="font-medium text-foreground">
-                Es wurde noch kein Administrator-Konto festgelegt. Möchtest du dein aktuelles Konto jetzt als Administrator freischalten?
-              </p>
-              <Button onClick={handleClaimAdmin} disabled={claiming}>
-                {claiming ? 'Wird aktiviert…' : 'Mein Konto als Admin aktivieren'}
-              </Button>
-            </div>
-          )}
           <div className="pt-2">
             <Link href="/" className="text-sm text-primary underline">
               ← Zurück zum Urlaubsplaner
@@ -173,10 +236,10 @@ export function AdminDashboard() {
           </Link>
           <h1 className="mt-1 text-2xl font-bold flex items-center gap-2">
             <BarChart3 className="h-6 w-6 text-primary" />
-            Admin-Dashboard &amp; Nutzungsstatistiken
+            Admin-Dashboard &amp; Einstellungen
           </h1>
           <p className="text-xs text-muted-foreground">
-            Übersicht über registrierte Konten, nicht-registrierte Gäste, geplante Urlaubstage und Kontaktanfragen
+            Exklusiver Zugriff für Administrator <strong>markenjaden</strong> · Nutzungsstatistiken, Social Logins &amp; Kontaktanfragen
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -241,6 +304,154 @@ export function AdminDashboard() {
           </p>
         </div>
       </div>
+
+      {/* Social Logins (Google & GitHub OAuth) Configuration */}
+      <form onSubmit={handleSaveOAuth} className="rounded-xl border bg-card p-5 space-y-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="font-semibold text-base flex items-center gap-2">
+              <KeyRound className="h-4 w-4 text-primary" />
+              Social Logins einrichten (Google &amp; GitHub OAuth)
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Aktiviere die Anmeldung über Google oder GitHub. Sobald aktiviert und hinterlegt, erscheinen die Buttons automatisch auf <code>/login</code> und <code>/register</code>.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-5 lg:grid-cols-2">
+          {/* Google OAuth Card */}
+          <div className="rounded-xl border bg-background/60 p-4 space-y-3.5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold">Google Login</span>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${googleEnabled && googleClientId && (hasGoogleSecret || googleClientSecret) ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-muted text-muted-foreground'}`}>
+                  {googleEnabled && googleClientId && (hasGoogleSecret || googleClientSecret) ? 'Aktiv' : 'Inaktiv'}
+                </span>
+              </div>
+              <Switch checked={googleEnabled} onCheckedChange={setGoogleEnabled} aria-label="Google Login aktivieren" />
+            </div>
+
+            <div className="space-y-1 text-xs">
+              <span className="text-muted-foreground">Autorisierte Weiterleitungs-URI (Google Cloud Console):</span>
+              <div className="flex items-center gap-1.5">
+                <code className="flex-1 truncate rounded border bg-muted px-2 py-1 font-mono text-[11px]">
+                  {origin}/api/auth/callback/google
+                </code>
+                <Button type="button" variant="outline" size="sm" className="h-7 px-2" onClick={() => void copyCallbackUrl('google')}>
+                  {copiedCallback === 'google' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+            </div>
+
+            <label className="block space-y-1 text-xs font-medium">
+              Google Client ID
+              <input
+                type="text"
+                placeholder="1234567890-abc.apps.googleusercontent.com"
+                value={googleClientId}
+                onChange={e => setGoogleClientId(e.target.value)}
+                className="min-h-10 w-full rounded-lg border bg-background px-3 text-sm font-normal"
+              />
+            </label>
+
+            <label className="block space-y-1 text-xs font-medium">
+              Google Client Secret {hasGoogleSecret && <span className="text-emerald-600 dark:text-emerald-400 font-normal">(bereits hinterlegt – leer lassen zum Behalten)</span>}
+              <div className="relative">
+                <input
+                  type={showGoogleSecret ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  placeholder={hasGoogleSecret ? '••••••••••••••••••••••••' : 'GOCSPX-...'}
+                  value={googleClientSecret}
+                  onChange={e => setGoogleClientSecret(e.target.value)}
+                  className="min-h-10 w-full rounded-lg border bg-background pl-3 pr-10 text-sm font-normal"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowGoogleSecret(v => !v)}
+                  aria-label={showGoogleSecret ? 'Secret verbergen' : 'Secret anzeigen'}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {showGoogleSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </label>
+          </div>
+
+          {/* GitHub OAuth Card */}
+          <div className="rounded-xl border bg-background/60 p-4 space-y-3.5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold">GitHub Login</span>
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${githubEnabled && githubClientId && (hasGithubSecret || githubClientSecret) ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-muted text-muted-foreground'}`}>
+                  {githubEnabled && githubClientId && (hasGithubSecret || githubClientSecret) ? 'Aktiv' : 'Inaktiv'}
+                </span>
+              </div>
+              <Switch checked={githubEnabled} onCheckedChange={setGithubEnabled} aria-label="GitHub Login aktivieren" />
+            </div>
+
+            <div className="space-y-1 text-xs">
+              <span className="text-muted-foreground">Authorization callback URL (GitHub OAuth App):</span>
+              <div className="flex items-center gap-1.5">
+                <code className="flex-1 truncate rounded border bg-muted px-2 py-1 font-mono text-[11px]">
+                  {origin}/api/auth/callback/github
+                </code>
+                <Button type="button" variant="outline" size="sm" className="h-7 px-2" onClick={() => void copyCallbackUrl('github')}>
+                  {copiedCallback === 'github' ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+            </div>
+
+            <label className="block space-y-1 text-xs font-medium">
+              GitHub Client ID
+              <input
+                type="text"
+                placeholder="Iv1.1234567890abcdef"
+                value={githubClientId}
+                onChange={e => setGithubClientId(e.target.value)}
+                className="min-h-10 w-full rounded-lg border bg-background px-3 text-sm font-normal"
+              />
+            </label>
+
+            <label className="block space-y-1 text-xs font-medium">
+              GitHub Client Secret {hasGithubSecret && <span className="text-emerald-600 dark:text-emerald-400 font-normal">(bereits hinterlegt – leer lassen zum Behalten)</span>}
+              <div className="relative">
+                <input
+                  type={showGithubSecret ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  placeholder={hasGithubSecret ? '••••••••••••••••••••••••' : 'Client Secret eingeben'}
+                  value={githubClientSecret}
+                  onChange={e => setGithubClientSecret(e.target.value)}
+                  className="min-h-10 w-full rounded-lg border bg-background pl-3 pr-10 text-sm font-normal"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowGithubSecret(v => !v)}
+                  aria-label={showGithubSecret ? 'Secret verbergen' : 'Secret anzeigen'}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  {showGithubSecret ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          {oauthMessage ? (
+            <p role="status" className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+              {oauthMessage}
+            </p>
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              Geheime Schlüssel werden verschlüsselt auf dem Server verwendet und niemals im Browser ausgelesen.
+            </span>
+          )}
+          <Button type="submit" size="sm" disabled={savingOAuth}>
+            {savingOAuth ? 'Wird gespeichert…' : 'Social-Login-Einstellungen speichern'}
+          </Button>
+        </div>
+      </form>
 
       {/* Daily Traffic & Region Breakdown */}
       <div className="grid gap-6 lg:grid-cols-3">

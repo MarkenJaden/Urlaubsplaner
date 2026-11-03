@@ -16,6 +16,7 @@ export default async function SettingsPage() {
   return (
     <SettingsClient
       username={user.username}
+      email={user.email}
       hasLocalAccount={Boolean(user.passwordHash)}
       calendarToken={user.calendarToken}
       preferences={user.preferences as Record<string, unknown>}

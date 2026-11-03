@@ -97,6 +97,12 @@ model ContactMessage {
   @@index([status])
 }
 
+model SystemSetting {
+  key       String   @id
+  value     Json     @default("{}")
+  updatedAt DateTime @updatedAt
+}
+
 model RateLimit {
   key       String   @id
   hits      Int

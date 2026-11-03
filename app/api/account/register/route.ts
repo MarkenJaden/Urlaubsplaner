@@ -10,11 +10,11 @@ export async function POST(request: Request) {
   const body = await readJson(request)
   if (!body) return jsonError('Ungültige Eingabe.')
   try {
-    const { recoveryKey } = await registerAccount(body.username, body.password, body.name)
+    const { recoveryKey } = await registerAccount(body.username, body.password, body.name, body.email)
     return NextResponse.json({ recoveryKey }, { status: 201, headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return jsonError('Dieser Benutzername ist nicht verfügbar.', 409)
-    if (error instanceof Error && error.message === 'INVALID_INPUT') return jsonError('Benutzername: 3–32 Zeichen (a–z, 0–9, Punkt, Bindestrich, Unterstrich). Passwort: 12–128 Zeichen.')
+    if (error instanceof Error && error.message === 'INVALID_INPUT') return jsonError('Benutzername: 3–32 Zeichen (a–z, 0–9, Punkt, Bindestrich, Unterstrich). Passwort: 6–128 Zeichen. E-Mail (falls angegeben) muss gültig sein.')
     return jsonError('Konto konnte nicht erstellt werden. Bitte erneut versuchen.', 503)
   }
 }
