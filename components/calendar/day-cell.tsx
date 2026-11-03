@@ -170,9 +170,9 @@ export function DayCell({
         // Heatmap background:
         heatmapClass,
         // Own School Holiday when Heatmap is OFF:
-        schoolHoliday && !showHeatmap && !hasEntry && !publicHoliday && 'bg-amber-100/90 text-amber-950 border-b-[3px] border-b-amber-500 dark:bg-amber-400/25 dark:text-amber-100 dark:border-b-amber-400',
-        // Own School Holiday when Heatmap is ON (clear sky-blue frame + bottom bar so own school holidays are always visible on top of heatmap!):
-        schoolHoliday && showHeatmap && !hasEntry && 'ring-2 ring-inset ring-sky-600 border-b-[3px] border-b-sky-600 dark:ring-sky-400 dark:border-b-sky-400',
+        schoolHoliday && !showHeatmap && !hasEntry && !publicHoliday && 'bg-amber-100/85 text-amber-950 dark:bg-amber-400/20 dark:text-amber-100',
+        // Own School Holiday when Heatmap is ON (subtle inner frame + bottom accent so own school holidays are recognizable without clashing):
+        schoolHoliday && showHeatmap && !hasEntry && 'ring-1 ring-inset ring-foreground/45 border-b-2 border-b-foreground/65 dark:ring-white/60 dark:border-b-white/75 font-semibold',
         // Bridge day:
         showBridgeDays && isBridgeDay && !hasEntry && !publicHoliday && 'ring-2 ring-orange-500 bg-orange-50 text-orange-950 dark:bg-orange-500/25 dark:text-orange-100',
       )}
@@ -202,7 +202,7 @@ export function DayCell({
 
       <div className="flex gap-0.5 mt-0.5">
         {publicHoliday && <span className="w-1 h-1 rounded-full bg-emerald-600 dark:bg-emerald-400" />}
-        {schoolHoliday && <span className={cn('w-1 h-1 rounded-full', showHeatmap ? 'bg-sky-600 dark:bg-sky-300' : 'bg-amber-500')} />}
+        {schoolHoliday && <span className={cn('w-1 h-1 rounded-full', showHeatmap ? 'bg-foreground/75 dark:bg-white/85' : 'bg-amber-500')} />}
         {showBridgeDays && isBridgeDay && !hasEntry && <span className="w-1 h-1 rounded-full bg-orange-500" />}
       </div>
     </button>

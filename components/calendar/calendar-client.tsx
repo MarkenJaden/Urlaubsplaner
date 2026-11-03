@@ -1161,11 +1161,12 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
               <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-blue-600 shadow-2xs" /> Urlaub</span>
               <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-red-600" /> Über Budget</span>
               <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-purple-600" /> Gleittag</span>
-              <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-emerald-100 border border-emerald-400 dark:bg-emerald-500/30 dark:border-emerald-500/60" /> Feiertag</span>
+              <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-slate-500 dark:bg-slate-600" /> Notiz</span>
+              <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-emerald-100 border border-emerald-400 dark:bg-emerald-500/30 dark:border-emerald-500/60" /> Feiertag (grüner Punkt)</span>
               {!showHeatmap && (
-                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-sky-100 border-b-2 border-b-sky-500 dark:bg-sky-500/25" /> Eigene Schulferien</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-amber-100/85 border border-amber-300 dark:bg-amber-400/20 dark:border-amber-400/50" /> Eigene Schulferien (gelber Punkt)</span>
               )}
-              <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-orange-50 ring-2 ring-orange-400 dark:bg-orange-400/20" /> Brückentag</span>
+              <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-orange-50 ring-2 ring-orange-400 dark:bg-orange-400/20" /> Brückentag (oranger Punkt)</span>
               <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-muted/60 opacity-45 grayscale border" /> Vergangener Tag</span>
             </div>
             <div className="hidden sm:flex items-center gap-2 text-[11px] text-muted-foreground">
@@ -1195,9 +1196,11 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
                   <span>Sehr viele (&gt; 75 %)</span>
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 font-medium text-sky-700 dark:text-sky-300">
-                <span className="w-3.5 h-3.5 rounded-sm ring-2 ring-inset ring-sky-600 border-b-[3px] border-b-sky-600 bg-amber-200 dark:bg-amber-500/30" />
-                <span>Blauer Rahmen = Schulferien in deinem eigenen Bundesland</span>
+              <div className="flex items-center gap-1.5 font-medium text-foreground/85">
+                <span className="w-3.5 h-3.5 rounded-sm ring-1 ring-inset ring-foreground/45 border-b-2 border-b-foreground/65 dark:ring-white/60 dark:border-b-white/75 bg-amber-200 dark:bg-amber-500/30 flex items-end justify-center pb-0.5">
+                  <span className="w-1 h-1 rounded-full bg-foreground/75 dark:bg-white/85" />
+                </span>
+                <span>Punkt + feiner Rahmen = Schulferien in deinem eigenen Bundesland</span>
               </div>
             </div>
           )}
