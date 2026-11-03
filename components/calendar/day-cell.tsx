@@ -90,6 +90,10 @@ export function DayCell({
   const schoolHoliday = getHolidayForDate(schoolHolidays, date)
   const hasEntry = vacation || gleittag || note
   const hasHeatmap = showHeatmap && heatmapValue !== undefined && heatmapValue > 0
+  const isVisibleBridgeDay = showBridgeDays && isBridgeDay && !hasEntry && !publicHoliday
+  const isWeekendName = (name?: string) => !name || name === 'Samstag' || name === 'Sonntag' || name === 'Wochenende'
+  const bridgeHolidayBefore = isVisibleBridgeDay && bridgeDayInfo ? !isWeekendName(bridgeDayInfo.connectsBeforeName) : false
+  const bridgeHolidayAfter = isVisibleBridgeDay && bridgeDayInfo ? !isWeekendName(bridgeDayInfo.connectsAfterName) : false
 
   const buildTitle = (): string => {
     const parts: string[] = []
@@ -173,8 +177,11 @@ export function DayCell({
         schoolHoliday && !showHeatmap && !hasEntry && !publicHoliday && 'bg-amber-100/85 text-amber-950 dark:bg-amber-400/20 dark:text-amber-100',
         // Own School Holiday when Heatmap is ON (subtle inner frame + bottom accent so own school holidays are recognizable without clashing):
         schoolHoliday && showHeatmap && !hasEntry && 'ring-1 ring-inset ring-foreground/45 border-b-2 border-b-foreground/65 dark:ring-white/60 dark:border-b-white/75 font-semibold',
-        // Bridge day:
-        showBridgeDays && isBridgeDay && !hasEntry && !publicHoliday && 'ring-2 ring-orange-500 bg-orange-50 text-orange-950 dark:bg-orange-500/25 dark:text-orange-100',
+        // Bridge day with directional edge toward the referenced holiday:
+        isVisibleBridgeDay && 'ring-1 ring-inset ring-orange-400/90 bg-orange-50/95 text-orange-950 dark:bg-orange-500/20 dark:text-orange-100 dark:ring-orange-400/70',
+        bridgeHolidayBefore && !bridgeHolidayAfter && 'border-l-[3px] border-l-emerald-500 dark:border-l-emerald-400',
+        bridgeHolidayAfter && !bridgeHolidayBefore && 'border-r-[3px] border-r-emerald-500 dark:border-r-emerald-400',
+        bridgeHolidayBefore && bridgeHolidayAfter && 'border-x-[3px] border-x-emerald-500 dark:border-x-emerald-400',
       )}
       onClick={handleClick}
       onMouseEnter={handleMouseEnter}
@@ -200,11 +207,21 @@ export function DayCell({
         {format(date, 'd')}
       </span>
 
-      <div className="flex gap-0.5 mt-0.5">
-        {publicHoliday && <span className="w-1 h-1 rounded-full bg-emerald-600 dark:bg-emerald-400" />}
-        {schoolHoliday && <span className={cn('w-1 h-1 rounded-full', showHeatmap ? 'bg-foreground/75 dark:bg-white/85' : 'bg-amber-500')} />}
-        {showBridgeDays && isBridgeDay && !hasEntry && <span className="w-1 h-1 rounded-full bg-orange-500" />}
-      </div>
+      {/* Directional arrow on potential bridge days indicating which holiday it connects to */}
+      {isVisibleBridgeDay && (
+        <span
+          aria-hidden="true"
+          className="mt-0.5 text-[9px] leading-none font-bold text-orange-600 dark:text-orange-300 tracking-tighter"
+        >
+          {bridgeHolidayBefore && bridgeHolidayAfter
+            ? '↔'
+            : bridgeHolidayBefore
+              ? '←'
+              : bridgeHolidayAfter
+                ? '→'
+                : '•'}
+        </span>
+      )}
     </button>
   )
 }
