@@ -5,6 +5,7 @@ import { isUserAdmin } from '@/lib/admin'
 import { NextResponse } from 'next/server'
 import { mergePreferences, parsePreferences } from '@/lib/preferences'
 import { jsonError, readJson, validOrigin } from '@/lib/request'
+import { publishPlanUpdate } from '@/lib/realtime-hub'
 import type { UserPreferences } from '@/types'
 
 export async function GET() {
@@ -40,5 +41,6 @@ export async function PATCH(request: Request) {
     await tx.user.update({ where: { id: session.user.id }, data: { preferences: merged as object } })
     return merged
   })
+  publishPlanUpdate({ userId: session.user.id })
   return NextResponse.json({ preferences }, { headers: { 'Cache-Control': 'no-store' } })
 }

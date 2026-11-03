@@ -149,3 +149,35 @@ export function summarizeFlex(gleittage: number, preferences: FlexPreferences, y
 export function formatDays(value: number): string {
   return value.toLocaleString('de-DE', { maximumFractionDigits: 1 })
 }
+
+const SHORT_WEEKDAY_LABELS: Record<number, string> = {
+  1: 'Mo',
+  2: 'Di',
+  3: 'Mi',
+  4: 'Do',
+  5: 'Fr',
+  6: 'Sa',
+  0: 'So',
+}
+
+export function isStandardFiveDayWeek(workDays?: number[]): boolean {
+  if (!workDays || workDays.length === 0) return true
+  return workDays.length === 5 && [1, 2, 3, 4, 5].every(d => workDays.includes(d))
+}
+
+export function formatWorkDaysLabel(workDays?: number[]): string {
+  if (!workDays || workDays.length === 0 || isStandardFiveDayWeek(workDays)) {
+    return '5-Tage (Mo–Fr)'
+  }
+  if (workDays.length === 4 && [1, 2, 3, 4].every(d => workDays.includes(d))) {
+    return '4-Tage (Mo–Do)'
+  }
+  if (workDays.length === 4 && [2, 3, 4, 5].every(d => workDays.includes(d))) {
+    return '4-Tage (Di–Fr)'
+  }
+  if (workDays.length === 6 && [1, 2, 3, 4, 5, 6].every(d => workDays.includes(d))) {
+    return '6-Tage (Mo–Sa)'
+  }
+  const ordered = [1, 2, 3, 4, 5, 6, 0].filter(d => workDays.includes(d))
+  return `${ordered.length}-Tage (${ordered.map(d => SHORT_WEEKDAY_LABELS[d]).join(', ')})`
+}

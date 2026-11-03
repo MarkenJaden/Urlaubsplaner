@@ -117,11 +117,17 @@ export function buildNonWorkSet(
   workDays?: number[],
 ): Set<string> {
   const set = new Set<string>()
+  // Include a 7-day buffer before startDate and after endDate so New Year's Day (Jan 1)
+  // and surrounding weekends across year boundaries are accurately recognized as free days.
+  const bufferedStart = addDaysDate(startDate, -7)
+  const bufferedEnd = addDaysDate(endDate, 7)
   if (!countWeekendsAsVacation) {
-    for (const d of eachDayOfInterval({ start: startDate, end: endDate })) {
+    for (const d of eachDayOfInterval({ start: bufferedStart, end: bufferedEnd })) {
       if (isOffWeekday(d, workDays)) set.add(format(d, 'yyyy-MM-dd'))
     }
   }
+  // Always mark Jan 1 of (endDate.year + 1) as a public holiday (Neujahr)
+  set.add(`${endDate.getFullYear() + 1}-01-01`)
   for (const h of publicHolidays) {
     const start = parseISO(h.startDate)
     const end = parseISO(h.endDate)
@@ -133,7 +139,19 @@ export function buildNonWorkSet(
   return set
 }
 
-function buildHolidayNameByDate(publicHolidays: Holiday[]): Map<string, string> {
+/**
+ * Maps date -> holiday name ONLY for public holidays that fall on an actual working day
+ * (or when weekends count as vacation). Holidays falling on a regular weekend/off-day
+ * (such as 3 Oct 2027 on a Sunday or 1 May 2027 on a Saturday) save 0 vacation days
+ * and must never trigger fake bridge days or holiday bonuses.
+ */
+function buildEffectiveHolidayNameByDate(
+  publicHolidays: Holiday[],
+  workDays?: number[],
+  countWeekendsAsVacation = false,
+  halfDaysChristmas = false,
+  year?: number,
+): Map<string, string> {
   const map = new Map<string, string>()
   for (const h of publicHolidays) {
     const name = localizedName(h.name, 'Feiertag')
@@ -141,7 +159,21 @@ function buildHolidayNameByDate(publicHolidays: Holiday[]): Map<string, string> 
     const end = parseISO(h.endDate)
     if (start > end) continue
     for (const d of eachDayOfInterval({ start, end })) {
-      map.set(format(d, 'yyyy-MM-dd'), name)
+      if (countWeekendsAsVacation || !isOffWeekday(d, workDays)) {
+        map.set(format(d, 'yyyy-MM-dd'), name)
+      }
+    }
+  }
+  if (halfDaysChristmas && year) {
+    const dec24 = new Date(year, 11, 24)
+    const dec31 = new Date(year, 11, 31)
+    const dec24Key = `${year}-12-24`
+    const dec31Key = `${year}-12-31`
+    if (!map.has(dec24Key) && (countWeekendsAsVacation || !isOffWeekday(dec24, workDays))) {
+      map.set(dec24Key, 'Heiligabend (½ Tag)')
+    }
+    if (!map.has(dec31Key) && (countWeekendsAsVacation || !isOffWeekday(dec31, workDays))) {
+      map.set(dec31Key, 'Silvester (½ Tag)')
     }
   }
   return map
@@ -216,23 +248,27 @@ export function expandFreeSpan(
   yearStart: Date,
   yearEnd: Date,
 ): { spanStart: string; spanEnd: string; freeDaysGained: number } {
+  const minBoundary = addDaysDate(yearStart, -4)
+  const maxBoundary = addDaysDate(yearEnd, 4)
   let start = parseISO(firstWorkDay)
-  while (start > yearStart) {
+  while (start > minBoundary) {
     const prev = addDaysDate(start, -1)
     const prevStr = format(prev, 'yyyy-MM-dd')
     if (freeSet.has(prevStr)) start = prev
     else break
   }
   let end = parseISO(lastWorkDay)
-  while (end < yearEnd) {
+  while (end < maxBoundary) {
     const next = addDaysDate(end, 1)
     const nextStr = format(next, 'yyyy-MM-dd')
     if (freeSet.has(nextStr)) end = next
     else break
   }
-  const spanStart = format(start, 'yyyy-MM-dd')
-  const spanEnd = format(end, 'yyyy-MM-dd')
   const freeDaysGained = differenceInCalendarDays(end, start) + 1
+  const clampedStart = start < yearStart ? yearStart : start
+  const clampedEnd = end > yearEnd ? yearEnd : end
+  const spanStart = format(clampedStart, 'yyyy-MM-dd')
+  const spanEnd = format(clampedEnd, 'yyyy-MM-dd')
   return { spanStart, spanEnd, freeDaysGained }
 }
 
@@ -269,14 +305,20 @@ function buildSmartLabelAndReason(
   const lastMonth = getMonthLabel(vacationDays[vacationDays.length - 1])
   const spanLabel = firstMonth === lastMonth ? firstMonth : `${firstMonth} – ${lastMonth}`
 
-  if (vacationDays.length === 1) {
+  if (vacationDays.length <= 2 && holidaysIncluded.length > 0) {
     const hName = holidaysIncluded[0]
     return {
-      label: hName ? `Brückentag ${hName}` : `Brückentag ${firstMonth}`,
-      reason: hName
-        ? `Verbindet ${hName} mit freien Tagen (${freeDaysGained} Tage frei am Stück)`
-        : `1 Urlaubstag für ${freeDaysGained} zusammenhängende freie Tage`,
+      label: `Brückentag ${hName}`,
+      reason: `Verbindet ${hName} mit freien Tagen (${cost} UT → ${freeDaysGained} Tage frei am Stück)`,
       category: 'bridge',
+    }
+  }
+
+  if (vacationDays.length <= 2) {
+    return {
+      label: `Verlängertes Wochenende (${spanLabel})`,
+      reason: `${cost} Urlaubstag${cost !== 1 ? 'e' : ''} für ${freeDaysGained} zusammenhängende freie Tage`,
+      category: 'relax',
     }
   }
 
@@ -342,7 +384,13 @@ export function recalculateSuggestionBlock(
   )
   const existingSet = options.overwrite ? new Set<string>() : existingVacationDates
   const effectiveNonWorkDays = new Set([...baseNonWorkDays, ...existingSet])
-  const holidayNameByDate = buildHolidayNameByDate(publicHolidays)
+  const holidayNameByDate = buildEffectiveHolidayNameByDate(
+    publicHolidays,
+    options.workDays,
+    options.countWeekendsAsVacation,
+    options.halfDaysChristmas,
+    year,
+  )
   const shDates = buildDateSet(schoolHolidays)
 
   const allDaysInRange = eachDayOfInterval({ start: clampedStart, end: clampedEnd }).map(d =>
@@ -463,7 +511,13 @@ export function suggestVacation(
   const existingSet = overwriteExisting ? new Set<string>() : new Set(existingVacationDates)
   // Free days include weekends/off-days, public holidays, and (when extending) already planned vacation days
   const effectiveNonWorkDays = new Set([...baseNonWorkDays, ...existingSet])
-  const holidayNameByDate = buildHolidayNameByDate(publicHolidays)
+  const holidayNameByDate = buildEffectiveHolidayNameByDate(
+    publicHolidays,
+    prefs.workDays,
+    prefs.countWeekendsAsVacation,
+    prefs.halfDaysChristmas,
+    year,
+  )
   const shDates = buildDateSet(schoolHolidays)
   const avoidMonthsSet = new Set(prefs.avoidMonths ?? [])
   for (const p of prefs.periodPreferences ?? []) {
@@ -484,7 +538,10 @@ export function suggestVacation(
     }
   }
 
-  // Step 1: Collect elementary contiguous workday segments between non-workdays
+  // Step 1: Collect elementary contiguous workday segments between non-workdays.
+  // Because effectiveNonWorkDays already contains all workday public holidays, weekends,
+  // and off-days, every true 1-day or 2-day bridge (e.g. Friday after Christi Himmelfahrt
+  // or Mon-Tue before a Wednesday holiday) is ALREADY its own complete WorkSegment!
   const segments: WorkSegment[] = []
   let cur = new Date(startDate)
   while (cur <= endDate) {
@@ -514,6 +571,7 @@ export function suggestVacation(
     workDays: string[],
     matchedMustHaveIndex: number | null = null,
     customLabel?: string,
+    extraFreeDates?: Set<string>,
   ): Candidate | null => {
     const newVacationDays = workDays.filter(d => !existingSet.has(d) && !baseNonWorkDays.has(d))
     if (newVacationDays.length === 0) return null
@@ -536,10 +594,14 @@ export function suggestVacation(
     const cost = newVacationDays.reduce((sum, d) => sum + getDayCost(d, prefs.halfDaysChristmas), 0)
     if (cost <= 0 || cost > effectiveBudget) return null
 
+    const freeSet = extraFreeDates
+      ? new Set([...effectiveNonWorkDays, ...extraFreeDates, ...newVacationDays])
+      : new Set([...effectiveNonWorkDays, ...newVacationDays])
+
     const { spanStart, spanEnd, freeDaysGained } = expandFreeSpan(
-      workDays[0],
-      workDays[workDays.length - 1],
-      effectiveNonWorkDays,
+      newVacationDays[0],
+      newVacationDays[newVacationDays.length - 1],
+      freeSet,
       yearStart,
       yearEnd,
     )
@@ -560,22 +622,27 @@ export function suggestVacation(
     // Strategy-specific weighting
     if (goal === 'max_efficiency') {
       score = Math.pow(efficiency, 1.8) * 10
-      if (holidaysIncluded.length > 0) score *= 1.25
+      if (holidaysIncluded.length > 0) score *= 1.35
+      // A single day that does NOT include an effective holiday is just a normal weekend extension
+      if (newVacationDays.length <= 2 && holidaysIncluded.length === 0) score *= 0.45
     } else if (goal === 'long_breaks') {
       score = efficiency * 8 + Math.min(freeDaysGained, 24) * 1.6
       if (freeDaysGained >= 9) score *= 1.45
       if (freeDaysGained >= 14) score *= 1.25
-      if (newVacationDays.length === 1 && efficiency < 3.5) score *= 0.65
+      if (newVacationDays.length === 1 && efficiency < 3.5) score *= 0.55
     } else if (goal === 'distributed') {
       score = efficiency * 10 + (freeDaysGained >= 4 && freeDaysGained <= 11 ? 8 : 0)
+      if (holidaysIncluded.length > 0) score *= 1.2
     } else {
-      // 'balanced': reward strong bridge days AND holiday combos
-      if (holidaysIncluded.length > 0) score *= 1.25
-      if (efficiency >= 2.2) score *= 1.2
+      // 'balanced': reward strong true bridge days AND holiday combos
+      if (holidaysIncluded.length > 0) score *= 1.3
+      if (efficiency >= 2.2 && holidaysIncluded.length > 0) score *= 1.2
+      if (newVacationDays.length <= 2 && holidaysIncluded.length === 0) score *= 0.5
     }
 
-    if (prefs.preferBridgeDays && (newVacationDays.length <= 2 || holidaysIncluded.length > 0) && efficiency >= 2.0) {
-      score *= 1.25
+    // Only boost bridge days if they actually connect an effective workday holiday!
+    if (prefs.preferBridgeDays && holidaysIncluded.length > 0 && efficiency >= 2.0) {
+      score *= newVacationDays.length <= 2 ? 1.35 : 1.2
     }
 
     // School holiday strategy (strictly consistent!)
@@ -655,29 +722,23 @@ export function suggestVacation(
     }
   }
 
-  // Generate single-segment, partial-segment (around mid-week holidays), and multi-segment (1-3 week) candidates
+  // Generate complete single-segment and multi-segment (1-4 week) candidates.
+  // Because segments are already split at every workday public holiday, every true
+  // 1-day or 2-day holiday bridge is already a full segment in `segments`.
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i]
-    // 1. Full segment
+    // 1. Full segment (connects non-workdays before seg with non-workdays after seg)
     addCandidate(createCandidate(seg.workDays))
 
-    // 2. Partial segments (e.g., 1-2 day bridges at start or end of segment when adjacent to a holiday)
-    if (seg.workDays.length >= 3) {
-      const beforeFirst = format(addDaysDate(seg.start, -1), 'yyyy-MM-dd')
-      const afterLast = format(addDaysDate(seg.end, 1), 'yyyy-MM-dd')
-      if (holidayNameByDate.has(beforeFirst)) {
-        addCandidate(createCandidate(seg.workDays.slice(0, 1)))
-        addCandidate(createCandidate(seg.workDays.slice(0, 2)))
-      }
-      if (holidayNameByDate.has(afterLast)) {
-        addCandidate(createCandidate(seg.workDays.slice(-1)))
-        addCandidate(createCandidate(seg.workDays.slice(-2)))
-      }
+    // 2. If maxDaysPerBlock is explicitly smaller than a full workweek segment, allow edge slices of size maxBlock
+    if (prefs.maxDaysPerBlock !== null && prefs.maxDaysPerBlock < seg.workDays.length) {
+      addCandidate(createCandidate(seg.workDays.slice(0, prefs.maxDaysPerBlock)))
+      addCandidate(createCandidate(seg.workDays.slice(-prefs.maxDaysPerBlock)))
     }
 
-    // 3. Multi-segment combinations (2, 3, or 4 consecutive segments across weekends/holidays for 2-3 week vacations!)
+    // 3. Multi-segment combinations (2, 3, 4, or 5 consecutive segments across weekends/holidays for 1-3 week vacations!)
     let combinedWorkDays = [...seg.workDays]
-    for (let j = i + 1; j < Math.min(i + 4, segments.length); j++) {
+    for (let j = i + 1; j < Math.min(i + 5, segments.length); j++) {
       const gapDays = differenceInCalendarDays(segments[j].start, segments[j - 1].end) - 1
       // Only bridge across contiguous non-workday gaps (weekends / off-days / public holidays)
       if (gapDays > 6) break
@@ -786,7 +847,7 @@ export function suggestVacation(
     }
   }
 
-  // Step 3: Fill remaining budget with dynamic re-scoring
+  // Step 3: Fill remaining budget with dynamic marginal re-scoring
   let candidates = [...candidateMap.values()].filter(
     c => !c.vacationDays.some(d => usedDates.has(d)),
   )
@@ -815,6 +876,27 @@ export function suggestVacation(
     for (const c of candidates) {
       c.dynamicScore = c.baseScore
 
+      // Check if c's free span overlaps/touches any already-selected block (e.g. second Easter week).
+      // If so, discount by the true marginal free days gained so shared holidays/weekends aren't double-counted.
+      const touching = selected.filter(
+        s => !(c.spanEnd < s.spanStart || c.spanStart > s.spanEnd),
+      )
+      if (touching.length > 0) {
+        const existingSpanDays = touching.reduce((sum, s) => sum + s.freeDaysGained, 0)
+        const allTouchVacDays = [...touching.flatMap(s => s.vacationDays), ...c.vacationDays].sort()
+        const combinedFreeSet = new Set([...effectiveNonWorkDays, ...usedDates, ...c.vacationDays])
+        const mergedSpan = expandFreeSpan(
+          allTouchVacDays[0],
+          allTouchVacDays[allTouchVacDays.length - 1],
+          combinedFreeSet,
+          yearStart,
+          yearEnd,
+        )
+        const marginalFree = Math.max(c.vacationDays.length, mergedSpan.freeDaysGained - existingSpanDays)
+        const ratioCorrection = marginalFree / Math.max(1, c.freeDaysGained)
+        c.dynamicScore *= Math.pow(ratioCorrection, 1.4)
+      }
+
       if (
         (goal === 'balanced' || goal === 'long_breaks' || Boolean(prefs.requireMainVacationDays)) &&
         !hasLongVacation &&
@@ -832,6 +914,20 @@ export function suggestVacation(
         }
       }
 
+      // Coordinate Christmas & New Year half-days (24.12. & 31.12.) so no 0.5 day is left stranded
+      if (prefs.halfDaysChristmas) {
+        const currentHasHalf = Math.abs((budget % 1) - 0.5) < 0.01
+        const candHasHalf = Math.abs((c.cost % 1) - 0.5) < 0.01
+        const nextBudget = budget - c.cost
+        if (currentHasHalf && candHasHalf) {
+          // Resolves the 0.5 day fraction back to a clean integer!
+          c.dynamicScore *= 1.75
+        } else if (!currentHasHalf && candHasHalf && nextBudget < 4.5) {
+          // Would create a 0.5 fraction without enough budget left for the other Christmas week
+          c.dynamicScore *= 0.25
+        }
+      }
+
       if (prefs.distributeEvenly && selected.length > 0) {
         const cStart = parseISO(c.spanStart)
         const cEnd = parseISO(c.spanEnd)
@@ -846,20 +942,16 @@ export function suggestVacation(
               : 0
           if (dist < minDistance) minDistance = dist
         }
-        if (minDistance < minGap) c.dynamicScore *= 0.15
-        else if (minDistance < 35) c.dynamicScore *= 0.45
-        else if (minDistance < 60) c.dynamicScore *= 0.78
+        if (minDistance < minGap) c.dynamicScore *= 0.18
+        else if (minDistance < 35) c.dynamicScore *= 0.5
+        else if (minDistance < 60) c.dynamicScore *= 0.8
       }
     }
 
     candidates.sort((a, b) => b.dynamicScore - a.dynamicScore)
     const best = candidates.shift()!
 
-    // Prevent overlapping free spans unless no other choice
-    const spanOverlaps = selected.some(
-      s => !(best.spanEnd < s.spanStart || best.spanStart > s.spanEnd),
-    )
-    if (!spanOverlaps && best.cost <= budget) {
+    if (best.cost <= budget) {
       selected.push(best)
       budget -= best.cost
       best.vacationDays.forEach(d => usedDates.add(d))
@@ -869,20 +961,112 @@ export function suggestVacation(
     }
   }
 
-  return selected
-    .sort((a, b) => a.vacationDays[0].localeCompare(b.vacationDays[0]))
-    .map((op, index) => ({
-      id: `sug-${index}-${op.vacationDays[0]}`,
-      vacationDays: op.vacationDays,
-      startDate: op.spanStart,
-      endDate: op.spanEnd,
-      freeDaysGained: op.freeDaysGained,
-      cost: op.cost,
-      efficiency: op.cost > 0 ? op.freeDaysGained / op.cost : 0,
-      label: op.label,
-      reason: op.reason,
-      category: op.category,
-      holidaysIncluded: op.holidaysIncluded,
-      inSchoolHolidays: op.schoolHolidayRatio >= 0.5,
-    }))
+  // Step 4: Smart Remainder Filler — if 0.5..3.5 vacation days remain in budget that couldn't fit
+  // a full workweek segment, extend an existing vacation block or add a clean weekend/half-day attachment.
+  if (budget >= 0.5 && (maxBlocksLimit === null || selected.length < maxBlocksLimit)) {
+    const remainderCandidates: Candidate[] = []
+    for (const seg of segments) {
+      const avail = seg.workDays.filter(d => !usedDates.has(d))
+      if (avail.length > 0) {
+        for (let len = Math.min(avail.length, 4); len >= 1; len--) {
+          const frontSlice = avail.slice(0, len)
+          const backSlice = avail.slice(-len)
+          const cFront = createCandidate(frontSlice, null, undefined, usedDates)
+          const cBack = createCandidate(backSlice, null, undefined, usedDates)
+          if (cFront && cFront.cost <= budget) remainderCandidates.push(cFront)
+          if (cBack && cBack.cost <= budget) remainderCandidates.push(cBack)
+        }
+      }
+    }
+    if (remainderCandidates.length > 0) {
+      // Prefer remainder slices that consume the exact remaining budget and/or directly extend an already-selected block
+      remainderCandidates.sort((a, b) => {
+        const aExact = Math.abs(budget - a.cost) < 0.01 ? 1.5 : 1
+        const bExact = Math.abs(budget - b.cost) < 0.01 ? 1.5 : 1
+        const aTouches = selected.some(s => !(a.spanEnd < s.spanStart || a.spanStart > s.spanEnd)) ? 1.35 : 1
+        const bTouches = selected.some(s => !(b.spanEnd < s.spanStart || b.spanStart > s.spanEnd)) ? 1.35 : 1
+        return b.baseScore * bExact * bTouches - a.baseScore * aExact * aTouches
+      })
+      const pick = remainderCandidates[0]
+      selected.push(pick)
+      budget -= pick.cost
+      pick.vacationDays.forEach(d => usedDates.add(d))
+    }
+  }
+
+  // Step 5: Merge any selected blocks whose free spans touch or overlap (separated only by non-workdays)
+  // so that total freeDaysGained and efficiency are 100% accurate and never double-count shared holidays/weekends.
+  const sortedSelected = [...selected].sort((a, b) => a.vacationDays[0].localeCompare(b.vacationDays[0]))
+  const finalBlocks: VacationSuggestionBlock[] = []
+  const allPlannedSet = new Set([...effectiveNonWorkDays, ...usedDates])
+
+  let idx = 0
+  while (idx < sortedSelected.length) {
+    let mergedVacDays = [...sortedSelected[idx].vacationDays]
+    const customLabels: string[] = sortedSelected[idx].matchedMustHaveIndex !== null ? [sortedSelected[idx].label] : []
+    let nextIdx = idx + 1
+
+    while (nextIdx < sortedSelected.length) {
+      const prevLast = parseISO(mergedVacDays[mergedVacDays.length - 1])
+      const nextFirst = parseISO(sortedSelected[nextIdx].vacationDays[0])
+      // Check if every day strictly between prevLast and nextFirst is in allPlannedSet
+      let curCheck = addDaysDate(prevLast, 1)
+      let allFreeBetween = true
+      while (curCheck < nextFirst) {
+        if (!allPlannedSet.has(format(curCheck, 'yyyy-MM-dd'))) {
+          allFreeBetween = false
+          break
+        }
+        curCheck = addDaysDate(curCheck, 1)
+      }
+      if (!allFreeBetween) break
+      mergedVacDays = [...mergedVacDays, ...sortedSelected[nextIdx].vacationDays]
+      if (sortedSelected[nextIdx].matchedMustHaveIndex !== null) {
+        customLabels.push(sortedSelected[nextIdx].label)
+      }
+      nextIdx++
+    }
+
+    mergedVacDays.sort()
+    const { spanStart, spanEnd, freeDaysGained } = expandFreeSpan(
+      mergedVacDays[0],
+      mergedVacDays[mergedVacDays.length - 1],
+      allPlannedSet,
+      yearStart,
+      yearEnd,
+    )
+    const cost = mergedVacDays.reduce((sum, d) => sum + getDayCost(d, prefs.halfDaysChristmas), 0)
+    const holidaysIncluded = collectHolidaysInSpan(spanStart, spanEnd, holidayNameByDate)
+    const schoolOverlapCount = mergedVacDays.filter(d => shDates.has(d)).length
+    const inSchoolHolidays = schoolOverlapCount / mergedVacDays.length >= 0.5
+    const { label, reason, category } = buildSmartLabelAndReason(
+      mergedVacDays,
+      spanStart,
+      spanEnd,
+      freeDaysGained,
+      cost,
+      holidaysIncluded,
+      inSchoolHolidays,
+      customLabels[0],
+    )
+
+    finalBlocks.push({
+      id: `sug-${finalBlocks.length}-${mergedVacDays[0]}`,
+      vacationDays: mergedVacDays,
+      startDate: spanStart,
+      endDate: spanEnd,
+      freeDaysGained,
+      cost,
+      efficiency: cost > 0 ? freeDaysGained / cost : 0,
+      label,
+      reason,
+      category,
+      holidaysIncluded,
+      inSchoolHolidays,
+    })
+
+    idx = nextIdx
+  }
+
+  return finalBlocks
 }

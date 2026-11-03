@@ -81,10 +81,19 @@ export interface Country {
 export interface SharedPlanOverlay {
   id: string
   label: string
+  ownerName?: string
   color: string
   enabled: boolean
   permission: 'view' | 'edit'
   token?: string
+  country?: string
+  subdivision?: string
+  workDays?: number[]
+  vacationDays?: number
+  vacationDaysPerYear?: Record<string | number, number>
+  halfDaysChristmas?: boolean
+  countWeekendsAsVacation?: boolean
+  updatedAt?: string
   entries: Array<{ date: string; type: EntryType; title?: string | null }>
 }
 

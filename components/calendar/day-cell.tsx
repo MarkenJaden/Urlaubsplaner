@@ -8,7 +8,7 @@ import { format, parseISO } from 'date-fns'
 export interface SharedDayItem {
   label: string
   color: string
-  type: EntryType
+  type: EntryType | 'off_day'
   title?: string | null
 }
 
@@ -133,7 +133,14 @@ export function DayCell({
     if (gleittag) parts.push('Gleittag')
     if (note) parts.push(note.title ?? 'Notiz')
     for (const s of sharedItems) {
-      const tLabel = s.type === 'vacation' ? 'Urlaub' : s.type === 'gleittag' ? 'Gleittag' : s.title || 'Notiz'
+      const tLabel =
+        s.type === 'vacation'
+          ? 'Urlaub'
+          : s.type === 'gleittag'
+            ? 'Gleittag'
+            : s.type === 'off_day'
+              ? `Regulär frei (${s.title || 'Arbeitszeitmodell'})`
+              : s.title || 'Notiz'
       parts.push(`${s.label}: ${tLabel}`)
     }
     if (comparisonStates.length) parts.push(`Ferien-Dichte (${comparisonStates.length} Regionen): ${comparisonStates.join(', ')}`)
@@ -224,16 +231,24 @@ export function DayCell({
       aria-label={`${format(date, 'dd.MM.yyyy')}${buildTitle() ? ` · ${buildTitle()}` : ''}`}
       aria-pressed={Boolean(hasEntry)}
     >
-      {/* Shared plan overlay bar at top of cell */}
+      {/* Shared plan overlay bar at top of cell (solid = vacation/entry, dashed = partner regular off-day e.g. 4-day week) */}
       {sharedItems.length > 0 && (
         <div className="absolute top-0.5 inset-x-1 flex gap-0.5 justify-center pointer-events-none">
-          {sharedItems.slice(0, 3).map((s, idx) => (
-            <span
-              key={idx}
-              className="h-1 flex-1 max-w-3 rounded-full"
-              style={{ backgroundColor: s.color }}
-            />
-          ))}
+          {sharedItems.slice(0, 3).map((s, idx) =>
+            s.type === 'off_day' ? (
+              <span
+                key={idx}
+                className="h-1 flex-1 max-w-3.5 border-t-2 border-dashed opacity-85"
+                style={{ borderColor: s.color }}
+              />
+            ) : (
+              <span
+                key={idx}
+                className="h-1.5 flex-1 max-w-3.5 rounded-full"
+                style={{ backgroundColor: s.color }}
+              />
+            )
+          )}
         </div>
       )}
 

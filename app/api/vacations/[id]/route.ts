@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { getUserFromSession } from '@/lib/user'
 import { NextResponse } from 'next/server'
 import { validOrigin, jsonError } from '@/lib/request'
+import { publishPlanUpdate } from '@/lib/realtime-hub'
 
 export async function DELETE(
   request: Request,
@@ -24,5 +25,6 @@ export async function DELETE(
   }
 
   await prisma.vacationEntry.delete({ where: { id } })
+  publishPlanUpdate({ userId: user.id })
   return NextResponse.json({ success: true })
 }

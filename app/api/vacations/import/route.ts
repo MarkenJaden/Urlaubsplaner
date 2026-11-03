@@ -2,6 +2,7 @@ import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { parseEntry, parsePreferences, mergeImportedPreferences } from '@/lib/preferences'
 import { jsonError, readJson, validOrigin } from '@/lib/request'
+import { publishPlanUpdate } from '@/lib/realtime-hub'
 import type { UserPreferences } from '@/types'
 
 export async function POST(request: Request) {
@@ -22,5 +23,6 @@ export async function POST(request: Request) {
     }
     await tx.user.update({ where: { id: session.user.id }, data: { preferences: mergeImportedPreferences(user.preferences, prefs) as object } })
   }, { timeout: 30_000 })
+  publishPlanUpdate({ userId: session.user.id })
   return Response.json({ success: true })
 }

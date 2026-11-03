@@ -8,7 +8,7 @@ import type { VacationEntry, Holiday, EntryType, SharedPlanOverlay } from '@/typ
 import type { BridgeDay } from '@/lib/bridge-days'
 import type { VacationSuggestionBlock } from '@/lib/vacation-suggester'
 import { countHolidayStates } from '@/lib/holidays'
-import { DEFAULT_WORK_DAYS } from '@/lib/vacation-accounting'
+import { DEFAULT_WORK_DAYS, formatWorkDaysLabel, isOffDayKey } from '@/lib/vacation-accounting'
 
 interface YearViewProps {
   year: number
@@ -101,17 +101,47 @@ export function YearView({
 
   const sharedByDate = useMemo(() => {
     const map = new Map<string, SharedDayItem[]>()
+    const yearDays = eachDayOfInterval({
+      start: new Date(year, 0, 1),
+      end: new Date(year, 11, 31),
+    }).map(d => format(d, 'yyyy-MM-dd'))
+
     for (const ov of overlays) {
       if (!ov.enabled) continue
+      const entryDateSet = new Set<string>()
       for (const e of ov.entries) {
         const key = e.date.slice(0, 10)
+        entryDateSet.add(key)
         const list = map.get(key) ?? []
         list.push({ label: ov.label, color: ov.color, type: e.type, title: e.title })
         map.set(key, list)
       }
+
+      const ovWorkDays = ov.workDays && ov.workDays.length > 0 ? ov.workDays : DEFAULT_WORK_DAYS
+      const ovLabel = formatWorkDaysLabel(ovWorkDays)
+      const differsFromViewer =
+        ovWorkDays.length !== workDays.length ||
+        ovWorkDays.some(d => !workDays.includes(d))
+
+      if (differsFromViewer) {
+        for (const key of yearDays) {
+          if (entryDateSet.has(key)) continue
+          // Highlight days where the partner has a regular off-weekday (e.g. Friday in a 4-day week) while the viewer works
+          if (isOffDayKey(key, ovWorkDays) && !isOffDayKey(key, workDays)) {
+            const list = map.get(key) ?? []
+            list.push({
+              label: ov.label,
+              color: ov.color,
+              type: 'off_day',
+              title: ovLabel,
+            })
+            map.set(key, list)
+          }
+        }
+      }
     }
     return map
-  }, [overlays])
+  }, [overlays, year, workDays])
 
   const suggestionPreviewByDate = useMemo(() => {
     const map = new Map<string, SuggestionPreviewDayInfo>()

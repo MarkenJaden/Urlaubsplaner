@@ -25,6 +25,18 @@ import {
 } from '@/lib/export'
 import { formatDays, type FlexSummary } from '@/lib/vacation-accounting'
 
+export interface SharedPlanStatSummary {
+  id: string
+  label: string
+  color: string
+  used: number
+  total: number
+  remaining: number
+  workDaysLabel?: string
+  isDifferentWorkWeek?: boolean
+  isLive?: boolean
+}
+
 interface ToolbarProps {
   year: number
   onYearChange: (year: number) => void
@@ -40,8 +52,10 @@ interface ToolbarProps {
   onToggleBridgeDays: (val: boolean) => void
   vacationDaysUsed: number
   vacationDaysTotal: number
+  workDaysLabel?: string
   flex: FlexSummary
   remainingWorkDays: number
+  sharedPlanSummaries?: SharedPlanStatSummary[]
   canUndo: boolean
   onUndo: () => void
   entries: VacationEntry[]
@@ -63,8 +77,9 @@ export function Toolbar({
   showPublicHolidays, onTogglePublicHolidays,
   showSchoolHolidays, onToggleSchoolHolidays,
   showBridgeDays, onToggleBridgeDays,
-  vacationDaysUsed, vacationDaysTotal,
-  flex, remainingWorkDays, canUndo, onUndo,
+  vacationDaysUsed, vacationDaysTotal, workDaysLabel,
+  flex, remainingWorkDays, sharedPlanSummaries = [],
+  canUndo, onUndo,
   entries, preferences, localConfig,
   activeOverlaysCount = 0,
   onOpenSuggestions, onOpenClipboardExport, onOpenShare, onOpenSubscribe,
@@ -315,13 +330,18 @@ export function Toolbar({
       </div>
 
       {/* Compact Stats Bar */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border/60 pt-1.5 text-xs">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border/60 pt-1.5 text-xs">
         <div className="flex min-w-0 items-center gap-1.5">
           <span className="text-muted-foreground">Urlaub:</span>
           <Badge variant={remaining < 0 ? 'destructive' : remaining < 5 ? 'secondary' : 'default'} className="px-1.5 py-0 text-[11px]">
             {formatDays(vacationDaysUsed)}/{formatDays(vacationDaysTotal)}
           </Badge>
           <span className="text-muted-foreground">({formatDays(remaining)} übrig)</span>
+          {workDaysLabel && (
+            <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-normal">
+              {workDaysLabel}
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-1.5">
           <span className="text-muted-foreground">{flex.unit === 'hours' ? 'Gleitstunden:' : 'Gleittage:'}</span>
@@ -333,6 +353,38 @@ export function Toolbar({
           <span className="text-muted-foreground">Verbleibende Arbeitstage:</span>
           <Badge variant="secondary" className="px-1.5 py-0 text-[11px]">{remainingWorkDays}</Badge>
         </div>
+
+        {/* Partner / Shared Plan Remaining Vacation Claim directly in the Year View stats bar */}
+        {sharedPlanSummaries.map(sp => (
+          <div key={sp.id} className="flex items-center gap-1.5 border-l border-border/70 pl-3">
+            <span
+              className="h-2.5 w-2.5 rounded-full shrink-0"
+              style={{ backgroundColor: sp.color }}
+              aria-hidden="true"
+            />
+            {sp.isLive && (
+              <span
+                className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"
+                title="Echtzeit-Synchronisierung aktiv"
+                aria-hidden="true"
+              />
+            )}
+            <span className="font-medium truncate max-w-36">{sp.label}:</span>
+            <Badge
+              variant={sp.remaining < 0 ? 'destructive' : 'outline'}
+              className="px-1.5 py-0 text-[11px]"
+              style={{ borderColor: `${sp.color}66` }}
+            >
+              {formatDays(sp.used)}/{formatDays(sp.total)}
+            </Badge>
+            <span className="text-muted-foreground">({formatDays(sp.remaining)} übrig)</span>
+            {sp.workDaysLabel && (
+              <Badge variant="secondary" className="px-1.5 py-0 text-[10px] font-normal">
+                {sp.workDaysLabel}
+              </Badge>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   )

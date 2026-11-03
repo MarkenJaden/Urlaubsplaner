@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Header } from '@/components/layout/header'
-import { Toolbar } from '@/components/calendar/toolbar'
+import { Toolbar, type SharedPlanStatSummary } from '@/components/calendar/toolbar'
 import { YearView } from '@/components/calendar/year-view'
 import { SettingsPanel } from '@/components/calendar/settings-panel'
 import { SuggestionsPanel } from '@/components/calendar/suggestions-panel'
 import { ClipboardExportDialog } from '@/components/calendar/clipboard-export-dialog'
-import { ShareDialog } from '@/components/calendar/share-dialog'
+import { ShareDialog, GUEST_OWNED_SHARES_STORAGE_KEY, type StoredShareLink } from '@/components/calendar/share-dialog'
 import { SubscribeDialog } from '@/components/calendar/subscribe-dialog'
 import { useVacations, useToggleVacation } from '@/hooks/use-vacations'
 import { useHolidays, useCompareHolidays, useCountries, useCountryHolidays } from '@/hooks/use-holidays'
@@ -22,6 +22,8 @@ import {
   isOffDayKey,
   DEFAULT_WORK_DAYS,
   formatDays,
+  formatWorkDaysLabel,
+  isStandardFiveDayWeek,
   remainingWorkDays as countRemainingWorkDays,
   summarizeFlex,
   summarizeVacation,
@@ -53,7 +55,7 @@ import { parsePreferences, parseEntry, countryChangePatch } from '@/lib/preferen
 import { parseISO, format, eachDayOfInterval, differenceInCalendarDays } from 'date-fns'
 import { de } from 'date-fns/locale'
 import type { EntryType, Holiday, LocalConfig, PreferencesPatch, SharedPlanOverlay } from '@/types'
-import type { DayInfo } from '@/components/calendar/day-cell'
+import type { DayInfo, SharedDayItem } from '@/components/calendar/day-cell'
 
 interface CalendarClientProps {
   userId?: string
@@ -112,6 +114,11 @@ function hasVisibleDayInfo(day: DayInfo | null): day is DayInfo {
 }
 
 function DayInfoDetails({ day }: { day: DayInfo }) {
+  const viewerHasVacationOrFlex = day.entry?.type === 'vacation' || day.entry?.type === 'gleittag'
+  const partnerHasFree = Boolean(
+    day.sharedItems?.some(s => s.type === 'vacation' || s.type === 'gleittag' || s.type === 'off_day'),
+  )
+
   return (
     <>
       <p className="font-medium">{format(day.date, 'dd.MM.yyyy (EEEE)', { locale: de })}</p>
@@ -145,13 +152,33 @@ function DayInfoDetails({ day }: { day: DayInfo }) {
         </p>
       )}
       {Boolean(day.sharedItems?.length) && (
-        <div className="mt-1.5 border-t pt-1.5 space-y-0.5">
+        <div className="mt-1.5 border-t pt-1.5 space-y-1">
+          {viewerHasVacationOrFlex && partnerHasFree && (
+            <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+              🤝 Gemeinsam frei an diesem Tag
+            </p>
+          )}
           {day.sharedItems!.map((shared, i) => (
             <p key={i} className="text-xs flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: shared.color }} />
+              <span
+                className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${
+                  shared.type === 'off_day' ? 'border border-dashed bg-transparent' : ''
+                }`}
+                style={
+                  shared.type === 'off_day'
+                    ? { borderColor: shared.color }
+                    : { backgroundColor: shared.color }
+                }
+              />
               <span className="font-medium">{shared.label}:</span>
               <span>
-                {shared.type === 'vacation' ? 'Urlaub' : shared.type === 'gleittag' ? 'Gleittag' : shared.title || 'Notiz'}
+                {shared.type === 'vacation'
+                  ? 'Urlaub'
+                  : shared.type === 'gleittag'
+                    ? 'Gleittag'
+                    : shared.type === 'off_day'
+                      ? `Regulär frei (${shared.title || 'Teilzeit/4-Tage'})`
+                      : shared.title || 'Notiz'}
               </span>
             </p>
           ))}
@@ -159,6 +186,47 @@ function DayInfoDetails({ day }: { day: DayInfo }) {
       )}
     </>
   )
+}
+
+function mapApiShareToOverlay(
+  shareToken: string,
+  data: Record<string, unknown>,
+  color: string,
+  enabled: boolean,
+): SharedPlanOverlay {
+  const id = `token-${shareToken.slice(0, 10)}`
+  const rawEntries = Array.isArray(data.entries) ? data.entries : []
+  const mappedEntries = rawEntries.map((e: { date: string; type: EntryType; title?: string | null }) => ({
+    date: String(e.date).slice(0, 10),
+    type: e.type,
+    ...(e.title ? { title: e.title } : {}),
+  }))
+  const ownerName = typeof data.ownerName === 'string' && data.ownerName ? data.ownerName : undefined
+  const baseLabel = typeof data.label === 'string' && data.label ? data.label : 'Geteilter Plan'
+  const label = ownerName && !baseLabel.includes(ownerName) ? `${baseLabel} (${ownerName})` : baseLabel
+
+  return {
+    id,
+    label,
+    ownerName,
+    token: shareToken,
+    permission: data.permission === 'edit' ? 'edit' : 'view',
+    color,
+    enabled,
+    country: typeof data.country === 'string' ? data.country : undefined,
+    subdivision: typeof data.subdivision === 'string' ? data.subdivision : undefined,
+    workDays: Array.isArray(data.workDays) ? (data.workDays as number[]) : undefined,
+    vacationDays: typeof data.vacationDays === 'number' ? data.vacationDays : undefined,
+    vacationDaysPerYear:
+      data.vacationDaysPerYear && typeof data.vacationDaysPerYear === 'object'
+        ? (data.vacationDaysPerYear as Record<string, number>)
+        : undefined,
+    halfDaysChristmas: typeof data.halfDaysChristmas === 'boolean' ? data.halfDaysChristmas : undefined,
+    countWeekendsAsVacation:
+      typeof data.countWeekendsAsVacation === 'boolean' ? data.countWeekendsAsVacation : undefined,
+    updatedAt: typeof data.updatedAt === 'string' ? data.updatedAt : undefined,
+    entries: mappedEntries,
+  }
 }
 
 export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: CalendarClientProps) {
@@ -238,7 +306,7 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
         const url = new URL(trimmed, window.location.origin)
         shareSnapshot = url.searchParams.get('share')
         shareToken = url.searchParams.get('shareToken')
-      } else if (trimmed.length > 40) {
+      } else if (trimmed.length > 48 && !trimmed.startsWith('g_')) {
         shareSnapshot = trimmed
       } else {
         shareToken = trimmed
@@ -257,6 +325,10 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
             permission: 'view',
             color,
             enabled: true,
+            country: decoded.country,
+            subdivision: decoded.subdivision,
+            workDays: decoded.workDays,
+            vacationDays: decoded.vacationDays,
             entries: decoded.entries,
           }
           const updated = exists ? prev.map(o => o.id === id ? nextOverlay : o) : [...prev, nextOverlay]
@@ -271,28 +343,19 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
       }
 
       if (shareToken) {
-        const res = await fetch(`/api/shares/${encodeURIComponent(shareToken)}`)
+        const res = await fetch(`/api/shares/${encodeURIComponent(shareToken)}?_t=${Date.now()}`, {
+          cache: 'no-store',
+        })
         if (!res.ok) return false
-        const data = await res.json()
+        const data = (await res.json()) as Record<string, unknown>
         const id = `token-${shareToken.slice(0, 10)}`
-        const mappedEntries = (data.entries ?? []).map((e: { date: string; type: EntryType; title?: string | null }) => ({
-          date: e.date.slice(0, 10),
-          type: e.type,
-          ...(e.title ? { title: e.title } : {}),
-        }))
         setSharedOverlays(prev => {
-          const exists = prev.find(o => o.id === id)
+          const exists = prev.find(o => o.id === id || o.token === shareToken)
           const color = exists?.color ?? OVERLAY_COLORS[prev.length % OVERLAY_COLORS.length]
-          const nextOverlay: SharedPlanOverlay = {
-            id,
-            label: `${data.label} (${data.ownerName})`,
-            token: shareToken,
-            permission: data.permission,
-            color,
-            enabled: true,
-            entries: mappedEntries,
-          }
-          const updated = exists ? prev.map(o => o.id === id ? nextOverlay : o) : [...prev, nextOverlay]
+          const nextOverlay = mapApiShareToOverlay(shareToken, data, color, true)
+          const updated = exists
+            ? prev.map(o => (o.id === id || o.token === shareToken ? nextOverlay : o))
+            : [...prev, nextOverlay]
           try {
             localStorage.setItem(SHARED_OVERLAYS_STORAGE_KEY, JSON.stringify(updated))
           } catch {
@@ -303,9 +366,14 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
         if (data.permission === 'edit') {
           setActiveCollab({
             token: shareToken,
-            label: data.label,
-            ownerName: data.ownerName,
-            entries: data.entries ?? [],
+            label: typeof data.label === 'string' ? data.label : 'Geteilter Plan',
+            ownerName: typeof data.ownerName === 'string' ? data.ownerName : 'Partner',
+            entries: (Array.isArray(data.entries) ? data.entries : []) as Array<{
+              id?: string
+              date: string
+              type: EntryType
+              title?: string | null
+            }>,
           })
         }
         return true
@@ -340,6 +408,10 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
             permission: 'view',
             color,
             enabled: true,
+            country: decoded.country,
+            subdivision: decoded.subdivision,
+            workDays: decoded.workDays,
+            vacationDays: decoded.vacationDays,
             entries: decoded.entries,
           }
           const updated = exists ? prev.map(o => o.id === id ? nextOverlay : o) : [...prev, nextOverlay]
@@ -357,28 +429,19 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
     if (shareToken) {
       void (async () => {
         try {
-          const res = await fetch(`/api/shares/${encodeURIComponent(shareToken)}`)
+          const res = await fetch(`/api/shares/${encodeURIComponent(shareToken)}?_t=${Date.now()}`, {
+            cache: 'no-store',
+          })
           if (!res.ok) return
-          const data = await res.json()
+          const data = (await res.json()) as Record<string, unknown>
           const id = `token-${shareToken.slice(0, 10)}`
-          const mappedEntries = (data.entries ?? []).map((e: { date: string; type: EntryType; title?: string | null }) => ({
-            date: e.date.slice(0, 10),
-            type: e.type,
-            ...(e.title ? { title: e.title } : {}),
-          }))
           setSharedOverlays(prev => {
-            const exists = prev.find(o => o.id === id)
+            const exists = prev.find(o => o.id === id || o.token === shareToken)
             const color = exists?.color ?? OVERLAY_COLORS[prev.length % OVERLAY_COLORS.length]
-            const nextOverlay: SharedPlanOverlay = {
-              id,
-              label: `${data.label} (${data.ownerName})`,
-              token: shareToken,
-              permission: data.permission,
-              color,
-              enabled: true,
-              entries: mappedEntries,
-            }
-            const updated = exists ? prev.map(o => o.id === id ? nextOverlay : o) : [...prev, nextOverlay]
+            const nextOverlay = mapApiShareToOverlay(shareToken, data, color, true)
+            const updated = exists
+              ? prev.map(o => (o.id === id || o.token === shareToken ? nextOverlay : o))
+              : [...prev, nextOverlay]
             try {
               localStorage.setItem(SHARED_OVERLAYS_STORAGE_KEY, JSON.stringify(updated))
             } catch {
@@ -386,16 +449,23 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
             }
             return updated
           })
+          const label = typeof data.label === 'string' ? data.label : 'Geteilter Plan'
+          const ownerName = typeof data.ownerName === 'string' ? data.ownerName : 'Partner'
           if (data.permission === 'edit') {
             setActiveCollab({
               token: shareToken,
-              label: data.label,
-              ownerName: data.ownerName,
-              entries: data.entries ?? [],
+              label,
+              ownerName,
+              entries: (Array.isArray(data.entries) ? data.entries : []) as Array<{
+                id?: string
+                date: string
+                type: EntryType
+                title?: string | null
+              }>,
             })
-            setSyncMessage(`Geteilter Plan „${data.label}“ von ${data.ownerName} geladen. Du kannst ihn vergleichen oder direkt gemeinsam bearbeiten!`)
+            setSyncMessage(`Geteilter Plan „${label}“ von ${ownerName} geladen. Du kannst ihn vergleichen oder direkt gemeinsam bearbeiten!`)
           } else {
-            setSyncMessage(`Geteilter Plan „${data.label}“ von ${data.ownerName} wurde zum Vergleichen eingeblendet.`)
+            setSyncMessage(`Geteilter Plan „${label}“ von ${ownerName} wurde zum Vergleichen eingeblendet.`)
           }
         } catch {
           // ignore
@@ -530,6 +600,219 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
     [entries]
   )
 
+  // ── Real-time synchronization of shared plans ──────────────────────────────
+  // Server-Sent Events push changes instantly; BroadcastChannel syncs other tabs
+  // of the same browser; a short visibility-aware poll covers proxies that buffer SSE.
+  const liveTokens = useMemo(
+    () => [...new Set(sharedOverlays.map(o => o.token).filter((t): t is string => Boolean(t)))].sort(),
+    [sharedOverlays],
+  )
+  const liveTokensKey = liveTokens.join(',')
+  const lastOverlaySignatureRef = useRef(new Map<string, string>())
+  const broadcastRef = useRef<BroadcastChannel | null>(null)
+
+  const refreshLiveOverlays = useCallback(async (onlyTokens?: string[]) => {
+    const targets = onlyTokens?.length ? onlyTokens.filter(t => liveTokens.includes(t)) : liveTokens
+    if (targets.length === 0) return
+    const results = await Promise.all(targets.map(async token => {
+      try {
+        const res = await fetch(`/api/shares/${encodeURIComponent(token)}?_t=${Date.now()}`, { cache: 'no-store' })
+        if (!res.ok) return null
+        return { token, data: (await res.json()) as Record<string, unknown> }
+      } catch {
+        return null
+      }
+    }))
+    const fresh = results.filter((r): r is { token: string; data: Record<string, unknown> } => Boolean(r))
+    if (fresh.length === 0) return
+
+    // Skip state updates when nothing changed to avoid needless re-renders.
+    const changed = fresh.filter(({ token, data }) => {
+      const signature = JSON.stringify([data.entries, data.workDays, data.vacationDays, data.vacationDaysPerYear, data.label, data.permission, data.halfDaysChristmas, data.countWeekendsAsVacation])
+      if (lastOverlaySignatureRef.current.get(token) === signature) return false
+      lastOverlaySignatureRef.current.set(token, signature)
+      return true
+    })
+    if (changed.length === 0) return
+
+    setSharedOverlays(prev => {
+      const updated = prev.map(overlay => {
+        const match = overlay.token ? changed.find(c => c.token === overlay.token) : undefined
+        return match ? mapApiShareToOverlay(match.token, match.data, overlay.color, overlay.enabled) : overlay
+      })
+      try {
+        localStorage.setItem(SHARED_OVERLAYS_STORAGE_KEY, JSON.stringify(updated))
+      } catch {
+        // ignore
+      }
+      return updated
+    })
+    setActiveCollab(prev => {
+      if (!prev) return prev
+      const match = changed.find(c => c.token === prev.token)
+      if (!match) return prev
+      return {
+        ...prev,
+        entries: (Array.isArray(match.data.entries) ? match.data.entries : []) as typeof prev.entries,
+      }
+    })
+  }, [liveTokens])
+
+  const refreshLiveOverlaysRef = useRef(refreshLiveOverlays)
+  useEffect(() => {
+    refreshLiveOverlaysRef.current = refreshLiveOverlays
+  }, [refreshLiveOverlays])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const tokens = liveTokensKey ? liveTokensKey.split(',') : []
+    const refresh = (only?: string[]) => void refreshLiveOverlaysRef.current(only)
+    if (tokens.length > 0) refresh()
+
+    let eventSource: EventSource | null = null
+    if ((tokens.length > 0 || isLoggedIn) && typeof EventSource !== 'undefined') {
+      eventSource = new EventSource(`/api/shares/stream?tokens=${encodeURIComponent(liveTokensKey)}`)
+      eventSource.onmessage = event => {
+        try {
+          const payload = JSON.parse(event.data) as { type?: string; tokens?: string[]; selfUpdated?: boolean }
+          if (payload.type !== 'plan-updated') return
+          if (payload.tokens?.length) refresh(payload.tokens)
+          if (payload.selfUpdated) {
+            void queryClient.invalidateQueries({ queryKey: ['vacations'] })
+            void queryClient.invalidateQueries({ queryKey: ['profile'] })
+          }
+        } catch {
+          // ignore malformed events
+        }
+      }
+    }
+
+    let channel: BroadcastChannel | null = null
+    if (typeof BroadcastChannel !== 'undefined') {
+      channel = new BroadcastChannel('urlaubsplaner-live-sync')
+      channel.onmessage = event => {
+        const data = event.data as { type?: string; tokens?: string[] } | null
+        if (data?.type !== 'plan-updated') return
+        refresh(data.tokens)
+        if (isLoggedIn) void queryClient.invalidateQueries({ queryKey: ['vacations'] })
+      }
+      broadcastRef.current = channel
+    }
+
+    const poll = tokens.length > 0
+      ? window.setInterval(() => {
+          if (document.visibilityState === 'visible') refresh()
+        }, 2500)
+      : undefined
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    window.addEventListener('focus', onVisible)
+    document.addEventListener('visibilitychange', onVisible)
+
+    return () => {
+      eventSource?.close()
+      channel?.close()
+      if (broadcastRef.current === channel) broadcastRef.current = null
+      if (poll) window.clearInterval(poll)
+      window.removeEventListener('focus', onVisible)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [liveTokensKey, isLoggedIn, queryClient])
+
+  // Tell other tabs of this browser that our own plan changed.
+  const ownPlanSignature = useMemo(
+    () => JSON.stringify(baseEntries.map(e => [e.date.slice(0, 10), e.type, e.title ?? ''])),
+    [baseEntries],
+  )
+  const lastOwnPlanSignatureRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (lastOwnPlanSignatureRef.current === null) {
+      lastOwnPlanSignatureRef.current = ownPlanSignature
+      return
+    }
+    if (lastOwnPlanSignatureRef.current === ownPlanSignature) return
+    lastOwnPlanSignatureRef.current = ownPlanSignature
+    broadcastRef.current?.postMessage({ type: 'plan-updated', ts: Date.now() })
+  }, [ownPlanSignature])
+
+  // Guests: push local changes to their own live share links so viewers update instantly.
+  const [guestShareVersion, setGuestShareVersion] = useState(0)
+  useEffect(() => {
+    if (isLoggedIn || !localConfig) return
+    let owned: StoredShareLink[] = []
+    try {
+      const raw = localStorage.getItem(GUEST_OWNED_SHARES_STORAGE_KEY)
+      const parsed = raw ? JSON.parse(raw) : []
+      if (Array.isArray(parsed)) owned = parsed.filter((s: StoredShareLink) => s?.token?.startsWith('g_') && s.ownerSecret)
+    } catch {
+      return
+    }
+    if (owned.length === 0) return
+    const { entries: allEntries } = localConfig
+    // Only send the fields a viewer needs; the server validates them strictly.
+    const guestPreferences = Object.fromEntries(
+      Object.entries({
+        country: localConfig.country,
+        subdivision: localConfig.subdivision,
+        holidayGroup: localConfig.holidayGroup,
+        workDays: localConfig.workDays,
+        vacationDaysPerYear: localConfig.vacationDaysPerYear,
+        halfDaysChristmas: localConfig.halfDaysChristmas,
+        countWeekendsAsVacation: localConfig.countWeekendsAsVacation,
+      }).filter(([, value]) => value !== undefined && value !== null && value !== ''),
+    )
+    const timer = window.setTimeout(() => {
+      for (const share of owned) {
+        const sharedEntries = share.includeNotes === false ? allEntries.filter(e => e.type !== 'note') : allEntries
+        void fetch(`/api/shares/${encodeURIComponent(share.token)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ownerSecret: share.ownerSecret, entries: sharedEntries, preferences: guestPreferences }),
+        }).catch(() => {})
+      }
+      broadcastRef.current?.postMessage({ type: 'plan-updated', tokens: owned.map(s => s.token), ts: Date.now() })
+    }, 400)
+    return () => window.clearTimeout(timer)
+  }, [isLoggedIn, localConfig, guestShareVersion])
+
+  // Remaining vacation claim and workweek model of every embedded shared plan.
+  const sharedPlanSummaries = useMemo<SharedPlanStatSummary[]>(() => sharedOverlays.map(overlay => {
+    const overlayWorkDays = overlay.workDays?.length ? overlay.workDays : DEFAULT_WORK_DAYS
+    const total = vacationBudget({ vacationDays: overlay.vacationDays, vacationDaysPerYear: overlay.vacationDaysPerYear }, year)
+    const yearEntries = overlay.entries
+      .filter(e => e.date.startsWith(`${year}-`))
+      .map((e, i) => ({
+        id: `${overlay.id}-${i}`,
+        userId: 'shared',
+        date: e.date,
+        type: e.type,
+        title: e.title ?? undefined,
+        year,
+        createdAt: '',
+        updatedAt: '',
+      }))
+    // Partner and viewer share the same country in most cases; holidays of the viewer are the best local estimate.
+    const partnerSummary = summarizeVacation(yearEntries, total, {
+      holidayDates: !overlay.country || overlay.country === country ? holidayDates : new Set<string>(),
+      halfDaysChristmas: overlay.halfDaysChristmas ?? true,
+      countWeekendsAsVacation: overlay.countWeekendsAsVacation ?? false,
+      workDays: overlayWorkDays,
+    })
+    const isDifferentWorkWeek = overlayWorkDays.length !== workDays.length || overlayWorkDays.some(d => !workDays.includes(d))
+    return {
+      id: overlay.id,
+      label: overlay.label,
+      color: overlay.color,
+      used: partnerSummary.used,
+      total,
+      remaining: total - partnerSummary.used,
+      workDaysLabel: !isStandardFiveDayWeek(overlayWorkDays) || isDifferentWorkWeek ? formatWorkDaysLabel(overlayWorkDays) : undefined,
+      isDifferentWorkWeek,
+      isLive: Boolean(overlay.token),
+    }
+  }), [sharedOverlays, year, country, holidayDates, workDays])
+
   const updateConfig = useCallback((patch: ConfigPatch) => {
     if (isLoggedIn) {
       const { entries: _entries, ...preferences } = patch
@@ -659,7 +942,8 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
             body: JSON.stringify({ action: 'toggle', date: dateKey, type, title }),
           })
           if (!res.ok) throw new Error()
-          const refreshed = await fetch(`/api/shares/${encodeURIComponent(activeCollab.token)}`)
+          broadcastRef.current?.postMessage({ type: 'plan-updated', tokens: [activeCollab.token], ts: Date.now() })
+          const refreshed = await fetch(`/api/shares/${encodeURIComponent(activeCollab.token)}?_t=${Date.now()}`, { cache: 'no-store' })
           if (refreshed.ok) {
             const data = await refreshed.json()
             setActiveCollab(prev => prev ? { ...prev, entries: data.entries ?? [] } : null)
@@ -931,19 +1215,33 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
 
   // Build map of dateKey -> shared plan entries from visible overlays (when not in edit mode for that same token)
   const sharedOverlayMap = useMemo(() => {
-    const map = new Map<string, Array<{ label: string; color: string; type: EntryType; title?: string }>>()
+    const map = new Map<string, SharedDayItem[]>()
     for (const overlay of sharedOverlays) {
       if (!overlay.enabled) continue
       if (activeCollab && collabMode === 'edit' && overlay.token === activeCollab.token) continue
+      const entryDates = new Set<string>()
       for (const e of overlay.entries) {
         const key = e.date.slice(0, 10)
+        entryDates.add(key)
         const list = map.get(key) ?? []
         list.push({ label: overlay.label, color: overlay.color, type: e.type, title: e.title ?? undefined })
         map.set(key, list)
       }
+      // Different workweek (e.g. partner Mo–Do, viewer Mo–Fr): mark the partner's regular off-days.
+      const overlayWorkDays = overlay.workDays?.length ? overlay.workDays : DEFAULT_WORK_DAYS
+      const differs = overlayWorkDays.length !== workDays.length || overlayWorkDays.some(d => !workDays.includes(d))
+      if (!differs) continue
+      const label = formatWorkDaysLabel(overlayWorkDays)
+      for (const day of eachDayOfInterval({ start: new Date(year, 0, 1), end: new Date(year, 11, 31) })) {
+        const key = format(day, 'yyyy-MM-dd')
+        if (entryDates.has(key) || !isOffDayKey(key, overlayWorkDays) || isOffDayKey(key, workDays)) continue
+        const list = map.get(key) ?? []
+        list.push({ label: overlay.label, color: overlay.color, type: 'off_day', title: label })
+        map.set(key, list)
+      }
     }
     return map
-  }, [sharedOverlays, activeCollab, collabMode])
+  }, [sharedOverlays, activeCollab, collabMode, workDays, year])
 
   const activeDayInfo = useMemo(() => {
     if (!activeDayKey) return null
@@ -1020,8 +1318,14 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
         isLoggedIn={isLoggedIn}
         country={country}
         subdivision={subdivision}
+        workDays={workDays}
+        vacationDaysTotal={vacationDaysTotal}
+        preferences={isLoggedIn ? (prefs as Record<string, unknown>) : ((config ?? {}) as unknown as Record<string, unknown>)}
         entries={entries}
         overlays={sharedOverlays}
+        sharedPlanSummaries={sharedPlanSummaries}
+        onRefreshOverlays={() => refreshLiveOverlays()}
+        onGuestShareCreated={() => setGuestShareVersion(v => v + 1)}
         onToggleOverlay={(id, enabled) =>
           saveSharedOverlays(sharedOverlays.map(o => (o.id === id ? { ...o, enabled } : o)))
         }
@@ -1038,7 +1342,7 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
             setActiveCollab({
               token,
               label: match.label,
-              ownerName: match.label,
+              ownerName: match.ownerName ?? match.label,
               entries: match.entries,
             })
             setCollabMode('edit')
@@ -1305,6 +1609,8 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
           showSchoolHolidays={showSchoolHolidays} onToggleSchoolHolidays={(v) => updateConfig({ showSchoolHolidays: v })}
           showBridgeDays={showBridgeDays} onToggleBridgeDays={(v) => updateConfig({ showBridgeDays: v })}
           vacationDaysUsed={vacationDaysUsed} vacationDaysTotal={vacationDaysTotal}
+          workDaysLabel={!isStandardFiveDayWeek(workDays) ? formatWorkDaysLabel(workDays) : undefined}
+          sharedPlanSummaries={sharedPlanSummaries.filter(s => sharedOverlays.find(o => o.id === s.id)?.enabled)}
           flex={flex} remainingWorkDays={remainingWorkDays}
           canUndo={canUndo}
           onUndo={() => void handleUndo()}

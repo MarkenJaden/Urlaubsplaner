@@ -230,6 +230,8 @@ export interface ShareSnapshotPayload {
   color?: string
   country?: string
   subdivision?: string
+  workDays?: number[]
+  vacationDays?: number
   entries: Array<{ date: string; type: EntryType; title?: string }>
 }
 
@@ -239,6 +241,8 @@ export function encodeSharePayload(payload: ShareSnapshotPayload): string {
     c: payload.color ?? '#10b981',
     co: payload.country,
     s: payload.subdivision,
+    w: payload.workDays,
+    vd: payload.vacationDays,
     e: payload.entries.map(item => [
       item.date.slice(0, 10),
       item.type === 'vacation' ? 'v' : item.type === 'gleittag' ? 'g' : 'n',
@@ -274,11 +278,16 @@ export function decodeSharePayload(encoded: string): ShareSnapshotPayload | null
       const type: EntryType = item[1] === 'g' ? 'gleittag' : item[1] === 'n' ? 'note' : 'vacation'
       entries.push({ date: item[0], type, ...(typeof item[2] === 'string' && item[2] ? { title: item[2] } : {}) })
     }
+    const workDays = Array.isArray(parsed.w)
+      ? parsed.w.filter((d: unknown): d is number => typeof d === 'number' && Number.isInteger(d) && d >= 0 && d <= 6)
+      : undefined
     return {
       label: typeof parsed.l === 'string' && parsed.l.trim() ? parsed.l.trim() : 'Geteilter Plan',
       color: typeof parsed.c === 'string' && /^#[0-9a-fA-F]{6}$/.test(parsed.c) ? parsed.c : '#10b981',
       country: typeof parsed.co === 'string' ? parsed.co : undefined,
       subdivision: typeof parsed.s === 'string' ? parsed.s : undefined,
+      ...(workDays && workDays.length > 0 ? { workDays } : {}),
+      ...(typeof parsed.vd === 'number' && parsed.vd >= 0 && parsed.vd <= 366 ? { vacationDays: parsed.vd } : {}),
       entries,
     }
   } catch {

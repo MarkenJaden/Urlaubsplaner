@@ -4,6 +4,7 @@ import { getUserFromSession } from '@/lib/user'
 import { NextResponse } from 'next/server'
 import { parseEntry } from '@/lib/preferences'
 import { jsonError, readJson, validOrigin } from '@/lib/request'
+import { publishPlanUpdate } from '@/lib/realtime-hub'
 
 export async function GET(request: Request) {
   const session = await auth()
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
     orderBy: { date: 'asc' }
   })
 
-  return NextResponse.json(vacations)
+  return NextResponse.json(vacations, { headers: { 'Cache-Control': 'no-store' } })
 }
 
 export async function POST(request: Request) {
@@ -40,7 +41,6 @@ export async function POST(request: Request) {
   const { date: parsedDate, type, title, year } = entryData
 
   const user = await getUserFromSession(session)
-
 
   const entry = await prisma.vacationEntry.upsert({
     where: {
@@ -60,6 +60,7 @@ export async function POST(request: Request) {
     }
   })
 
+  publishPlanUpdate({ userId: user.id })
   return NextResponse.json(entry)
 }
 
@@ -69,5 +70,6 @@ export async function DELETE(request: Request) {
   const session = await auth()
   if (!session?.user?.id) return jsonError('Unauthorized', 401)
   const { count } = await prisma.vacationEntry.deleteMany({ where: { userId: session.user.id } })
+  publishPlanUpdate({ userId: session.user.id })
   return NextResponse.json({ deleted: count }, { headers: { 'Cache-Control': 'no-store' } })
 }

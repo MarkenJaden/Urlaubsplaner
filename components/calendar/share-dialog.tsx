@@ -1,14 +1,15 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
-import { Share2, Copy, Check, Trash2, Users, Eye, Edit3, Plus, LogIn } from 'lucide-react'
+import { Share2, Copy, Check, Trash2, Users, Eye, Edit3, Plus, RefreshCw } from 'lucide-react'
 import { encodeSharePayload } from '@/lib/export'
+import { formatDays, formatWorkDaysLabel, isStandardFiveDayWeek } from '@/lib/vacation-accounting'
 import type { VacationEntry, SharedPlanOverlay } from '@/types'
+import type { SharedPlanStatSummary } from '@/components/calendar/toolbar'
 
 const COLOR_SWATCHES = [
   { hex: '#10b981', name: 'Smaragd' },
@@ -19,9 +20,12 @@ const COLOR_SWATCHES = [
   { hex: '#ef4444', name: 'Koralle' },
 ]
 
-interface StoredShareLink {
+export const GUEST_OWNED_SHARES_STORAGE_KEY = 'urlaubsplaner_guest_owned_shares_v1'
+
+export interface StoredShareLink {
   id: string
   token: string
+  ownerSecret?: string
   label: string
   permission: 'view' | 'edit'
   includeNotes: boolean
@@ -36,10 +40,16 @@ interface ShareDialogProps {
   entries: VacationEntry[]
   country?: string
   subdivision?: string
+  workDays?: number[]
+  vacationDaysTotal?: number
+  preferences?: Record<string, unknown>
   overlays: SharedPlanOverlay[]
+  sharedPlanSummaries?: SharedPlanStatSummary[]
   onToggleOverlay: (id: string, enabled: boolean) => void
   onRemoveOverlay: (id: string) => void
   onAddOverlayByLink: (linkOrToken: string) => Promise<boolean>
+  onRefreshOverlays?: () => Promise<void>
+  onGuestShareCreated?: (share: StoredShareLink) => void
   activeCollabToken: string | null
   onSelectCollabToken: (token: string | null) => void
 }
@@ -51,10 +61,16 @@ export function ShareDialog({
   entries,
   country,
   subdivision,
+  workDays,
+  vacationDaysTotal = 30,
+  preferences,
   overlays,
+  sharedPlanSummaries = [],
   onToggleOverlay,
   onRemoveOverlay,
   onAddOverlayByLink,
+  onRefreshOverlays,
+  onGuestShareCreated,
   activeCollabToken,
   onSelectCollabToken,
 }: ShareDialogProps) {
@@ -66,6 +82,7 @@ export function ShareDialog({
   const [shares, setShares] = useState<StoredShareLink[]>([])
   const [loadingShares, setLoadingShares] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [externalInput, setExternalInput] = useState('')
   const [addingExternal, setAddingExternal] = useState(false)
@@ -76,7 +93,18 @@ export function ShareDialog({
   }, [])
 
   const fetchShares = useCallback(async () => {
-    if (!isLoggedIn) return
+    if (!isLoggedIn) {
+      try {
+        const raw = localStorage.getItem(GUEST_OWNED_SHARES_STORAGE_KEY)
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          if (Array.isArray(parsed)) setShares(parsed)
+        }
+      } catch {
+        // Ignore
+      }
+      return
+    }
     setLoadingShares(true)
     try {
       const res = await fetch('/api/shares')
@@ -89,8 +117,8 @@ export function ShareDialog({
   }, [isLoggedIn])
 
   useEffect(() => {
-    if (open && isLoggedIn) void fetchShares()
-  }, [open, isLoggedIn, fetchShares])
+    if (open) void fetchShares()
+  }, [open, fetchShares])
 
   const handleCopySnapshotUrl = async () => {
     const filtered = entries
@@ -101,6 +129,8 @@ export function ShareDialog({
       color,
       country,
       subdivision,
+      workDays,
+      vacationDays: vacationDaysTotal,
       entries: filtered,
     })
     const url = `${origin}/?share=${encoded}`
@@ -122,14 +152,45 @@ export function ShareDialog({
     setCreating(true)
     setError('')
     try {
+      const payload: Record<string, unknown> = { label, permission, includeNotes, color }
+      if (!isLoggedIn) {
+        payload.entries = entries.map(e => ({
+          date: e.date.slice(0, 10),
+          type: e.type,
+          ...(e.title ? { title: e.title } : {}),
+        }))
+        payload.preferences = {
+          ...(preferences ?? {}),
+          country,
+          subdivision,
+          workDays,
+          vacationDays: vacationDaysTotal,
+        }
+      }
+
       const res = await fetch('/api/shares', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label, permission, includeNotes, color }),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Freigabe-Link konnte nicht erstellt werden.')
-      setShares(prev => [data, ...prev])
+
+      setShares(prev => {
+        const next = [data as StoredShareLink, ...prev]
+        if (!isLoggedIn) {
+          try {
+            localStorage.setItem(GUEST_OWNED_SHARES_STORAGE_KEY, JSON.stringify(next))
+          } catch {
+            // Ignore
+          }
+        }
+        return next
+      })
+      if (!isLoggedIn && data.ownerSecret) {
+        onGuestShareCreated?.(data as StoredShareLink)
+      }
+
       const liveUrl = `${origin}/?shareToken=${data.token}`
       await navigator.clipboard.writeText(liveUrl).catch(() => {})
       setCopiedId(data.id)
@@ -146,10 +207,25 @@ export function ShareDialog({
     }
   }
 
-  const handleDeleteShare = async (id: string) => {
+  const handleDeleteShare = async (share: StoredShareLink) => {
     try {
-      const res = await fetch(`/api/shares?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
-      if (res.ok) setShares(prev => prev.filter(s => s.id !== id))
+      const query = share.ownerSecret
+        ? `id=${encodeURIComponent(share.id)}&ownerSecret=${encodeURIComponent(share.ownerSecret)}`
+        : `id=${encodeURIComponent(share.id)}`
+      const res = await fetch(`/api/shares?${query}`, { method: 'DELETE' })
+      if (res.ok || !isLoggedIn) {
+        setShares(prev => {
+          const next = prev.filter(s => s.id !== share.id)
+          if (!isLoggedIn) {
+            try {
+              localStorage.setItem(GUEST_OWNED_SHARES_STORAGE_KEY, JSON.stringify(next))
+            } catch {
+              // Ignore
+            }
+          }
+          return next
+        })
+      }
     } catch {
       setError('Freigabe konnte nicht gelöscht werden.')
     }
@@ -175,6 +251,16 @@ export function ShareDialog({
     }
   }
 
+  const handleManualRefresh = async () => {
+    if (!onRefreshOverlays) return
+    setRefreshing(true)
+    try {
+      await onRefreshOverlays()
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -182,7 +268,7 @@ export function ShareDialog({
           <Share2 className="h-5 w-5 text-primary" /> Urlaubsplanung teilen & gemeinsam planen
         </DialogTitle>
         <p className="text-sm text-muted-foreground mb-3">
-          Teile deinen Urlaubsplan zum Ansehen und Einblenden im Kalender anderer Personen oder plant euren Urlaub direkt gemeinsam.
+          Erstelle einen <strong>Echtzeit-Freigabe-Link</strong>, damit Partner, Familie oder Kollegen deine Planung live in ihrem Kalender sehen oder direkt mitbearbeiten können.
         </p>
 
         {error && (
@@ -194,7 +280,7 @@ export function ShareDialog({
         {/* Konfiguration für neuen Link */}
         <div className="mb-4 rounded-xl border bg-muted/20 p-3.5 space-y-3 text-sm">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">
-            1. Deinen Plan teilen
+            1. Deinen Plan in Echtzeit teilen
           </span>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="space-y-1 text-xs">
@@ -204,7 +290,7 @@ export function ShareDialog({
                 maxLength={60}
                 value={label}
                 onChange={e => setLabel(e.target.value)}
-                placeholder="z.B. Jans Urlaub 2026"
+                placeholder="z.B. Jans Urlaub"
                 className="min-h-10 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
               />
             </label>
@@ -241,7 +327,7 @@ export function ShareDialog({
                 <Eye className="h-3.5 w-3.5 text-primary shrink-0" />
                 <div>
                   <div>Nur ansehen</div>
-                  <div className="text-[10px] text-muted-foreground">Zum Einblenden</div>
+                  <div className="text-[10px] text-muted-foreground">Live einblenden</div>
                 </div>
               </button>
               <button
@@ -267,78 +353,83 @@ export function ShareDialog({
           </div>
 
           <div className="flex flex-wrap gap-2 pt-1">
-            {isLoggedIn ? (
-              <Button type="button" onClick={handleCreateLiveShare} disabled={creating}>
-                <Plus className="h-4 w-4" />
-                {creating ? 'Erstelle Link…' : `Live-Freigabe-Link erstellen (${permission === 'edit' ? 'Bearbeitbar' : 'Nur Ansicht'})`}
-              </Button>
-            ) : (
-              <div className="w-full rounded-lg border border-primary/30 bg-primary/5 p-2.5 text-xs flex flex-wrap items-center justify-between gap-2">
-                <span>
-                  Für <strong>Live-Synchronisierung & gemeinsames Bearbeiten</strong> einfach kurz anmelden:
-                </span>
-                <Button size="sm" variant="outline" asChild>
-                  <Link href="/login"><LogIn className="h-3.5 w-3.5" /> Anmelden / Registrieren</Link>
-                </Button>
-              </div>
-            )}
-            <Button type="button" variant="secondary" onClick={handleCopySnapshotUrl}>
+            <Button type="button" onClick={handleCreateLiveShare} disabled={creating}>
+              <Plus className="h-4 w-4" />
+              {creating ? 'Erstelle Live-Link…' : `Live-Freigabe-Link erstellen & kopieren (${permission === 'edit' ? 'Bearbeitbar' : 'Echtzeit-Ansicht'})`}
+            </Button>
+            <Button type="button" variant="outline" onClick={handleCopySnapshotUrl} title="Statische Kopie ohne Live-Synchronisierung">
               {copiedId === 'snapshot' ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-              {copiedId === 'snapshot' ? 'Schnell-Link kopiert!' : 'Schnell-Link kopieren (Momentaufnahme)'}
+              {copiedId === 'snapshot' ? 'Statischer Link kopiert!' : 'Statische Momentaufnahme kopieren'}
             </Button>
           </div>
         </div>
 
-        {/* Aktive Live-Freigabe-Links des Kontos */}
-        {isLoggedIn && (
-          <div className="mb-4 space-y-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">
-              2. Deine aktiven Live-Freigabe-Links
-            </span>
-            {loadingShares ? (
-              <p className="text-xs text-muted-foreground">Lade Freigaben…</p>
-            ) : shares.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Noch keine aktiven Live-Freigabe-Links erstellt.</p>
-            ) : (
-              <div className="space-y-2">
-                {shares.map(s => (
-                  <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2 text-xs">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-                      <span className="font-medium truncate">{s.label}</span>
-                      <Badge variant={s.permission === 'edit' ? 'default' : 'secondary'} className="text-[10px]">
-                        {s.permission === 'edit' ? '✏️ Bearbeitbar' : '👁️ Nur Ansicht'}
-                      </Badge>
-                      {s.includeNotes && <Badge variant="outline" className="text-[10px]">inkl. Notizen</Badge>}
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button size="sm" variant="outline" onClick={() => handleCopyLiveLink(s)}>
-                        {copiedId === s.id ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
-                        {copiedId === s.id ? 'Kopiert!' : 'Link kopieren'}
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => handleDeleteShare(s.id)}
-                        aria-label="Freigabe widerrufen"
-                        title="Freigabe widerrufen"
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
+        {/* Aktive Live-Freigabe-Links */}
+        <div className="mb-4 space-y-2">
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">
+            2. Deine aktiven Live-Freigabe-Links
+          </span>
+          {loadingShares ? (
+            <p className="text-xs text-muted-foreground">Lade Freigaben…</p>
+          ) : shares.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Noch keine aktiven Live-Freigabe-Links erstellt.</p>
+          ) : (
+            <div className="space-y-2">
+              {shares.map(s => (
+                <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                    <span className="font-medium truncate">{s.label}</span>
+                    <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
+                      ● Echtzeit
+                    </Badge>
+                    <Badge variant={s.permission === 'edit' ? 'default' : 'secondary'} className="text-[10px]">
+                      {s.permission === 'edit' ? '✏️ Bearbeitbar' : '👁️ Nur Ansicht'}
+                    </Badge>
+                    {s.includeNotes && <Badge variant="outline" className="text-[10px]">inkl. Notizen</Badge>}
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+                  <div className="flex items-center gap-1">
+                    <Button size="sm" variant="outline" onClick={() => handleCopyLiveLink(s)}>
+                      {copiedId === s.id ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                      {copiedId === s.id ? 'Kopiert!' : 'Link kopieren'}
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => handleDeleteShare(s)}
+                      aria-label="Freigabe widerrufen"
+                      title="Freigabe widerrufen"
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Eingeblendete Pläne anderer Personen */}
         <div className="space-y-2.5">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-            <Users className="h-3.5 w-3.5" /> {isLoggedIn ? '3.' : '2.'} Pläne anderer Personen einblenden oder mitbearbeiten
-          </span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Users className="h-3.5 w-3.5" /> 3. Pläne anderer Personen einblenden oder mitbearbeiten
+            </span>
+            {overlays.some(o => Boolean(o.token)) && onRefreshOverlays && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs gap-1"
+                disabled={refreshing}
+                onClick={() => void handleManualRefresh()}
+              >
+                <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+                Jetzt synchronisieren
+              </Button>
+            )}
+          </div>
           <div className="flex gap-2">
             <input
               type="text"
@@ -354,15 +445,18 @@ export function ShareDialog({
 
           {overlays.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              Aktuell sind keine fremden Pläne eingeblendet. Öffne einen geteilten Link oder füge ihn oben ein, um den Urlaub von Partnern, Freunden oder Kollegen in deinem Kalender zu sehen.
+              Aktuell sind keine fremden Pläne eingeblendet. Öffne einen geteilten Link oder füge ihn oben ein, um den Urlaub von Partnern, Freunden oder Kollegen in Echtzeit in deinem Kalender zu sehen.
             </p>
           ) : (
             <div className="space-y-2">
               {overlays.map(ov => {
                 const isEditingThis = activeCollabToken !== null && ov.token === activeCollabToken
+                const stat = sharedPlanSummaries.find(s => s.id === ov.id)
+                const wdLabel = formatWorkDaysLabel(ov.workDays)
+                const isCustomWd = !isStandardFiveDayWeek(ov.workDays)
                 return (
                   <div key={ov.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2 text-xs">
-                    <div className="flex items-center gap-2 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2 min-w-0">
                       <Switch
                         checked={ov.enabled}
                         onCheckedChange={v => onToggleOverlay(ov.id, v)}
@@ -370,7 +464,25 @@ export function ShareDialog({
                       />
                       <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: ov.color }} />
                       <span className="font-medium truncate">{ov.label}</span>
-                      <span className="text-muted-foreground">({ov.entries.length} Tage)</span>
+                      {ov.token ? (
+                        <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
+                          ● Live
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="text-[10px]">
+                          Momentaufnahme
+                        </Badge>
+                      )}
+                      {stat && (
+                        <Badge variant="outline" className="text-[10px]">
+                          Urlaub: {formatDays(stat.used)}/{formatDays(stat.total)} ({formatDays(stat.remaining)} übrig)
+                        </Badge>
+                      )}
+                      {isCustomWd && (
+                        <Badge variant="secondary" className="text-[10px]">
+                          {wdLabel}
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex items-center gap-1.5">
                       {ov.permission === 'edit' && ov.token && (
