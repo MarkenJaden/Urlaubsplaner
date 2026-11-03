@@ -1,6 +1,7 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { getUserFromSession } from '@/lib/user'
+import { isUserAdmin } from '@/lib/admin'
 import { NextResponse } from 'next/server'
 import { mergePreferences, parsePreferences } from '@/lib/preferences'
 import { jsonError, readJson, validOrigin } from '@/lib/request'
@@ -10,7 +11,19 @@ export async function GET() {
   const session = await auth()
   if (!session?.user?.id) return jsonError('Unauthorized', 401)
   const user = await getUserFromSession(session)
-  return NextResponse.json({ id: user.id, name: user.name, email: user.email, username: user.username, hasLocalAccount: Boolean(user.passwordHash), calendarToken: user.calendarToken, preferences: user.preferences }, { headers: { 'Cache-Control': 'no-store' } })
+  return NextResponse.json(
+    {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      username: user.username,
+      hasLocalAccount: Boolean(user.passwordHash),
+      calendarToken: user.calendarToken,
+      preferences: user.preferences,
+      isAdmin: isUserAdmin(user),
+    },
+    { headers: { 'Cache-Control': 'no-store' } }
+  )
 }
 
 export async function PATCH(request: Request) {

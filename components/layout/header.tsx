@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
-import { Settings, LogOut, LogIn } from 'lucide-react'
+import { Settings, LogOut, LogIn, BarChart3 } from 'lucide-react'
 import { ThemeToggle } from './theme-toggle'
 
 interface HeaderProps {
@@ -22,6 +22,11 @@ export function Header({ isLoggedIn }: HeaderProps) {
         <nav className="flex shrink-0 items-center gap-1 sm:gap-2">
           {isLoggedIn ? (
             <>
+              <Button variant="ghost" size="icon" asChild title="Admin-Dashboard" aria-label="Admin-Dashboard">
+                <Link href="/admin">
+                  <BarChart3 className="h-4 w-4" />
+                </Link>
+              </Button>
               <Button variant="ghost" size="icon" asChild title="Einstellungen" aria-label="Einstellungen">
                 <Link href="/settings">
                   <Settings className="h-4 w-4" />

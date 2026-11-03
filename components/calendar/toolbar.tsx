@@ -1,12 +1,17 @@
 'use client'
 
 import { useRef } from 'react'
-import { ChevronLeft, ChevronRight, Sparkles, Download, Upload, Printer, Settings2, MoreHorizontal, Clipboard, FileJson, CalendarDays, Trash2, Undo2 } from 'lucide-react'
+import {
+  ChevronLeft, ChevronRight, Sparkles, Download, Upload, Printer,
+  Settings2, MoreHorizontal, Clipboard, FileJson, CalendarDays,
+  Trash2, Undo2, Share2,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -14,7 +19,7 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import type { EntryType, VacationEntry, LocalConfig } from '@/types'
 import {
-  exportToCSV, exportToClipboardText, downloadFile,
+  exportToCSV, downloadFile,
   exportToJSON, exportToICS, parseImportFile,
   exportConfigJSON, parseConfigJSON,
 } from '@/lib/export'
@@ -42,7 +47,11 @@ interface ToolbarProps {
   entries: VacationEntry[]
   preferences: Record<string, unknown>
   localConfig?: LocalConfig | null
+  activeOverlaysCount?: number
   onOpenSuggestions: () => void
+  onOpenClipboardExport?: () => void
+  onOpenShare?: () => void
+  onOpenSubscribe?: () => void
   onImport: (data: { vacations: Array<{ date: string; type: string; title?: string }>; preferences?: Record<string, unknown> }) => void
   onImportConfig?: (config: Record<string, unknown>) => void
   onReset: () => void
@@ -57,7 +66,9 @@ export function Toolbar({
   vacationDaysUsed, vacationDaysTotal,
   flex, remainingWorkDays, canUndo, onUndo,
   entries, preferences, localConfig,
-  onOpenSuggestions, onImport, onImportConfig, onReset,
+  activeOverlaysCount = 0,
+  onOpenSuggestions, onOpenClipboardExport, onOpenShare, onOpenSubscribe,
+  onImport, onImportConfig, onReset,
 }: ToolbarProps) {
   const remaining = vacationDaysTotal - vacationDaysUsed
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -65,10 +76,6 @@ export function Toolbar({
 
   const handleExportCSV = () => {
     downloadFile(exportToCSV(entries), `urlaubsplaner-${year}.csv`)
-  }
-
-  const handleExportClipboard = async () => {
-    await navigator.clipboard.writeText(exportToClipboardText(entries))
   }
 
   const handleExportJSON = () => {
@@ -134,21 +141,36 @@ export function Toolbar({
         </Button>
       </div>
 
-      {/* Entry Type Selector */}
-      <div className="grid grid-cols-3 gap-1 md:flex">
-        <Button size="sm" variant={selectedType === 'vacation' ? 'default' : 'outline'}
+      {/* Entry Type Selector with Hotkey Hints */}
+      <div className="grid grid-cols-3 gap-1 md:flex" role="group" aria-label="Eintragstyp auswählen">
+        <Button
+          size="sm"
+          variant={selectedType === 'vacation' ? 'default' : 'outline'}
           onClick={() => onTypeChange('vacation')}
-          aria-pressed={selectedType === 'vacation'} className={selectedType === 'vacation' ? 'bg-blue-500 hover:bg-blue-600' : ''}>
-          Urlaub
+          aria-pressed={selectedType === 'vacation'}
+          title="Urlaub eintragen (Tastenkürzel: U)"
+          className={selectedType === 'vacation' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
+        >
+          Urlaub <span className="hidden sm:inline text-[11px] opacity-80">(U)</span>
         </Button>
-        <Button size="sm" variant={selectedType === 'gleittag' ? 'default' : 'outline'}
+        <Button
+          size="sm"
+          variant={selectedType === 'gleittag' ? 'default' : 'outline'}
           onClick={() => onTypeChange('gleittag')}
-          aria-pressed={selectedType === 'gleittag'} className={selectedType === 'gleittag' ? 'bg-purple-500 hover:bg-purple-600' : ''}>
-          Gleittag
+          aria-pressed={selectedType === 'gleittag'}
+          title="Gleittag eintragen (Tastenkürzel: G)"
+          className={selectedType === 'gleittag' ? 'bg-purple-600 hover:bg-purple-700 text-white' : ''}
+        >
+          Gleittag <span className="hidden sm:inline text-[11px] opacity-80">(G)</span>
         </Button>
-        <Button size="sm" variant={selectedType === 'note' ? 'default' : 'outline'}
-          onClick={() => onTypeChange('note')} aria-pressed={selectedType === 'note'}>
-          Notiz
+        <Button
+          size="sm"
+          variant={selectedType === 'note' ? 'default' : 'outline'}
+          onClick={() => onTypeChange('note')}
+          aria-pressed={selectedType === 'note'}
+          title="Notiz eintragen (Tastenkürzel: N)"
+        >
+          Notiz <span className="hidden sm:inline text-[11px] opacity-80">(N)</span>
         </Button>
       </div>
 
@@ -174,70 +196,122 @@ export function Toolbar({
 
       {/* Actions */}
       <TooltipProvider delayDuration={0}>
-        <div className="grid grid-cols-[2.75rem_1fr_2.75rem] gap-2 md:flex md:items-center">
-          <Button size="icon" variant="outline" onClick={onUndo} disabled={!canUndo} aria-label="Rückgängig" title="Letzte Änderung rückgängig machen">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button size="icon" variant="outline" onClick={onUndo} disabled={!canUndo} aria-label="Rückgängig" title="Letzte Änderung rückgängig machen (Strg+Z)">
             <Undo2 className="h-4 w-4" />
           </Button>
-          <Button size="sm" variant="outline" onClick={onOpenSuggestions}>
+          <Button size="sm" variant="default" onClick={onOpenSuggestions} className="gap-1.5">
             <Sparkles className="h-4 w-4" />
             Planen
           </Button>
+          {onOpenShare && (
+            <Button size="sm" variant="outline" onClick={onOpenShare} className="gap-1.5">
+              <Share2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Teilen</span>
+              {activeOverlaysCount > 0 && (
+                <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                  {activeOverlaysCount}
+                </Badge>
+              )}
+            </Button>
+          )}
+          {onOpenSubscribe && (
+            <Button size="sm" variant="outline" onClick={onOpenSubscribe} className="gap-1.5" title="Mit Google Kalender, Apple oder Outlook verbinden">
+              <CalendarDays className="h-4 w-4" />
+              <span className="hidden lg:inline">Kalender-Abo</span>
+            </Button>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="icon" variant="outline" aria-label="Weitere Aktionen">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" className="w-64">
+              <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                Weitergeben & Kopieren
+              </div>
+              <DropdownMenuItem onClick={onOpenClipboardExport}>
+                <Clipboard className="h-4 w-4 text-primary" />
+                <div className="flex flex-col">
+                  <span>Text kopieren / Vorlagen…</span>
+                  <span className="text-[11px] text-muted-foreground">Mit Vorschau & Filter (E-Mail, Chat, Tabelle)</span>
+                </div>
+              </DropdownMenuItem>
+              {onOpenShare && (
+                <DropdownMenuItem onClick={onOpenShare}>
+                  <Share2 className="h-4 w-4 text-primary" />
+                  <div className="flex flex-col">
+                    <span>Urlaub teilen & einblenden…</span>
+                    <span className="text-[11px] text-muted-foreground">Link für Partner, Team oder Mitbearbeitung</span>
+                  </div>
+                </DropdownMenuItem>
+              )}
+              {onOpenSubscribe && (
+                <DropdownMenuItem onClick={onOpenSubscribe}>
+                  <CalendarDays className="h-4 w-4 text-primary" />
+                  <div className="flex flex-col">
+                    <span>Kalender abonnieren…</span>
+                    <span className="text-[11px] text-muted-foreground">Google Kalender, Apple & Outlook</span>
+                  </div>
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={handlePrint}>
+                <Printer className="h-4 w-4" />
+                <span>Drucken / Als PDF speichern</span>
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+              <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">
+                Datei-Export ({year})
+              </div>
               <DropdownMenuItem onClick={handleExportCSV}>
                 <Download className="h-4 w-4" />
-                CSV Export
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportClipboard}>
-                <Clipboard className="h-4 w-4" />
-                In Zwischenablage
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleExportJSON}>
-                <FileJson className="h-4 w-4" />
-                JSON Export
+                <span>CSV-Tabelle (Excel)</span>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleExportICS}>
                 <CalendarDays className="h-4 w-4" />
-                ICS Kalender Export
+                <span>ICS-Kalenderdatei (.ics)</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportJSON}>
+                <FileJson className="h-4 w-4" />
+                <span>Komplett-Backup (.json)</span>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleExportConfig}>
                 <Settings2 className="h-4 w-4" />
-                Konfiguration exportieren
+                <span>Einstellungen exportieren</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handlePrint}>
-                <Printer className="h-4 w-4" />
-                Drucken / PDF
-              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+              <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">
+                Datei-Import
+              </div>
               <DropdownMenuItem onClick={handleImportClick}>
                 <Upload className="h-4 w-4" />
-                Daten importieren
+                <span>Planung importieren (.json)</span>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleConfigImportClick}>
                 <Settings2 className="h-4 w-4" />
-                Konfiguration importieren
+                <span>Einstellungen importieren (.json)</span>
               </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleReset} className="text-red-500 focus:text-red-600">
                 <Trash2 className="h-4 w-4" />
-                Planung zurücksetzen
+                <span>Planung zurücksetzen</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
         <input ref={fileInputRef} type="file" accept=".json" className="hidden" onChange={handleImportFile} />
         <input ref={configInputRef} type="file" accept=".json" className="hidden" onChange={handleConfigImportFile} />
-
       </TooltipProvider>
 
       {/* Stats */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm md:basis-full">
         <div className="flex min-w-0 items-center gap-1.5">
           <span className="text-muted-foreground">Urlaub:</span>
-          <Badge variant={remaining < 5 ? 'destructive' : 'default'}>
+          <Badge variant={remaining < 0 ? 'destructive' : remaining < 5 ? 'secondary' : 'default'}>
             {formatDays(vacationDaysUsed)}/{formatDays(vacationDaysTotal)}
           </Badge>
           <span className="text-xs text-muted-foreground">({formatDays(remaining)} übrig)</span>
@@ -249,7 +323,7 @@ export function Toolbar({
           </Badge>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-muted-foreground">Arbeitstage:</span>
+          <span className="text-muted-foreground">Verbleibende Arbeitstage:</span>
           <Badge variant="secondary">{remainingWorkDays}</Badge>
         </div>
       </div>

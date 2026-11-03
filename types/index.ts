@@ -14,6 +14,7 @@ export interface VacationEntry {
 export interface UserProfile {
   username?: string | null
   hasLocalAccount: boolean
+  isAdmin?: boolean
   id: string
   name?: string | null
   email?: string | null
@@ -22,9 +23,13 @@ export interface UserProfile {
 }
 
 export interface UserPreferences extends Partial<Omit<LocalConfig, 'entries'>> {
+  feedIncludeVacations?: boolean
+  feedIncludeGleittage?: boolean
   feedIncludePublicHolidays?: boolean
   feedIncludeSchoolHolidays?: boolean
   feedIncludeNotes?: boolean
+  feedIncludeNoteTitles?: boolean
+  feedIncludeBridgeDays?: boolean
   /** Legacy single budget; vacationDaysPerYear takes precedence. */
   vacationDays?: number
 }
@@ -73,6 +78,16 @@ export interface Country {
   officialLanguages: string[]
 }
 
+export interface SharedPlanOverlay {
+  id: string
+  label: string
+  color: string
+  enabled: boolean
+  permission: 'view' | 'edit'
+  token?: string
+  entries: Array<{ date: string; type: EntryType; title?: string | null }>
+}
+
 export interface LocalConfig {
   /** Home country (ISO 3166-1 alpha-2); defaults to DE. */
   country?: string
@@ -101,9 +116,26 @@ export interface LocalConfig {
 
 export type SuggestionMode = 'extend' | 'overwrite' | 'rest_of_year'
 
-export type NoteHandling = 'avoid' | 'prefer'
+export type NoteHandling = 'avoid' | 'prefer' | 'ignore'
+
+export type SchoolHolidayStrategy = 'neutral' | 'prefer' | 'avoid' | 'avoid_heatmap'
+
+export type OptimizationGoal = 'balanced' | 'max_efficiency' | 'long_breaks' | 'distributed'
+
+export interface PeriodPreference {
+  id?: string
+  type: 'must_have' | 'nice_to_have' | 'exact_range' | 'avoid_months'
+  months: number[]
+  startDate?: string
+  endDate?: string
+  minDuration: number
+  exactDays?: number | null
+  label?: string
+}
 
 export interface PlanningPreferences {
+  goal?: OptimizationGoal
+  schoolStrategy?: SchoolHolidayStrategy
   preferBridgeDays: boolean
   optimizeForEfficiency: boolean
   preferSchoolHolidays: boolean
@@ -111,20 +143,20 @@ export interface PlanningPreferences {
   avoidAllStatesSchoolHolidays: boolean
   distributeEvenly: boolean
   noteHandling: NoteHandling
-  noteOverlapAvoidMultiplier: number
-  noteOverlapPreferMultiplier: number
+  noteOverlapAvoidMultiplier?: number
+  noteOverlapPreferMultiplier?: number
   minDaysPerBlock: number
-  maxDaysPerBlock?: number
+  maxDaysPerBlock?: number | null
+  minGapDaysBetweenBlocks?: number
+  reserveDaysToKeep?: number
+  allowSingleDayBridges?: boolean
+  avoidMonths?: number[]
   periodPreferences: PeriodPreference[]
 }
 
-export interface PeriodPreference {
-  type: 'must' | 'nice'
-  months: number[]
-  minDuration: number
-}
-
 export const DEFAULT_PLANNING_PREFS: PlanningPreferences = {
+  goal: 'balanced',
+  schoolStrategy: 'neutral',
   preferBridgeDays: true,
   optimizeForEfficiency: false,
   preferSchoolHolidays: false,
@@ -135,5 +167,10 @@ export const DEFAULT_PLANNING_PREFS: PlanningPreferences = {
   noteOverlapAvoidMultiplier: 0.2,
   noteOverlapPreferMultiplier: 1.35,
   minDaysPerBlock: 1,
+  maxDaysPerBlock: null,
+  minGapDaysBetweenBlocks: 14,
+  reserveDaysToKeep: 0,
+  allowSingleDayBridges: true,
+  avoidMonths: [],
   periodPreferences: [],
 }

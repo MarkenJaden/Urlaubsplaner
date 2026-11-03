@@ -2,8 +2,8 @@
 
 import { useMemo } from 'react'
 import { MonthGrid } from './month-grid'
-import type { DayInfo } from './day-cell'
-import type { VacationEntry, Holiday, EntryType } from '@/types'
+import type { DayInfo, SharedDayItem } from './day-cell'
+import type { VacationEntry, Holiday, EntryType, SharedPlanOverlay } from '@/types'
 import type { BridgeDay } from '@/lib/bridge-days'
 import { countHolidayStates } from '@/lib/holidays'
 
@@ -14,6 +14,7 @@ interface YearViewProps {
   schoolHolidays: Holiday[]
   compareHolidays?: Holiday[][]
   compareLabels?: string[]
+  overlays?: SharedPlanOverlay[]
   showHeatmap: boolean
   showPublicHolidays: boolean
   showSchoolHolidays: boolean
@@ -30,7 +31,7 @@ interface YearViewProps {
 
 export function YearView({
   year, entries, publicHolidays, schoolHolidays,
-  compareHolidays = [], compareLabels = [], showHeatmap, showPublicHolidays,
+  compareHolidays = [], compareLabels = [], overlays = [], showHeatmap, showPublicHolidays,
   showSchoolHolidays, bridgeDaySet, bridgeDayMap,
   showBridgeDays, showOtherMonthDays, overBudgetDates,
   onToggle, selectedType, onHover, onSelectDate,
@@ -53,6 +54,20 @@ export function YearView({
     return map
   }, [compareHolidays, compareLabels, showHeatmap])
 
+  const sharedByDate = useMemo(() => {
+    const map = new Map<string, SharedDayItem[]>()
+    for (const ov of overlays) {
+      if (!ov.enabled) continue
+      for (const e of ov.entries) {
+        const key = e.date.slice(0, 10)
+        const list = map.get(key) ?? []
+        list.push({ label: ov.label, color: ov.color, type: e.type, title: e.title })
+        map.set(key, list)
+      }
+    }
+    return map
+  }, [overlays])
+
   const months = Array.from({ length: 12 }, (_, i) => new Date(year, i, 1))
 
   return (
@@ -66,6 +81,7 @@ export function YearView({
           schoolHolidays={showSchoolHolidays ? schoolHolidays : []}
           heatmapData={heatmapData}
           comparisonByDate={comparisonByDate}
+          sharedByDate={sharedByDate}
           showHeatmap={showHeatmap}
           bridgeDaySet={bridgeDaySet}
           bridgeDayMap={bridgeDayMap}

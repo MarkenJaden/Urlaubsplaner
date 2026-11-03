@@ -7,7 +7,7 @@ import {
 } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { DayCell } from './day-cell'
-import type { DayInfo } from './day-cell'
+import type { DayInfo, SharedDayItem } from './day-cell'
 import type { VacationEntry, Holiday, EntryType } from '@/types'
 import type { BridgeDay } from '@/lib/bridge-days'
 
@@ -20,6 +20,7 @@ interface MonthGridProps {
   schoolHolidays: Holiday[]
   heatmapData?: Map<string, number>
   comparisonByDate?: Map<string, string[]>
+  sharedByDate?: Map<string, SharedDayItem[]>
   showHeatmap: boolean
   bridgeDaySet: Set<string>
   bridgeDayMap: Map<string, BridgeDay>
@@ -34,7 +35,7 @@ interface MonthGridProps {
 
 export function MonthGrid({
   date, entries, publicHolidays, schoolHolidays,
-  heatmapData, comparisonByDate, showHeatmap, bridgeDaySet, bridgeDayMap,
+  heatmapData, comparisonByDate, sharedByDate, showHeatmap, bridgeDaySet, bridgeDayMap,
   showBridgeDays, showOtherMonthDays, overBudgetDates,
   onToggle, selectedType, onHover, onSelectDate,
 }: MonthGridProps) {
@@ -47,7 +48,7 @@ export function MonthGrid({
   const monthName = format(date, 'MMMM yyyy', { locale: de })
 
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
+    <div className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-border/70 bg-card/60 p-2.5 shadow-2xs">
       <h3 className="text-center text-base font-semibold text-foreground capitalize sm:text-sm">
         {monthName}
       </h3>
@@ -71,6 +72,7 @@ export function MonthGrid({
               isOtherMonth={!isSameMonth(day, date)}
               heatmapValue={heatmapData?.get(key)}
               comparisonStates={comparisonByDate?.get(key)}
+              sharedItems={sharedByDate?.get(key)}
               showHeatmap={showHeatmap}
               isPast={isBefore(day, today)}
               isOverBudget={overBudgetDates.has(key)}

@@ -1,7 +1,22 @@
 import type { EntryType, PreferencesPatch, UserPreferences } from '@/types'
 import { DEFAULT_COUNTRY, isCountryCode, isRegionCode } from './holiday-regions'
 
-const booleanKeys = new Set(['showHeatmap', 'showPublicHolidays', 'showSchoolHolidays', 'showBridgeDays', 'showOtherMonthDays', 'countWeekendsAsVacation', 'halfDaysChristmas', 'feedIncludePublicHolidays', 'feedIncludeSchoolHolidays', 'feedIncludeNotes'])
+const booleanKeys = new Set([
+  'showHeatmap',
+  'showPublicHolidays',
+  'showSchoolHolidays',
+  'showBridgeDays',
+  'showOtherMonthDays',
+  'countWeekendsAsVacation',
+  'halfDaysChristmas',
+  'feedIncludeVacations',
+  'feedIncludeGleittage',
+  'feedIncludePublicHolidays',
+  'feedIncludeSchoolHolidays',
+  'feedIncludeNotes',
+  'feedIncludeNoteTitles',
+  'feedIncludeBridgeDays',
+])
 // Location values that a patch may clear with null (e.g. after a country change).
 const clearableKeys = new Set(['subdivision', 'holidayGroup'])
 

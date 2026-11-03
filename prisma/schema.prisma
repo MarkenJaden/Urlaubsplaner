@@ -8,19 +8,21 @@ datasource db {
 }
 
 model User {
-  id            String          @id @default(cuid())
-  keycloakId    String          @unique
-  username      String?         @unique
-  passwordHash  String?
-  recoveryHash  String?
-  sessionVersion Int            @default(0)
-  email         String?
-  name          String?
-  calendarToken String          @unique @default(cuid())
-  preferences   Json            @default("{}")
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  vacations     VacationEntry[]
+  id             String          @id @default(cuid())
+  keycloakId     String          @unique
+  username       String?         @unique
+  passwordHash   String?
+  recoveryHash   String?
+  sessionVersion Int             @default(0)
+  isAdmin        Boolean         @default(false)
+  email          String?
+  name           String?
+  calendarToken  String          @unique @default(cuid())
+  preferences    Json            @default("{}")
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  vacations      VacationEntry[]
+  shares         PlanShare[]
 }
 
 model VacationEntry {
@@ -36,6 +38,63 @@ model VacationEntry {
 
   @@unique([userId, date, type])
   @@index([userId, year])
+}
+
+model PlanShare {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token        String   @unique
+  label        String   @default("Mein geteilter Plan")
+  permission   String   @default("view")
+  includeNotes Boolean  @default(false)
+  color        String   @default("#10b981")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model AnalyticsVisitor {
+  visitorId    String   @id
+  userId       String?
+  isRegistered Boolean  @default(false)
+  country      String?
+  subdivision  String?
+  deviceType   String?
+  plannedDays  Int      @default(0)
+  firstSeenAt  DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+  pageViews    Int      @default(1)
+  consentGiven Boolean  @default(false)
+
+  @@index([lastSeenAt])
+  @@index([isRegistered])
+}
+
+model AnalyticsDaily {
+  date            String @id
+  totalVisitors   Int    @default(0)
+  guestVisitors   Int    @default(0)
+  authedVisitors  Int    @default(0)
+  pageViews       Int    @default(0)
+  suggestionsRun  Int    @default(0)
+  exportsCount    Int    @default(0)
+  sharesCreated   Int    @default(0)
+  feedsFetched    Int    @default(0)
+}
+
+model ContactMessage {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  subject   String
+  message   String
+  status    String   @default("open")
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([status])
 }
 
 model RateLimit {

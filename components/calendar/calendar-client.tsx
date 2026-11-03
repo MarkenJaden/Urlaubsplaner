@@ -6,6 +6,9 @@ import { Toolbar } from '@/components/calendar/toolbar'
 import { YearView } from '@/components/calendar/year-view'
 import { SettingsPanel } from '@/components/calendar/settings-panel'
 import { SuggestionsPanel } from '@/components/calendar/suggestions-panel'
+import { ClipboardExportDialog } from '@/components/calendar/clipboard-export-dialog'
+import { ShareDialog } from '@/components/calendar/share-dialog'
+import { SubscribeDialog } from '@/components/calendar/subscribe-dialog'
 import { useVacations, useToggleVacation } from '@/hooks/use-vacations'
 import { useHolidays, useCompareHolidays, useCountries, useCountryHolidays } from '@/hooks/use-holidays'
 import { useHomeRegion } from '@/hooks/use-home-region'
@@ -14,22 +17,37 @@ import { loadConfig, saveConfig, configToEntries, defaultConfig, applyConfigPatc
 import { comparisonRegions, defaultComparisonSelection, localizedName } from '@/lib/holiday-regions'
 import { getSubdivisionAliases } from '@/lib/subdivision-aliases'
 import { christmasPartner, holidayDateSet, remainingWorkDays as countRemainingWorkDays, summarizeFlex, summarizeVacation, vacationBudget } from '@/lib/vacation-accounting'
-import { X, Info, Cloud } from 'lucide-react'
+import { decodeSharePayload, type ImportData } from '@/lib/export'
+import {
+  X,
+  CheckCircle2,
+  Share2,
+  CalendarPlus,
+  Sparkles,
+  Users,
+  Eye,
+  Edit3,
+  Keyboard,
+  HelpCircle,
+} from 'lucide-react'
 import { useProfile, useUpdatePreferences } from '@/hooks/use-profile'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { parsePreferences, parseEntry, countryChangePatch } from '@/lib/preferences'
 import { parseISO, format } from 'date-fns'
 import { de } from 'date-fns/locale'
-import type { EntryType, Holiday, LocalConfig, PreferencesPatch } from '@/types'
+import type { EntryType, Holiday, LocalConfig, PreferencesPatch, SharedPlanOverlay } from '@/types'
 import type { DayInfo } from '@/components/calendar/day-cell'
-import type { ImportData } from '@/lib/export'
 
 interface CalendarClientProps {
   userId?: string
   preferences: Record<string, unknown>
   isLoggedIn: boolean
 }
+
+const SHARED_OVERLAYS_STORAGE_KEY = 'urlaubsplaner_shared_overlays_v1'
+const GUEST_IMPORT_DISMISSED_KEY = 'urlaubsplaner_guest_import_dismissed_v1'
+const OVERLAY_COLORS = ['#0d9488', '#db2777', '#7c3aed', '#ea580c', '#0284c7']
 
 function getDateKey(date: Date): string {
   return format(date, 'yyyy-MM-dd')
@@ -57,7 +75,14 @@ const UNDO_LIMIT = 20
 const plannedEntry = ({ date, type, title }: PlannedEntry): PlannedEntry => ({ date: date.slice(0, 10), type, ...(title ? { title } : {}) })
 
 function hasVisibleDayInfo(day: DayInfo | null): day is DayInfo {
-  return Boolean(day?.publicHoliday || day?.schoolHoliday || day?.isBridgeDay || day?.entry || day?.comparisonStates?.length)
+  return Boolean(
+    day?.publicHoliday ||
+    day?.schoolHoliday ||
+    day?.isBridgeDay ||
+    day?.entry ||
+    day?.comparisonStates?.length ||
+    day?.sharedItems?.length
+  )
 }
 
 function DayInfoDetails({ day }: { day: DayInfo }) {
@@ -65,7 +90,7 @@ function DayInfoDetails({ day }: { day: DayInfo }) {
     <>
       <p className="font-medium">{format(day.date, 'dd.MM.yyyy (EEEE)', { locale: de })}</p>
       {day.publicHoliday && <p className="text-green-600 dark:text-green-400">🎉 {day.publicHoliday}</p>}
-      {day.schoolHoliday && <p className="text-yellow-600 dark:text-yellow-400">🏫 {day.schoolHoliday}</p>}
+      {day.schoolHoliday && <p className="text-sky-600 dark:text-sky-400 font-medium">🏫 Eigene Schulferien: {day.schoolHoliday}</p>}
       {day.isBridgeDay && day.bridgeDayInfo && (
         <div className="text-orange-500">
           <p>🌉 Brückentag</p>
@@ -74,11 +99,28 @@ function DayInfoDetails({ day }: { day: DayInfo }) {
         </div>
       )}
       {day.isBridgeDay && !day.bridgeDayInfo && <p className="text-orange-500">🌉 Brückentag</p>}
-      {Boolean(day.comparisonStates?.length) && <p className="mt-1 text-xs text-muted-foreground">Schulferien in {day.comparisonStates!.length} Bundesländern: {day.comparisonStates!.join(', ')}</p>}
+      {Boolean(day.comparisonStates?.length) && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          Ferien-Auslastung ({day.comparisonStates!.length} Regionen): {day.comparisonStates!.join(', ')}
+        </p>
+      )}
       {day.entry && (
-        <p className={day.entry.type === 'vacation' ? 'text-blue-500' : day.entry.type === 'gleittag' ? 'text-purple-500' : 'text-muted-foreground'}>
+        <p className={day.entry.type === 'vacation' ? 'text-blue-500 font-medium' : day.entry.type === 'gleittag' ? 'text-purple-500 font-medium' : 'text-muted-foreground'}>
           {day.entry.type === 'vacation' ? '🌴 Urlaub' : day.entry.type === 'gleittag' ? '⏰ Gleittag' : `📝 ${day.entry.title ?? 'Notiz'}`}
         </p>
+      )}
+      {Boolean(day.sharedItems?.length) && (
+        <div className="mt-1.5 border-t pt-1.5 space-y-0.5">
+          {day.sharedItems!.map((shared, i) => (
+            <p key={i} className="text-xs flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: shared.color }} />
+              <span className="font-medium">{shared.label}:</span>
+              <span>
+                {shared.type === 'vacation' ? 'Urlaub' : shared.type === 'gleittag' ? 'Gleittag' : shared.title || 'Notiz'}
+              </span>
+            </p>
+          ))}
+        </div>
       )}
     </>
   )
@@ -90,13 +132,237 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
   const [selectedType, setSelectedType] = useState<EntryType>('vacation')
   const [localConfig, setConfig] = useState<LocalConfig | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [showClipboardDialog, setShowClipboardDialog] = useState(false)
+  const [showShareDialog, setShowShareDialog] = useState(false)
+  const [showSubscribeDialog, setShowSubscribeDialog] = useState(false)
   const [hoveredDay, setHoveredDay] = useState<DayInfo | null>(null)
   const [activeDayKey, setActiveDayKey] = useState<string | null>(null)
   const [defaultNoteText, setDefaultNoteText] = useState('')
   const [undoStack, setUndoStack] = useState<UndoSnapshot[]>([])
   const [undoBusy, setUndoBusy] = useState(false)
+  const [sharedOverlays, setSharedOverlays] = useState<SharedPlanOverlay[]>([])
+  const [activeCollab, setActiveCollab] = useState<{
+    token: string
+    label: string
+    ownerName: string
+    entries: Array<{ id?: string; date: string; type: EntryType; title?: string | null }>
+  } | null>(null)
+  const [collabMode, setCollabMode] = useState<'overlay' | 'edit'>('overlay')
+  const [guestEntriesCount, setGuestEntriesCount] = useState(0)
+  const [guestImportDismissed, setGuestImportDismissed] = useState(false)
 
-  useEffect(() => { if (!isLoggedIn) setConfig(loadConfig()) }, [isLoggedIn])
+  useEffect(() => {
+    const loaded = loadConfig()
+    if (!isLoggedIn) {
+      setConfig(loaded)
+    } else {
+      setGuestEntriesCount(loaded.entries?.length ?? 0)
+      try {
+        setGuestImportDismissed(localStorage.getItem(GUEST_IMPORT_DISMISSED_KEY) === '1')
+      } catch {
+        // ignore
+      }
+    }
+  }, [isLoggedIn])
+
+  // Load saved shared plan overlays from localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(SHARED_OVERLAYS_STORAGE_KEY)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) setSharedOverlays(parsed)
+      }
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  const saveSharedOverlays = useCallback((next: SharedPlanOverlay[]) => {
+    setSharedOverlays(next)
+    try {
+      localStorage.setItem(SHARED_OVERLAYS_STORAGE_KEY, JSON.stringify(next))
+    } catch {
+      // ignore
+    }
+  }, [])
+
+  const handleAddOverlayByLink = useCallback(async (input: string): Promise<boolean> => {
+    const trimmed = input.trim()
+    if (!trimmed) return false
+    try {
+      let shareSnapshot: string | null = null
+      let shareToken: string | null = null
+
+      if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.includes('?')) {
+        const url = new URL(trimmed, window.location.origin)
+        shareSnapshot = url.searchParams.get('share')
+        shareToken = url.searchParams.get('shareToken')
+      } else if (trimmed.length > 40) {
+        shareSnapshot = trimmed
+      } else {
+        shareToken = trimmed
+      }
+
+      if (shareSnapshot) {
+        const decoded = decodeSharePayload(shareSnapshot)
+        if (!decoded || decoded.entries.length === 0) return false
+        const id = `snapshot-${decoded.label.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
+        setSharedOverlays(prev => {
+          const exists = prev.find(o => o.id === id)
+          const color = exists?.color ?? OVERLAY_COLORS[prev.length % OVERLAY_COLORS.length]
+          const nextOverlay: SharedPlanOverlay = {
+            id,
+            label: decoded.label,
+            permission: 'view',
+            color,
+            enabled: true,
+            entries: decoded.entries,
+          }
+          const updated = exists ? prev.map(o => o.id === id ? nextOverlay : o) : [...prev, nextOverlay]
+          try {
+            localStorage.setItem(SHARED_OVERLAYS_STORAGE_KEY, JSON.stringify(updated))
+          } catch {
+            // ignore
+          }
+          return updated
+        })
+        return true
+      }
+
+      if (shareToken) {
+        const res = await fetch(`/api/shares/${encodeURIComponent(shareToken)}`)
+        if (!res.ok) return false
+        const data = await res.json()
+        const id = `token-${shareToken.slice(0, 10)}`
+        const mappedEntries = (data.entries ?? []).map((e: { date: string; type: EntryType; title?: string | null }) => ({
+          date: e.date.slice(0, 10),
+          type: e.type,
+          ...(e.title ? { title: e.title } : {}),
+        }))
+        setSharedOverlays(prev => {
+          const exists = prev.find(o => o.id === id)
+          const color = exists?.color ?? OVERLAY_COLORS[prev.length % OVERLAY_COLORS.length]
+          const nextOverlay: SharedPlanOverlay = {
+            id,
+            label: `${data.label} (${data.ownerName})`,
+            token: shareToken,
+            permission: data.permission,
+            color,
+            enabled: true,
+            entries: mappedEntries,
+          }
+          const updated = exists ? prev.map(o => o.id === id ? nextOverlay : o) : [...prev, nextOverlay]
+          try {
+            localStorage.setItem(SHARED_OVERLAYS_STORAGE_KEY, JSON.stringify(updated))
+          } catch {
+            // ignore
+          }
+          return updated
+        })
+        if (data.permission === 'edit') {
+          setActiveCollab({
+            token: shareToken,
+            label: data.label,
+            ownerName: data.ownerName,
+            entries: data.entries ?? [],
+          })
+        }
+        return true
+      }
+      return false
+    } catch {
+      return false
+    }
+  }, [])
+
+  // Handle ?share= and ?shareToken= URL query parameters
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const shareSnapshot = params.get('share')
+    const shareToken = params.get('shareToken')
+
+    if (shareSnapshot) {
+      const decoded = decodeSharePayload(shareSnapshot)
+      if (decoded && decoded.entries.length > 0) {
+        const firstYear = Number(decoded.entries[0]?.date?.slice(0, 4))
+        if (firstYear >= 2020 && firstYear <= 2100) {
+          setYear(firstYear)
+        }
+        const id = `snapshot-${decoded.label.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
+        setSharedOverlays(prev => {
+          const exists = prev.find(o => o.id === id)
+          const color = exists?.color ?? OVERLAY_COLORS[prev.length % OVERLAY_COLORS.length]
+          const nextOverlay: SharedPlanOverlay = {
+            id,
+            label: decoded.label,
+            permission: 'view',
+            color,
+            enabled: true,
+            entries: decoded.entries,
+          }
+          const updated = exists ? prev.map(o => o.id === id ? nextOverlay : o) : [...prev, nextOverlay]
+          try {
+            localStorage.setItem(SHARED_OVERLAYS_STORAGE_KEY, JSON.stringify(updated))
+          } catch {
+            // ignore
+          }
+          return updated
+        })
+        setSyncMessage(`Geteilter Plan „${decoded.label}“ wurde im Kalender eingeblendet.`)
+      }
+    }
+
+    if (shareToken) {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/shares/${encodeURIComponent(shareToken)}`)
+          if (!res.ok) return
+          const data = await res.json()
+          const id = `token-${shareToken.slice(0, 10)}`
+          const mappedEntries = (data.entries ?? []).map((e: { date: string; type: EntryType; title?: string | null }) => ({
+            date: e.date.slice(0, 10),
+            type: e.type,
+            ...(e.title ? { title: e.title } : {}),
+          }))
+          setSharedOverlays(prev => {
+            const exists = prev.find(o => o.id === id)
+            const color = exists?.color ?? OVERLAY_COLORS[prev.length % OVERLAY_COLORS.length]
+            const nextOverlay: SharedPlanOverlay = {
+              id,
+              label: `${data.label} (${data.ownerName})`,
+              token: shareToken,
+              permission: data.permission,
+              color,
+              enabled: true,
+              entries: mappedEntries,
+            }
+            const updated = exists ? prev.map(o => o.id === id ? nextOverlay : o) : [...prev, nextOverlay]
+            try {
+              localStorage.setItem(SHARED_OVERLAYS_STORAGE_KEY, JSON.stringify(updated))
+            } catch {
+              // ignore
+            }
+            return updated
+          })
+          if (data.permission === 'edit') {
+            setActiveCollab({
+              token: shareToken,
+              label: data.label,
+              ownerName: data.ownerName,
+              entries: data.entries ?? [],
+            })
+            setSyncMessage(`Geteilter Plan „${data.label}“ von ${data.ownerName} geladen. Du kannst ihn vergleichen oder direkt gemeinsam bearbeiten!`)
+          } else {
+            setSyncMessage(`Geteilter Plan „${data.label}“ von ${data.ownerName} wurde zum Vergleichen eingeblendet.`)
+          }
+        } catch {
+          // ignore
+        }
+      })()
+    }
+  }, [])
 
   const profile = useProfile(isLoggedIn)
   const updatePreferences = useUpdatePreferences()
@@ -124,7 +390,55 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
   const { data: serverEntries = [], isLoading: entriesLoading, isError: entriesError } = useVacations(year, isLoggedIn)
   const { addMutation, removeMutation } = useToggleVacation(year, isLoggedIn)
 
-  const entries = useMemo(() => isLoggedIn ? serverEntries : (localConfig ? configToEntries(localConfig, year) : []), [isLoggedIn, serverEntries, localConfig, year])
+  const baseEntries = useMemo(
+    () => isLoggedIn ? serverEntries : (localConfig ? configToEntries(localConfig, year) : []),
+    [isLoggedIn, serverEntries, localConfig, year]
+  )
+
+  // When collaborative editing mode is active on a shared plan, show and edit that plan's entries
+  const entries = useMemo(() => {
+    if (activeCollab && collabMode === 'edit') {
+      return activeCollab.entries
+        .filter(e => e.date.startsWith(`${year}-`))
+        .map((e, i) => ({
+          id: e.id ?? `collab-${i}`,
+          userId: 'shared',
+          date: e.date,
+          type: e.type,
+          title: e.title ?? undefined,
+          year,
+          createdAt: '',
+          updatedAt: '',
+        }))
+    }
+    return baseEntries
+  }, [activeCollab, collabMode, baseEntries, year])
+
+  // Lightweight anonymous/registered analytics heartbeat for the Admin Dashboard
+  useEffect(() => {
+    if (typeof window === 'undefined' || process.env.NODE_ENV === 'test') return
+    try {
+      let visitorId = localStorage.getItem('urlaubsplaner_visitor_id')
+      if (!visitorId) {
+        visitorId = typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `v-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+        localStorage.setItem('urlaubsplaner_visitor_id', visitorId)
+      }
+      void fetch('/api/analytics/ping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          visitorId,
+          country,
+          subdivision,
+          plannedDaysCount: baseEntries.length,
+        }),
+      }).catch(() => {})
+    } catch {
+      // ignore
+    }
+  }, [country, subdivision, baseEntries.length])
 
   const { data: publicHolidays = [], isError: holidaysError, refetch: refetchHolidays } = useHolidays({
     country, subdivision, year, type: 'public', enabled: locationReady,
@@ -204,7 +518,7 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
     ? { scope: year, entries: serverEntries.map(plannedEntry) }
     : { scope: 'all', entries: (localConfig?.entries ?? []).map(plannedEntry) }), [pushUndo, isLoggedIn, year, serverEntries, localConfig])
 
-  const handleUndo = async () => {
+  const handleUndo = useCallback(async () => {
     const snapshot = undoStack.at(-1)
     if (!snapshot) return
     setUndoStack(stack => stack.slice(0, -1))
@@ -218,10 +532,92 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
       if (add.length && !(await fetch('/api/vacations/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ vacations: add }) })).ok) throw new Error()
     } catch { setSyncMessage('Rückgängig machen fehlgeschlagen. Bitte erneut versuchen.') }
     finally { setUndoBusy(false); await queryClient.invalidateQueries({ queryKey: ['vacations'] }) }
-  }
+  }, [undoStack, isLoggedIn, updateLocalEntries, queryClient])
+
+  const canUndo = undoStack.length > 0 && !undoBusy && !importBusy && !addMutation.isPending && !removeMutation.isPending
+
+  // Keyboard shortcuts: U (Urlaub), G (Gleittag), N (Notiz), P (Planer), Ctrl+Z (Undo)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.tagName === 'SELECT' ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+      if (showSuggestions || showClipboardDialog || showShareDialog || showSubscribeDialog) {
+        return
+      }
+
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+        if (canUndo) {
+          e.preventDefault()
+          void handleUndo()
+        }
+        return
+      }
+
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+
+      const key = e.key.toLowerCase()
+      if (key === 'u' || key === '1') {
+        e.preventDefault()
+        setSelectedType('vacation')
+      } else if (key === 'g' || key === '2') {
+        e.preventDefault()
+        setSelectedType('gleittag')
+      } else if (key === 'n' || key === '3') {
+        e.preventDefault()
+        setSelectedType('note')
+      } else if (key === 'p') {
+        e.preventDefault()
+        setShowSuggestions(true)
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [
+    canUndo,
+    handleUndo,
+    showSuggestions,
+    showClipboardDialog,
+    showShareDialog,
+    showSubscribeDialog,
+  ])
 
   const handleToggle = useCallback((date: Date, type: EntryType) => {
     const dateKey = getDateKey(date)
+
+    // Collaborative live-edit mode on a shared plan
+    if (activeCollab && collabMode === 'edit') {
+      const matching = (key: string) => (e: { date: string; type: string }) => e.type === type && e.date.slice(0, 10) === key
+      const existing = activeCollab.entries.find(matching(dateKey))
+      const title = !existing && type === 'note' ? defaultNoteText || prompt('Notiz-Text (optional):') || undefined : undefined
+      void (async () => {
+        try {
+          const res = await fetch(`/api/shares/${encodeURIComponent(activeCollab.token)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'toggle', date: dateKey, type, title }),
+          })
+          if (!res.ok) throw new Error()
+          const refreshed = await fetch(`/api/shares/${encodeURIComponent(activeCollab.token)}`)
+          if (refreshed.ok) {
+            const data = await refreshed.json()
+            setActiveCollab(prev => prev ? { ...prev, entries: data.entries ?? [] } : null)
+          }
+        } catch {
+          setSyncMessage('Gemeinsame Änderung konnte nicht gespeichert werden.')
+        }
+      })()
+      return
+    }
+
     const matching = (key: string) => (e: { date: string; type: string }) => e.type === type && e.date.slice(0, 10) === key
     // Guests: search all years, days of the neighbouring year can be visible in the grid.
     const existing = isLoggedIn ? entries.find(matching(dateKey)) : localConfig?.entries.find(matching(dateKey))
@@ -239,7 +635,7 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
     } else {
       updateLocalEntries(current => keys.reduce((next, key) => Boolean(next.find(matching(key))) === Boolean(existing) ? toggleEntry(next, key, type, title) : next, current))
     }
-  }, [isLoggedIn, entries, localConfig, addMutation, removeMutation, updateLocalEntries, defaultNoteText, halfDaysChristmas, recordUndo])
+  }, [activeCollab, collabMode, isLoggedIn, entries, localConfig, addMutation, removeMutation, updateLocalEntries, defaultNoteText, halfDaysChristmas, recordUndo])
 
   const importSavedData = async (vacations: unknown[], preferences?: Record<string, unknown>, successMessage = 'Plan übernommen. Die lokale Kopie bleibt erhalten.') => {
     setImportBusy(true); setSyncMessage('')
@@ -295,7 +691,22 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
 
   const importGuestPlan = () => {
     const { entries, ...preferences } = loadConfig()
-    void importSavedData(entries, preferences as Record<string, unknown>)
+    void importSavedData(entries, preferences as Record<string, unknown>, 'Deine lokal gespeicherten Tage wurden in dein Konto übernommen.')
+    setGuestImportDismissed(true)
+    try {
+      localStorage.setItem(GUEST_IMPORT_DISMISSED_KEY, '1')
+    } catch {
+      // ignore
+    }
+  }
+
+  const dismissGuestImport = () => {
+    setGuestImportDismissed(true)
+    try {
+      localStorage.setItem(GUEST_IMPORT_DISMISSED_KEY, '1')
+    } catch {
+      // ignore
+    }
   }
 
   const handleReset = async () => {
@@ -327,6 +738,22 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
     return merged
   }, [publicHolidays, allCountryHolidays])
 
+  // Build map of dateKey -> shared plan entries from visible overlays (when not in edit mode for that same token)
+  const sharedOverlayMap = useMemo(() => {
+    const map = new Map<string, Array<{ label: string; color: string; type: EntryType; title?: string }>>()
+    for (const overlay of sharedOverlays) {
+      if (!overlay.enabled) continue
+      if (activeCollab && collabMode === 'edit' && overlay.token === activeCollab.token) continue
+      for (const e of overlay.entries) {
+        const key = e.date.slice(0, 10)
+        const list = map.get(key) ?? []
+        list.push({ label: overlay.label, color: overlay.color, type: e.type, title: e.title ?? undefined })
+        map.set(key, list)
+      }
+    }
+    return map
+  }, [sharedOverlays, activeCollab, collabMode])
+
   const activeDayInfo = useMemo(() => {
     if (!activeDayKey) return null
 
@@ -337,6 +764,7 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
     const publicHoliday = getHolidayForDate(combinedPublicHolidays, date)
     const schoolHoliday = getHolidayForDate(schoolHolidays, date)
     const bridgeDayInfo = bridgeDayMap.get(activeDayKey)
+    const sharedItems = sharedOverlayMap.get(activeDayKey)
     const day: DayInfo = {
       date,
       comparisonStates: showHeatmap ? comparison.holidays.flatMap((holidays, i) => getHolidayForDate(holidays, date) ? [regionName(compareSubdivisions[i])] : []) : [],
@@ -345,14 +773,19 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
       isBridgeDay: showBridgeDays && bridgeDaySet.has(activeDayKey),
       bridgeDayInfo,
       entry,
+      sharedItems,
     }
 
     return hasVisibleDayInfo(day) ? day : null
-  }, [activeDayKey, entries, combinedPublicHolidays, schoolHolidays, bridgeDayMap, bridgeDaySet, showBridgeDays, showHeatmap, comparison.holidays, compareSubdivisions, regionName])
+  }, [activeDayKey, entries, combinedPublicHolidays, schoolHolidays, bridgeDayMap, bridgeDaySet, showBridgeDays, showHeatmap, comparison.holidays, compareSubdivisions, regionName, sharedOverlayMap])
+
+  const hasSyncError = profile.isError || entriesError || updatePreferences.isError || addMutation.isError || removeMutation.isError
+  const isSavingOrLoading = profile.isLoading || entriesLoading || updatePreferences.isPending || addMutation.isPending || removeMutation.isPending
 
   return (
     <div className="min-h-screen bg-background">
       <Header isLoggedIn={isLoggedIn} />
+
       <SuggestionsPanel
         open={showSuggestions} onClose={() => setShowSuggestions(false)}
         year={year} country={country} subdivision={subdivision} group={region.group}
@@ -365,21 +798,253 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
         onRemove={handleRemoveSuggestion}
         busy={importBusy || addMutation.isPending || removeMutation.isPending}
       />
+
+      <ClipboardExportDialog
+        open={showClipboardDialog}
+        onClose={() => setShowClipboardDialog(false)}
+        entries={entries}
+        year={year}
+        vacationDaysUsed={vacationDaysUsed}
+        vacationDaysTotal={vacationDaysTotal}
+      />
+
+      <ShareDialog
+        open={showShareDialog}
+        onClose={() => setShowShareDialog(false)}
+        isLoggedIn={isLoggedIn}
+        country={country}
+        subdivision={subdivision}
+        entries={entries}
+        overlays={sharedOverlays}
+        onToggleOverlay={(id, enabled) =>
+          saveSharedOverlays(sharedOverlays.map(o => (o.id === id ? { ...o, enabled } : o)))
+        }
+        onRemoveOverlay={id => saveSharedOverlays(sharedOverlays.filter(o => o.id !== id))}
+        onAddOverlayByLink={handleAddOverlayByLink}
+        activeCollabToken={activeCollab && collabMode === 'edit' ? activeCollab.token : null}
+        onSelectCollabToken={token => {
+          if (!token) {
+            setCollabMode('overlay')
+            return
+          }
+          const match = sharedOverlays.find(o => o.token === token && o.permission === 'edit')
+          if (match) {
+            setActiveCollab({
+              token,
+              label: match.label,
+              ownerName: match.label,
+              entries: match.entries,
+            })
+            setCollabMode('edit')
+          }
+        }}
+      />
+
+      <SubscribeDialog
+        open={showSubscribeDialog}
+        onClose={() => setShowSubscribeDialog(false)}
+        isLoggedIn={isLoggedIn}
+        year={year}
+        entries={entries}
+        locationReady={locationReady}
+        regionLabel={subdivision ? regionName(subdivision) : country}
+      />
+
       <main className="container space-y-4 py-3 sm:py-4">
+        {/* Guest Welcome & Quick Actions Bar */}
         {!isLoggedIn && (
-          <div className="rounded-md border border-blue-200 bg-blue-50 dark:bg-blue-900/20 p-3 text-sm text-blue-800 dark:text-blue-200">
-            <Info className="mr-1 inline h-4 w-4" /> Dein Plan wird auf diesem Gerät gespeichert.{' '}
-            <a href="/login" className="underline font-medium">Anmelden</a>, um ihn auf deinen anderen Geräten zu nutzen.
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200/80 bg-blue-50/80 dark:border-blue-900/50 dark:bg-blue-950/30 px-3.5 py-2.5 text-sm text-blue-900 dark:text-blue-100">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
+              <span>
+                Dein Plan wird automatisch <strong>auf diesem Gerät gespeichert</strong>.{' '}
+                <a href="/login" className="underline font-semibold hover:text-blue-700 dark:hover:text-blue-300">
+                  Kostenlos anmelden
+                </a>
+                , um ihn auch am Handy oder anderen PCs zu synchronisieren.
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs bg-background/80"
+                onClick={() => setShowShareDialog(true)}
+              >
+                <Share2 className="mr-1.5 h-3.5 w-3.5" />
+                Plan teilen
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs bg-background/80"
+                onClick={() => setShowSubscribeDialog(true)}
+              >
+                <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />
+                In Kalender einbinden
+              </Button>
+            </div>
           </div>
         )}
 
-        {isLoggedIn && <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 text-sm">
-          <Cloud className="h-4 w-4 text-primary" /><span>{profile.isError || entriesError || updatePreferences.isError || addMutation.isError || removeMutation.isError ? 'Synchronisierung fehlgeschlagen' : profile.isLoading || entriesLoading ? 'Plan wird geladen…' : updatePreferences.isPending || addMutation.isPending || removeMutation.isPending ? 'Wird gespeichert…' : 'Mit deinem Konto synchronisiert'}</span>
-          <Button variant="outline" size="sm" disabled={importBusy} onClick={importGuestPlan}>Lokalen Plan übernehmen</Button>
-          <span className="text-xs text-muted-foreground">Aktualisierung alle 15 Sekunden und beim Zurückkehren.</span>
-        </div>}
-        {(profile.isError || entriesError || updatePreferences.isError || addMutation.isError || removeMutation.isError) && <div role="alert" className="rounded-lg border border-destructive/30 p-3 text-sm text-destructive">Speichern oder Synchronisieren fehlgeschlagen. Prüfe deine Verbindung und Anmeldung. <Button variant="outline" size="sm" onClick={() => { profile.refetch(); queryClient.invalidateQueries({ queryKey: ['vacations'] }) }}>Neu laden</Button></div>}
-        {syncMessage && <p role="status" className="rounded-lg border p-3 text-sm">{syncMessage}</p>}
+        {/* Logged-in Friendly Account Status & Optional Guest Plan Import */}
+        {isLoggedIn && !hasSyncError && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-card/70 px-3.5 py-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>
+                {isSavingOrLoading
+                  ? 'Änderungen werden gespeichert…'
+                  : 'Alle Änderungen werden automatisch in deinem Konto gespeichert'}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {guestEntriesCount > 0 && !guestImportDismissed && (
+                <div className="flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs text-foreground">
+                  <span>Lokale Gast-Einträge gefunden ({guestEntriesCount}):</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    disabled={importBusy}
+                    onClick={importGuestPlan}
+                  >
+                    In mein Konto übernehmen
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={dismissGuestImport}
+                    className="text-muted-foreground hover:text-foreground px-1"
+                    title="Hinweis ausblenden"
+                    aria-label="Hinweis ausblenden"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setShowShareDialog(true)}
+              >
+                <Share2 className="mr-1 h-3.5 w-3.5" />
+                Teilen
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setShowSubscribeDialog(true)}
+              >
+                <CalendarPlus className="mr-1 h-3.5 w-3.5" />
+                Google / Apple Kalender
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {hasSyncError && (
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            <span>Speichern oder Synchronisieren fehlgeschlagen. Prüfe deine Verbindung und Anmeldung.</span>
+            <Button variant="outline" size="sm" onClick={() => { profile.refetch(); queryClient.invalidateQueries({ queryKey: ['vacations'] }) }}>
+              Neu laden
+            </Button>
+          </div>
+        )}
+
+        {/* Active Collaborative Plan Banner */}
+        {activeCollab && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-teal-500/40 bg-teal-50/70 dark:bg-teal-950/30 p-3 text-sm">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-teal-600 dark:text-teal-400 shrink-0" />
+              <div>
+                <span className="font-semibold">Geteilter Plan: „{activeCollab.label}“</span>{' '}
+                <span className="text-muted-foreground">(von {activeCollab.ownerName})</span>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button
+                size="sm"
+                variant={collabMode === 'overlay' ? 'default' : 'outline'}
+                className="h-8 text-xs"
+                onClick={() => setCollabMode('overlay')}
+              >
+                <Eye className="mr-1.5 h-3.5 w-3.5" />
+                Neben meinem Plan vergleichen
+              </Button>
+              <Button
+                size="sm"
+                variant={collabMode === 'edit' ? 'default' : 'outline'}
+                className="h-8 text-xs"
+                onClick={() => setCollabMode('edit')}
+              >
+                <Edit3 className="mr-1.5 h-3.5 w-3.5" />
+                Diesen Plan direkt bearbeiten
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 text-xs"
+                onClick={() => {
+                  setActiveCollab(null)
+                  setCollabMode('overlay')
+                }}
+              >
+                Beenden
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Shared Overlays Quick Bar when overlays exist */}
+        {sharedOverlays.length > 0 && !activeCollab && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/40 px-3 py-2 text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium text-muted-foreground flex items-center gap-1">
+                <Users className="h-3.5 w-3.5" /> Eingeblendete Pläne:
+              </span>
+              {sharedOverlays.map(overlay => (
+                <button
+                  key={overlay.id}
+                  type="button"
+                  onClick={() =>
+                    saveSharedOverlays(
+                      sharedOverlays.map(o => (o.id === overlay.id ? { ...o, enabled: !o.enabled } : o))
+                    )
+                  }
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-medium transition-opacity ${
+                    overlay.enabled ? 'bg-background shadow-xs opacity-100' : 'opacity-50'
+                  }`}
+                >
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: overlay.color }} />
+                  <span>{overlay.label}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    ({overlay.enabled ? 'sichtbar' : 'ausgeblendet'})
+                  </span>
+                </button>
+              ))}
+            </div>
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setShowShareDialog(true)}>
+              Verwalten
+            </Button>
+          </div>
+        )}
+
+        {syncMessage && (
+          <div role="status" className="flex items-center justify-between rounded-lg border bg-card p-3 text-sm">
+            <span>{syncMessage}</span>
+            <button
+              type="button"
+              onClick={() => setSyncMessage('')}
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="Meldung schließen"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {(schoolLoading || comparison.isLoading) && <p role="status" className="text-sm text-muted-foreground">Schulferien werden geladen…</p>}
         {locationReady && showSchoolHolidays && !schoolLoading && !schoolError && schoolHolidays.length === 0 && <p role="status" className="text-sm text-muted-foreground">Für {country === 'DE' ? 'dieses Bundesland' : 'diese Region'} und Jahr sind noch keine Schulferien verfügbar.</p>}
         {showSchoolHolidays && region.ambiguous && <p role="status" className="text-sm text-muted-foreground">Hier gelten mehrere Ferienregionen. Wähle deine Ferienregion, damit nur deine Schulferien angezeigt werden.</p>}
@@ -420,6 +1085,8 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
           onDefaultNoteTextChange={setDefaultNoteText}
           apiError={home.isError || holidaysError || schoolError || comparison.isError}
           onRetryApi={handleRetryApi}
+          onOpenSubscribe={() => setShowSubscribeDialog(true)}
+          onOpenShare={() => setShowShareDialog(true)}
         />
 
         <Toolbar
@@ -431,11 +1098,14 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
           showBridgeDays={showBridgeDays} onToggleBridgeDays={(v) => updateConfig({ showBridgeDays: v })}
           vacationDaysUsed={vacationDaysUsed} vacationDaysTotal={vacationDaysTotal}
           flex={flex} remainingWorkDays={remainingWorkDays}
-          canUndo={undoStack.length > 0 && !undoBusy && !importBusy && !addMutation.isPending && !removeMutation.isPending}
+          canUndo={canUndo}
           onUndo={() => void handleUndo()}
           entries={entries} preferences={isLoggedIn ? (prefs as Record<string, unknown>) : ((config ?? {}) as unknown as Record<string, unknown>)}
           localConfig={isLoggedIn ? null : config}
           onOpenSuggestions={() => setShowSuggestions(true)}
+          onOpenClipboardExport={() => setShowClipboardDialog(true)}
+          onOpenShare={() => setShowShareDialog(true)}
+          onOpenSubscribe={() => setShowSubscribeDialog(true)}
           onImport={handleImport}
           onImportConfig={handleImportConfig}
           onReset={handleReset}
@@ -457,6 +1127,7 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
             bridgeDaySet={bridgeDaySet} bridgeDayMap={bridgeDayMap}
             showBridgeDays={showBridgeDays} showOtherMonthDays={showOtherMonthDays}
             overBudgetDates={overBudgetDates}
+            overlays={sharedOverlays}
             onToggle={handleToggle} selectedType={selectedType}
             onHover={setHoveredDay}
             onSelectDate={(date) => setActiveDayKey(getDateKey(date))}
@@ -483,14 +1154,94 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
           </div>
         )}
 
-        <div className="flex flex-wrap gap-4 text-xs text-muted-foreground pt-2">
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-blue-500" /> Urlaub</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-500" /> Über Budget</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-purple-500" /> Gleittag</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-100 border border-green-300 dark:bg-green-500/30 dark:border-green-500/50" /> Feiertag</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-yellow-100 border border-yellow-300 dark:bg-amber-400/25 dark:border-amber-400/50" /> Schulferien</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-orange-50 ring-2 ring-orange-400 dark:bg-orange-400/20" /> Brückentag</span>
+        {/* Color & Heatmap Legend */}
+        <div className="rounded-xl border bg-card p-3.5 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-blue-600 shadow-2xs" /> Urlaub</span>
+              <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-red-600" /> Über Budget</span>
+              <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-purple-600" /> Gleittag</span>
+              <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-emerald-100 border border-emerald-400 dark:bg-emerald-500/30 dark:border-emerald-500/60" /> Feiertag</span>
+              {!showHeatmap && (
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-sky-100 border-b-2 border-b-sky-500 dark:bg-sky-500/25" /> Eigene Schulferien</span>
+              )}
+              <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-orange-50 ring-2 ring-orange-400 dark:bg-orange-400/20" /> Brückentag</span>
+              <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-muted/60 opacity-45 grayscale border" /> Vergangener Tag</span>
+            </div>
+            <div className="hidden sm:flex items-center gap-2 text-[11px] text-muted-foreground">
+              <Keyboard className="h-3.5 w-3.5" />
+              <span>Tastenkürzel: <kbd className="rounded border bg-muted px-1 py-0.5">U</kbd> Urlaub · <kbd className="rounded border bg-muted px-1 py-0.5">G</kbd> Gleittag · <kbd className="rounded border bg-muted px-1 py-0.5">N</kbd> Notiz · <kbd className="rounded border bg-muted px-1 py-0.5">P</kbd> Optimaler Plan</span>
+            </div>
+          </div>
+
+          {showHeatmap && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-2.5 text-xs">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="font-semibold text-foreground">Ferien-Heatmap (Wie viele Regionen haben frei?):</span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3.5 h-3.5 rounded-sm bg-lime-200 border border-lime-400 dark:bg-lime-500/30" />
+                  <span>Wenig (1–25 %)</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3.5 h-3.5 rounded-sm bg-amber-300 border border-amber-500 dark:bg-amber-500/40" />
+                  <span>Mittel (26–50 %)</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3.5 h-3.5 rounded-sm bg-orange-400 border border-orange-600 dark:bg-orange-500/55" />
+                  <span>Viele (51–75 %)</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3.5 h-3.5 rounded-sm bg-rose-500 border border-rose-700 dark:bg-rose-500/70" />
+                  <span>Sehr viele (&gt; 75 %)</span>
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 font-medium text-sky-700 dark:text-sky-300">
+                <span className="w-3.5 h-3.5 rounded-sm ring-2 ring-inset ring-sky-600 border-b-[3px] border-b-sky-600 bg-amber-200 dark:bg-amber-500/30" />
+                <span>Blauer Rahmen = Schulferien in deinem eigenen Bundesland</span>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Helpful Ratgeber & SEO FAQ Section */}
+        <details className="group rounded-xl border bg-card/60 p-4 text-sm">
+          <summary className="flex cursor-pointer list-none items-center justify-between font-medium text-foreground">
+            <span className="flex items-center gap-2">
+              <HelpCircle className="h-4 w-4 text-primary" />
+              Tipps zur optimalen Urlaubsplanung {year}, Brückentage & Häufige Fragen
+            </span>
+            <span className="text-xs text-muted-foreground group-open:rotate-180 transition-transform">▼</span>
+          </summary>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs text-muted-foreground leading-relaxed border-t pt-4">
+            <div className="space-y-1.5">
+              <h3 className="font-semibold text-foreground flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                Maximale freie Tage durch Brückentage
+              </h3>
+              <p>
+                Mit dem Button <strong>„Optimaler Plan“</strong> (Taste <kbd className="rounded border px-1">P</kbd>) analysiert der smarte Algorithmus alle gesetzlichen Feiertage, Wochenenden und Schulferien deines Bundeslandes. So holst du aus deinem Urlaubsanspruch oft mehr als doppelt so viele zusammenhängende freie Tage heraus.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="font-semibold text-foreground flex items-center gap-1.5">
+                <Share2 className="h-3.5 w-3.5 text-primary" />
+                Urlaub teilen & gemeinsam planen
+              </h3>
+              <p>
+                Über <strong>„Teilen“</strong> erstellst du mit einem Klick einen Link für Partner, Familie oder Kollegen. Andere können deine Urlaubstage als farbige Ebene im eigenen Kalender einblenden oder – bei erteilter Freigabe – gemeinsam mit dir denselben Plan bearbeiten.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="font-semibold text-foreground flex items-center gap-1.5">
+                <CalendarPlus className="h-3.5 w-3.5 text-primary" />
+                Google Kalender, Outlook & Vorgesetzte
+              </h3>
+              <p>
+                Binde deinen Urlaubsplan per Direkt-Button in <strong>Google Kalender</strong>, Apple Kalender oder Outlook ein und entscheide selbst, ob Feiertage, Schulferien oder Notizen enthalten sein sollen. Für deinen Urlaubsantrag beim Arbeitgeber gibt es fertige E-Mail-, Tabellen- und Chat-Vorlagen zum Kopieren.
+              </p>
+            </div>
+          </div>
+        </details>
       </main>
     </div>
   )

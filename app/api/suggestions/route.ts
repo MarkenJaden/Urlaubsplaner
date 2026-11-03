@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { suggestVacation, DEFAULT_PREFERENCES } from '@/lib/vacation-suggester'
 import type { PlanningPreferences } from '@/lib/vacation-suggester'
-import { fetchHolidays, validateRegion } from '@/lib/holiday-api'
+import { fetchHolidays, fetchSubdivisions, validateRegion } from '@/lib/holiday-api'
+import { countHolidayStates } from '@/lib/holidays'
 import type { Holiday } from '@/types'
 
 const DATE_LIST = /^(?:\d{4}-\d{2}-\d{2}(?:,\d{4}-\d{2}-\d{2})*)?$/
@@ -37,15 +38,39 @@ export async function GET(request: Request) {
   const existingVacationDates = new Set<string>(existingParam ? existingParam.split(',') : [])
   const noteDates = new Set<string>(noteParam ? noteParam.split(',') : [])
 
+  const needSchool =
+    prefs.preferSchoolHolidays ||
+    prefs.avoidSchoolHolidays ||
+    prefs.schoolStrategy === 'prefer' ||
+    prefs.schoolStrategy === 'avoid' ||
+    prefs.schoolStrategy === 'avoid_heatmap'
+  const needAllStatesHeatmap =
+    prefs.avoidAllStatesSchoolHolidays || prefs.schoolStrategy === 'avoid_heatmap'
+
   let publicHolidays: Holiday[], schoolHolidays: Holiday[]
+  let heatmapDensityByDate: Map<string, number> | undefined
+
   try {
     const invalid = await validateRegion({ country, subdivision, group })
     if (invalid) return NextResponse.json({ error: invalid }, { status: 400 })
     // Suggestions without holidays would propose days that are already free.
     ;[publicHolidays, schoolHolidays] = await Promise.all([
       fetchHolidays(country, subdivision, year, 'public'),
-      (prefs.preferSchoolHolidays || prefs.avoidSchoolHolidays) ? fetchHolidays(country, subdivision, year, 'school', group) : Promise.resolve([] as Holiday[]),
+      needSchool ? fetchHolidays(country, subdivision, year, 'school', group) : Promise.resolve([] as Holiday[]),
     ])
+
+    if (needAllStatesHeatmap) {
+      const subs = await fetchSubdivisions(country)
+      if (subs.length > 0) {
+        const allSchool = await Promise.all(
+          subs.slice(0, 16).map(s => fetchHolidays(country, s.code, year, 'school').catch(() => [] as Holiday[])),
+        )
+        const counts = countHolidayStates(allSchool)
+        const max = Math.max(allSchool.length, 1)
+        heatmapDensityByDate = new Map()
+        counts.forEach((v, k) => heatmapDensityByDate!.set(k, v / max))
+      }
+    }
   } catch {
     return NextResponse.json({ error: 'Ferien oder Feiertage konnten nicht geladen werden.' }, { status: 502 })
   }
@@ -59,6 +84,7 @@ export async function GET(request: Request) {
     existingVacationDates,
     prefs,
     overwriteExisting,
+    heatmapDensityByDate,
   )
 
   return NextResponse.json(suggestions)
