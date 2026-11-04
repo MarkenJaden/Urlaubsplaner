@@ -29,6 +29,11 @@ import {
   LogOut,
   Edit3,
   X,
+  Activity,
+  Monitor,
+  Smartphone,
+  Tablet,
+  Clock,
 } from 'lucide-react'
 
 interface SafeOAuthSettings {
@@ -63,12 +68,25 @@ interface AdminUserRow {
   vacationsCount: number
   sharesCount: number
   feedsCount: number
+  lastActiveAt: string | null
+  isOnlineNow: boolean
   createdAt: string
   updatedAt: string
 }
 
 interface AdminStatsResponse {
   currentAdminId: string
+  serverTimestamp?: string
+  live?: {
+    activeNow: number
+    activeAuthedNow: number
+    activeGuestsNow: number
+    active30m: number
+    active24h: number
+    activePaths: Array<{ path: string; count: number }>
+    liveDevices: { desktop: number; mobile: number; tablet: number }
+    devices7d: { desktop: number; mobile: number; tablet: number }
+  }
   overview: {
     totalRegisteredUsers: number
     activeRegisteredUsers: number
@@ -108,9 +126,45 @@ interface AdminStatsResponse {
   umamiUrl: string
 }
 
+const relativeFormatter = new Intl.RelativeTimeFormat('de-DE', { numeric: 'auto' })
+
+function formatLastActive(iso: string | null | undefined): { relative: string; exact: string } {
+  if (!iso) return { relative: 'Noch nie', exact: 'Keine Aktivität erfasst' }
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return { relative: 'Unbekannt', exact: '' }
+
+  const exact = date.toLocaleString('de-DE', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  const diffSeconds = Math.round((date.getTime() - Date.now()) / 1000)
+  const absSeconds = Math.abs(diffSeconds)
+
+  if (absSeconds < 60) {
+    return { relative: 'Gerade eben', exact }
+  }
+  if (absSeconds < 3600) {
+    return { relative: relativeFormatter.format(Math.round(diffSeconds / 60), 'minute'), exact }
+  }
+  if (absSeconds < 86400) {
+    return { relative: relativeFormatter.format(Math.round(diffSeconds / 3600), 'hour'), exact }
+  }
+  if (absSeconds < 86400 * 30) {
+    return { relative: relativeFormatter.format(Math.round(diffSeconds / 86400), 'day'), exact }
+  }
+  return { relative: date.toLocaleDateString('de-DE'), exact }
+}
+
+type UserSortKey = 'lastActive' | 'onlineFirst' | 'createdAt' | 'entries' | 'name'
+
 export function AdminDashboard() {
   const [data, setData] = useState<AdminStatsResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  const [liveRefresh, setLiveRefresh] = useState(true)
   const [error, setError] = useState('')
   const [origin, setOrigin] = useState('https://urlaubsplaner.me')
 
@@ -149,6 +203,7 @@ export function AdminDashboard() {
 
   // User Management states
   const [userSearch, setUserSearch] = useState('')
+  const [userSort, setUserSort] = useState<UserSortKey>('lastActive')
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
   const [userActionStatus, setUserActionStatus] = useState('')
   const [userActionBusy, setUserActionBusy] = useState<string | null>(null)
@@ -197,28 +252,54 @@ export function AdminDashboard() {
     setSmtpFromName(smtp.fromName || 'Urlaubsplaner')
   }, [])
 
-  const fetchStats = useCallback(async () => {
-    setLoading(true)
-    setError('')
+  const fetchStats = useCallback(async (silent = false) => {
+    if (!silent) {
+      setLoading(true)
+      setError('')
+    }
     try {
-      const res = await fetch('/api/admin/stats')
+      const res = await fetch('/api/admin/stats', { cache: 'no-store' })
       const body = await res.json()
       if (!res.ok) {
         throw new Error(body.error || 'Zugriff verweigert.')
       }
       setData(body)
-      applyOAuthData(body.oauthSettings)
-      applySmtpData(body.smtpSettings)
+      if (!silent) {
+        applyOAuthData(body.oauthSettings)
+        applySmtpData(body.smtpSettings)
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Fehler beim Laden der Statistiken.')
+      if (!silent) {
+        setError(err instanceof Error ? err.message : 'Fehler beim Laden der Statistiken.')
+      }
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [applyOAuthData, applySmtpData])
 
   useEffect(() => {
-    void fetchStats()
+    void fetchStats(false)
   }, [fetchStats])
+
+  // Live auto-refresh every 15s while tab is visible and liveRefresh is enabled
+  useEffect(() => {
+    if (!liveRefresh) return
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void fetchStats(true)
+      }
+    }, 15_000)
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void fetchStats(true)
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [liveRefresh, fetchStats])
 
   const handleSaveOAuth = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -514,21 +595,45 @@ export function AdminDashboard() {
   }
 
   if (!data) return null
-  const { overview, users, regions, dailyStats, contactMessages, umamiUrl, currentAdminId } = data
+  const { overview, live, users, regions, dailyStats, contactMessages, umamiUrl, currentAdminId, serverTimestamp } = data
   const maxDailyViews = Math.max(1, ...dailyStats.map(d => d.pageViews))
   const unreadMessages = contactMessages.filter(m => !m.isRead).length
   const usersWithEmailCount = users.filter(u => Boolean(u.email)).length
+  const onlineRegisteredCount = users.filter(u => u.isOnlineNow).length
 
-  const filteredUsers = users.filter(u => {
-    const q = userSearch.trim().toLowerCase()
-    if (!q) return true
-    return (
-      (u.username && u.username.toLowerCase().includes(q)) ||
-      (u.email && u.email.toLowerCase().includes(q)) ||
-      (u.name && u.name.toLowerCase().includes(q)) ||
-      u.id.toLowerCase().includes(q)
-    )
-  })
+  const filteredUsers = users
+    .filter(u => {
+      const q = userSearch.trim().toLowerCase()
+      if (!q) return true
+      return (
+        (u.username && u.username.toLowerCase().includes(q)) ||
+        (u.email && u.email.toLowerCase().includes(q)) ||
+        (u.name && u.name.toLowerCase().includes(q)) ||
+        u.id.toLowerCase().includes(q)
+      )
+    })
+    .sort((a, b) => {
+      if (userSort === 'onlineFirst') {
+        if (a.isOnlineNow !== b.isOnlineNow) return a.isOnlineNow ? -1 : 1
+        const ta = a.lastActiveAt ? new Date(a.lastActiveAt).getTime() : 0
+        const tb = b.lastActiveAt ? new Date(b.lastActiveAt).getTime() : 0
+        return tb - ta
+      }
+      if (userSort === 'lastActive') {
+        const ta = a.lastActiveAt ? new Date(a.lastActiveAt).getTime() : 0
+        const tb = b.lastActiveAt ? new Date(b.lastActiveAt).getTime() : 0
+        return tb - ta
+      }
+      if (userSort === 'entries') {
+        return b.vacationsCount - a.vacationsCount
+      }
+      if (userSort === 'name') {
+        const na = (a.name || a.username || a.email || '').toLowerCase()
+        const nb = (b.name || b.username || b.email || '').toLowerCase()
+        return na.localeCompare(nb, 'de')
+      }
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    })
 
   return (
     <main className="container max-w-6xl space-y-6 py-6 text-sm">
@@ -539,14 +644,24 @@ export function AdminDashboard() {
           </Link>
           <h1 className="mt-1 text-2xl font-bold flex items-center gap-2">
             <BarChart3 className="h-6 w-6 text-primary" />
-            Admin-Dashboard, Nutzerverwaltung &amp; System
+            Admin-Dashboard, Live-Analytics &amp; Nutzerverwaltung
           </h1>
           <p className="text-xs text-muted-foreground">
-            Benutzerkonten verwalten, SMTP &amp; Social Logins konfigurieren, Rundmails versenden &amp; Statistiken einsehen
+            Echtzeit-Besucher, Benutzerkonten &amp; letzte Aktivität, SMTP, Social Logins &amp; Rundmails
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => void fetchStats()}>
+          <label className="inline-flex items-center gap-2 rounded-lg border bg-card px-2.5 py-1.5 text-xs font-medium cursor-pointer">
+            <span className="relative flex h-2 w-2">
+              {liveRefresh && (
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              )}
+              <span className={`relative inline-flex rounded-full h-2 w-2 ${liveRefresh ? 'bg-emerald-500' : 'bg-muted-foreground'}`} />
+            </span>
+            <span>Live (15s)</span>
+            <Switch checked={liveRefresh} onCheckedChange={setLiveRefresh} aria-label="Automatische Live-Aktualisierung alle 15 Sekunden" />
+          </label>
+          <Button variant="outline" size="sm" onClick={() => void fetchStats(false)}>
             <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
             Aktualisieren
           </Button>
@@ -558,6 +673,108 @@ export function AdminDashboard() {
           </Button>
         </div>
       </div>
+
+      {/* ==================================================================== */}
+      {/* Live Real-Time Analytics Panel                                       */}
+      {/* ==================================================================== */}
+      {live && (
+        <section aria-labelledby="live-analytics-heading" className="rounded-xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 via-card to-card p-5 space-y-4 shadow-2xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
+              </span>
+              <div>
+                <h2 id="live-analytics-heading" className="font-semibold text-base flex items-center gap-1.5">
+                  <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Live-Analytics – Echtzeit-Aktivität auf urlaubsplaner.me
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  Datenschutzfreundlicher Heartbeat (alle 45 Sek. bei aktivem Tab, ohne IP-Speicherung)
+                </p>
+              </div>
+            </div>
+            {serverTimestamp && (
+              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                Stand: {new Date(serverTimestamp).toLocaleTimeString('de-DE')} Uhr
+              </span>
+            )}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border bg-background/80 p-3.5">
+              <span className="text-xs text-muted-foreground">Jetzt gerade online</span>
+              <div className="mt-1 flex items-baseline gap-2">
+                <span className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
+                  {live.activeNow.toLocaleString('de-DE')}
+                </span>
+                <span className="text-xs text-muted-foreground">aktive Nutzer</span>
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {live.activeAuthedNow} mit Konto · {live.activeGuestsNow} Gäste
+              </p>
+            </div>
+
+            <div className="rounded-lg border bg-background/80 p-3.5">
+              <span className="text-xs text-muted-foreground">Letzte 30 Minuten</span>
+              <p className="mt-1 text-2xl font-bold">{live.active30m.toLocaleString('de-DE')}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Aktive Sitzungen in den letzten 30 Min.
+              </p>
+            </div>
+
+            <div className="rounded-lg border bg-background/80 p-3.5">
+              <span className="text-xs text-muted-foreground">Letzte 24 Stunden</span>
+              <p className="mt-1 text-2xl font-bold">{live.active24h.toLocaleString('de-DE')}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Eindeutige Besucher in 24 Std.
+              </p>
+            </div>
+
+            <div className="rounded-lg border bg-background/80 p-3.5">
+              <span className="text-xs text-muted-foreground">Geräte-Verteilung (7 Tage)</span>
+              <div className="mt-2 flex items-center justify-between text-xs">
+                <span className="inline-flex items-center gap-1" aria-label="Desktop">
+                  <Monitor className="h-3.5 w-3.5 text-primary" />
+                  <strong>{live.devices7d.desktop}</strong> PC
+                </span>
+                <span className="inline-flex items-center gap-1" aria-label="Smartphone">
+                  <Smartphone className="h-3.5 w-3.5 text-sky-600" />
+                  <strong>{live.devices7d.mobile}</strong> Mobil
+                </span>
+                <span className="inline-flex items-center gap-1" aria-label="Tablet">
+                  <Tablet className="h-3.5 w-3.5 text-purple-600" />
+                  <strong>{live.devices7d.tablet}</strong> Tablet
+                </span>
+              </div>
+              <p className="mt-1.5 text-[11px] text-muted-foreground">
+                Live jetzt: {live.liveDevices.desktop} PC · {live.liveDevices.mobile} Mobil · {live.liveDevices.tablet} Tablet
+              </p>
+            </div>
+          </div>
+
+          {live.activePaths.length > 0 && (
+            <div className="rounded-lg border bg-background/60 p-3 space-y-2">
+              <div className="text-xs font-medium text-foreground">Gerade angesehene Seiten (Live):</div>
+              <div className="flex flex-wrap gap-2">
+                {live.activePaths.map(item => (
+                  <span
+                    key={item.path}
+                    className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1 text-xs"
+                  >
+                    <code className="font-mono text-[11px] text-primary">{item.path}</code>
+                    <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+                      {item.count} live
+                    </span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {/* Primary KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -614,24 +831,45 @@ export function AdminDashboard() {
       <div className="rounded-xl border bg-card p-5 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-semibold text-base flex items-center gap-2">
+            <h2 id="admin-users-heading" className="font-semibold text-base flex flex-wrap items-center gap-2">
               <Users className="h-4 w-4 text-primary" />
-              Benutzerverwaltung ({users.length} registrierte Konten)
+              <span>Benutzerverwaltung ({users.length} registrierte Konten)</span>
+              {onlineRegisteredCount > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  {onlineRegisteredCount} online
+                </span>
+              )}
             </h2>
             <p className="text-xs text-muted-foreground">
-              Verwalte alle Nutzerkonten: Admin-Rechte vergeben, Passwörter zurücksetzen, Kontodaten bearbeiten oder Konten löschen.
+              Verwalte alle Nutzerkonten: letzte Aktivität prüfen, Admin-Rechte vergeben, Passwörter zurücksetzen, Kontodaten bearbeiten oder Konten löschen.
             </p>
           </div>
-          <div className="relative w-full sm:w-72">
-            <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="search"
-              placeholder="Suche nach Name, @user, E-Mail…"
-              value={userSearch}
-              onChange={e => setUserSearch(e.target.value)}
-              className="min-h-9 w-full rounded-lg border bg-background pl-9 pr-3 text-xs"
-            />
-          </div>
+          <search className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <select
+              aria-label="Nutzer sortieren"
+              value={userSort}
+              onChange={e => setUserSort(e.target.value as UserSortKey)}
+              className="min-h-9 rounded-lg border bg-background px-2.5 text-xs"
+            >
+              <option value="lastActive">Sortierung: Zuletzt aktiv</option>
+              <option value="onlineFirst">Sortierung: Online zuerst</option>
+              <option value="createdAt">Sortierung: Neueste Konten</option>
+              <option value="entries">Sortierung: Meiste Einträge</option>
+              <option value="name">Sortierung: Name (A–Z)</option>
+            </select>
+            <div className="relative flex-1 sm:w-64">
+              <Search className="h-4 w-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
+              <input
+                type="search"
+                aria-label="Nutzer durchsuchen"
+                placeholder="Suche nach Name, @user, E-Mail…"
+                value={userSearch}
+                onChange={e => setUserSearch(e.target.value)}
+                className="min-h-9 w-full rounded-lg border bg-background pl-9 pr-3 text-xs"
+              />
+            </div>
+          </search>
         </div>
 
         {userActionStatus && (
@@ -753,11 +991,16 @@ export function AdminDashboard() {
           </form>
         )}
 
-        <div className="overflow-x-auto rounded-lg border">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-muted/60 text-muted-foreground border-b">
+        <div
+          tabIndex={0}
+          role="region"
+          aria-labelledby="admin-users-heading"
+          className="overflow-auto max-h-[560px] rounded-lg border"
+        >
+          <table className="w-full text-left text-xs border-separate border-spacing-0">
+            <thead className="sticky top-0 z-10 bg-muted text-muted-foreground">
               <tr>
-                <th className="p-2.5 w-8">
+                <th scope="col" className="border-b p-2.5 w-8">
                   <input
                     type="checkbox"
                     aria-label="Alle Nutzer auswählen"
@@ -771,157 +1014,182 @@ export function AdminDashboard() {
                     }}
                   />
                 </th>
-                <th className="p-2.5">Nutzer / E-Mail</th>
-                <th className="p-2.5">Logins</th>
-                <th className="p-2.5">Rolle</th>
-                <th className="p-2.5">Nutzung</th>
-                <th className="p-2.5">Registriert</th>
-                <th className="p-2.5 text-right">Aktionen</th>
+                <th scope="col" className="border-b p-2.5">Nutzer / E-Mail</th>
+                <th scope="col" className="border-b p-2.5">Zuletzt aktiv</th>
+                <th scope="col" className="border-b p-2.5">Logins</th>
+                <th scope="col" className="border-b p-2.5">Rolle</th>
+                <th scope="col" className="border-b p-2.5">Nutzung</th>
+                <th scope="col" className="border-b p-2.5">Registriert</th>
+                <th scope="col" className="border-b p-2.5 text-right">Aktionen</th>
               </tr>
             </thead>
             <tbody className="divide-y">
               {filteredUsers.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-6 text-center text-muted-foreground">
+                  <td colSpan={8} className="p-6 text-center text-muted-foreground">
                     Keine passenden Benutzerkonten gefunden.
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map(u => (
-                  <tr key={u.id} className="hover:bg-muted/20">
-                    <td className="p-2.5">
-                      <input
-                        type="checkbox"
-                        aria-label={`Nutzer ${u.username || u.email || u.id} auswählen`}
-                        checked={selectedUserIds.includes(u.id)}
-                        onChange={e => {
-                          setSelectedUserIds(prev =>
-                            e.target.checked ? [...prev, u.id] : prev.filter(id => id !== u.id)
-                          )
-                        }}
-                      />
-                    </td>
-                    <td className="p-2.5">
-                      <div className="font-semibold text-foreground flex items-center gap-1.5">
-                        {u.name || u.username || 'Unbenannt'}
-                        {u.username && (
-                          <span className="font-mono text-[11px] font-normal text-muted-foreground">
-                            @{u.username}
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-muted-foreground text-[11px]">
-                        {u.email ? (
-                          <a href={`mailto:${u.email}`} className="text-primary hover:underline">
-                            {u.email}
-                          </a>
+                filteredUsers.map(u => {
+                  const activity = formatLastActive(u.lastActiveAt)
+                  return (
+                    <tr key={u.id} className="hover:bg-muted/20">
+                      <td className="p-2.5">
+                        <input
+                          type="checkbox"
+                          aria-label={`Nutzer ${u.username || u.email || u.id} auswählen`}
+                          checked={selectedUserIds.includes(u.id)}
+                          onChange={e => {
+                            setSelectedUserIds(prev =>
+                              e.target.checked ? [...prev, u.id] : prev.filter(id => id !== u.id)
+                            )
+                          }}
+                        />
+                      </td>
+                      <th scope="row" className="p-2.5 font-normal text-left">
+                        <div className="font-semibold text-foreground flex items-center gap-1.5">
+                          {u.name || u.username || 'Unbenannt'}
+                          {u.username && (
+                            <span className="font-mono text-[11px] font-normal text-muted-foreground">
+                              @{u.username}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-muted-foreground text-[11px]">
+                          {u.email ? (
+                            <a href={`mailto:${u.email}`} className="text-primary hover:underline">
+                              {u.email}
+                            </a>
+                          ) : (
+                            <span className="italic">Keine E-Mail hinterlegt</span>
+                          )}
+                        </div>
+                      </th>
+                      <td className="p-2.5 whitespace-nowrap">
+                        {u.isOnlineNow ? (
+                          <div className="space-y-0.5">
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">
+                              <span className="relative flex h-1.5 w-1.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                              </span>
+                              Gerade online
+                            </span>
+                            <div className="text-[10px] text-muted-foreground">{activity.exact}</div>
+                          </div>
                         ) : (
-                          <span className="italic">Keine E-Mail hinterlegt</span>
+                          <div className="space-y-0.5">
+                            <div className="font-medium text-foreground">{activity.relative}</div>
+                            {u.lastActiveAt && (
+                              <div className="text-[10px] text-muted-foreground">{activity.exact}</div>
+                            )}
+                          </div>
                         )}
-                      </div>
-                    </td>
-                    <td className="p-2.5">
-                      <div className="flex flex-wrap gap-1">
-                        {u.hasPassword && (
-                          <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] font-medium">
-                            Passwort
+                      </td>
+                      <td className="p-2.5">
+                        <div className="flex flex-wrap gap-1">
+                          {u.hasPassword && (
+                            <span className="rounded bg-secondary px-1.5 py-0.5 text-[10px] font-medium">
+                              Passwort
+                            </span>
+                          )}
+                          {u.googleLinked && (
+                            <span className="rounded bg-blue-500/15 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 text-[10px] font-medium">
+                              Google
+                            </span>
+                          )}
+                          {u.githubLinked && (
+                            <span className="rounded bg-purple-500/15 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 text-[10px] font-medium">
+                              GitHub
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="p-2.5">
+                        {u.isAdmin ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 px-2 py-0.5 text-[10px] font-semibold">
+                            <Shield className="h-3 w-3" aria-hidden="true" /> Admin
                           </span>
+                        ) : (
+                          <span className="text-muted-foreground text-[11px]">Nutzer</span>
                         )}
-                        {u.googleLinked && (
-                          <span className="rounded bg-blue-500/15 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 text-[10px] font-medium">
-                            Google
-                          </span>
-                        )}
-                        {u.githubLinked && (
-                          <span className="rounded bg-purple-500/15 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 text-[10px] font-medium">
-                            GitHub
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="p-2.5">
-                      {u.isAdmin ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 px-2 py-0.5 text-[10px] font-semibold">
-                          <Shield className="h-3 w-3" /> Admin
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground text-[11px]">Nutzer</span>
-                      )}
-                    </td>
-                    <td className="p-2.5 text-[11px] text-muted-foreground">
-                      {u.vacationsCount} Einträge · {u.feedsCount} Kalender · {u.sharesCount} Shares
-                    </td>
-                    <td className="p-2.5 text-[11px] text-muted-foreground whitespace-nowrap">
-                      {new Date(u.createdAt).toLocaleDateString('de-DE')}
-                    </td>
-                    <td className="p-2.5 text-right">
-                      <div className="inline-flex flex-wrap justify-end gap-1">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-[11px]"
-                          onClick={() => {
-                            setEditModalUser(u)
-                            setEditUsername(u.username || '')
-                            setEditEmail(u.email || '')
-                            setEditName(u.name || '')
-                          }}
-                          title="Benutzername / E-Mail bearbeiten"
-                        >
-                          <Edit3 className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-[11px]"
-                          onClick={() => {
-                            setPasswordModalUser(u)
-                            setNewAdminPassword('')
-                          }}
-                          title="Passwort zurücksetzen"
-                        >
-                          <KeyRound className="h-3 w-3 mr-1" /> Passwort
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={userActionBusy === u.id || (u.id === currentAdminId && u.isAdmin)}
-                          className="h-7 px-2 text-[11px]"
-                          onClick={() => void handleToggleAdmin(u)}
-                          title={u.isAdmin ? 'Admin-Rechte entziehen' : 'Zum Admin machen'}
-                        >
-                          <Shield className="h-3 w-3 mr-1" />
-                          {u.isAdmin ? 'Entziehen' : 'Admin'}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          disabled={userActionBusy === u.id}
-                          className="h-7 px-2 text-[11px]"
-                          onClick={() => void handleLogoutUser(u)}
-                          title="Alle Sitzungen dieses Nutzers abmelden"
-                        >
-                          <LogOut className="h-3 w-3" />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          disabled={userActionBusy === u.id || u.id === currentAdminId || u.username === 'markenjaden'}
-                          className="h-7 px-2 text-[11px] text-destructive hover:text-destructive"
-                          onClick={() => void handleDeleteUser(u)}
-                          title="Konto löschen"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td className="p-2.5 text-[11px] text-muted-foreground">
+                        {u.vacationsCount} Einträge · {u.feedsCount} Kalender · {u.sharesCount} Shares
+                      </td>
+                      <td className="p-2.5 text-[11px] text-muted-foreground whitespace-nowrap">
+                        {new Date(u.createdAt).toLocaleDateString('de-DE')}
+                      </td>
+                      <td className="p-2.5 text-right">
+                        <div className="inline-flex flex-wrap justify-end gap-1">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-[11px]"
+                            onClick={() => {
+                              setEditModalUser(u)
+                              setEditUsername(u.username || '')
+                              setEditEmail(u.email || '')
+                              setEditName(u.name || '')
+                            }}
+                            aria-label={`Kontodaten von ${u.username || u.email || u.id} bearbeiten`}
+                          >
+                            <Edit3 className="h-3 w-3" aria-hidden="true" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-[11px]"
+                            onClick={() => {
+                              setPasswordModalUser(u)
+                              setNewAdminPassword('')
+                            }}
+                            aria-label={`Passwort von ${u.username || u.email || u.id} zurücksetzen`}
+                          >
+                            <KeyRound className="h-3 w-3 mr-1" aria-hidden="true" /> Passwort
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={userActionBusy === u.id || (u.id === currentAdminId && u.isAdmin)}
+                            className="h-7 px-2 text-[11px]"
+                            onClick={() => void handleToggleAdmin(u)}
+                            aria-label={u.isAdmin ? `Admin-Rechte von ${u.username || u.id} entziehen` : `${u.username || u.id} zum Admin machen`}
+                          >
+                            <Shield className="h-3 w-3 mr-1" aria-hidden="true" />
+                            {u.isAdmin ? 'Entziehen' : 'Admin'}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={userActionBusy === u.id}
+                            className="h-7 px-2 text-[11px]"
+                            onClick={() => void handleLogoutUser(u)}
+                            aria-label={`Alle Sitzungen von ${u.username || u.email || u.id} abmelden`}
+                          >
+                            <LogOut className="h-3 w-3" aria-hidden="true" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={userActionBusy === u.id || u.id === currentAdminId || u.username === 'markenjaden'}
+                            className="h-7 px-2 text-[11px] text-destructive hover:text-destructive"
+                            onClick={() => void handleDeleteUser(u)}
+                            aria-label={`Konto von ${u.username || u.email || u.id} löschen`}
+                          >
+                            <Trash2 className="h-3 w-3" aria-hidden="true" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>

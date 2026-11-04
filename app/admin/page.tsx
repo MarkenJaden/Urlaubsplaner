@@ -4,7 +4,7 @@ import { auth } from '@/auth'
 import { AdminDashboard } from '@/components/admin/admin-dashboard'
 
 export const metadata: Metadata = {
-  title: 'Admin-Dashboard · Urlaubsplaner',
+  title: 'Admin-Dashboard',
   robots: { index: false, follow: false },
 }
 

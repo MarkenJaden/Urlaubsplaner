@@ -2,8 +2,11 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
-  title: 'Impressum · Urlaubsplaner',
+  title: 'Impressum',
   description: 'Impressum und Anbieterkennzeichnung gemäß § 5 DDG für den Urlaubsplaner.',
+  alternates: {
+    canonical: '/impressum',
+  },
 }
 
 export default function ImpressumPage() {

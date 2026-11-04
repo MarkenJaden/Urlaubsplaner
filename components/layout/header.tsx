@@ -19,24 +19,32 @@ export function Header({ isLoggedIn, isAdmin }: HeaderProps) {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-14 items-center justify-between gap-3">
-        <Link href="/" className="flex min-w-0 items-center gap-2 text-base font-semibold sm:text-lg">
-          <img src="/icon.svg" alt="" className="h-7 w-7 shrink-0" />
-          <span className="truncate">Urlaubsplaner</span>
-        </Link>
+        <div className="flex min-w-0 items-center gap-4">
+          <Link href="/" className="flex min-w-0 items-center gap-2 text-base font-semibold sm:text-lg">
+            <img src="/icon.svg" alt="" width={28} height={28} className="h-7 w-7 shrink-0" />
+            <span className="truncate">Urlaubsplaner</span>
+          </Link>
+          <Link
+            href="/brueckentage"
+            className="hidden md:inline-flex items-center text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            Brückentage &amp; Bundesländer
+          </Link>
+        </div>
 
         <nav className="flex shrink-0 items-center gap-1 sm:gap-2">
           {isLoggedIn ? (
             <>
               {showAdmin && (
-                <Button variant="ghost" size="icon" asChild title="Admin-Dashboard" aria-label="Admin-Dashboard">
+                <Button variant="ghost" size="icon" asChild aria-label="Admin-Dashboard">
                   <Link href="/admin">
-                    <BarChart3 className="h-4 w-4" />
+                    <BarChart3 className="h-4 w-4" aria-hidden="true" />
                   </Link>
                 </Button>
               )}
-              <Button variant="ghost" size="icon" asChild title="Einstellungen" aria-label="Einstellungen">
+              <Button variant="ghost" size="icon" asChild aria-label="Einstellungen">
                 <Link href="/settings">
-                  <Settings className="h-4 w-4" />
+                  <Settings className="h-4 w-4" aria-hidden="true" />
                 </Link>
               </Button>
               <ThemeToggle />
@@ -44,9 +52,9 @@ export function Header({ isLoggedIn, isAdmin }: HeaderProps) {
                 variant="ghost"
                 size="icon"
                 onClick={() => signOut({ callbackUrl: '/' })}
-                title="Abmelden" aria-label="Abmelden"
+                aria-label="Abmelden"
               >
-                <LogOut className="h-4 w-4" />
+                <LogOut className="h-4 w-4" aria-hidden="true" />
               </Button>
             </>
           ) : (
@@ -54,7 +62,7 @@ export function Header({ isLoggedIn, isAdmin }: HeaderProps) {
               <ThemeToggle />
               <Button variant="ghost" size="sm" className="px-2 sm:px-3" asChild>
                 <Link href="/login">
-                  <LogIn className="h-4 w-4" />
+                  <LogIn className="h-4 w-4" aria-hidden="true" />
                   Anmelden
                 </Link>
               </Button>

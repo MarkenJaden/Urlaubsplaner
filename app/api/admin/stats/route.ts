@@ -52,6 +52,9 @@ export async function GET() {
   }
 
   const now = new Date()
+  const threeMinutesAgo = new Date(now.getTime() - 3 * 60 * 1000)
+  const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000)
+  const twentyFourHoursAgo = subDays(now, 1)
   const sevenDaysAgo = subDays(now, 7)
   const thirtyDaysAgo = subDays(now, 30)
 
@@ -66,12 +69,17 @@ export async function GET() {
     totalVisitors,
     unregisteredGuests,
     guestsWithPlans,
+    activeVisitorsNowList,
+    activeVisitors30m,
+    activeVisitors24h,
     activeVisitors7d,
     activeVisitors30d,
+    deviceBreakdown7d,
     guestDaysAgg,
     dailyStats,
     contactMessages,
     visitorRegions,
+    visitorLastSeenByUser,
     oauthSettings,
     smtpSettings,
     usersList,
@@ -86,8 +94,28 @@ export async function GET() {
     prisma.analyticsVisitor.count(),
     prisma.analyticsVisitor.count({ where: { isRegistered: false } }),
     prisma.analyticsVisitor.count({ where: { isRegistered: false, plannedDays: { gt: 0 } } }),
+    prisma.analyticsVisitor.findMany({
+      where: { lastSeenAt: { gte: threeMinutesAgo } },
+      select: {
+        visitorId: true,
+        userId: true,
+        isRegistered: true,
+        currentPath: true,
+        deviceType: true,
+        subdivision: true,
+        lastSeenAt: true,
+      },
+      orderBy: { lastSeenAt: 'desc' },
+    }),
+    prisma.analyticsVisitor.count({ where: { lastSeenAt: { gte: thirtyMinutesAgo } } }),
+    prisma.analyticsVisitor.count({ where: { lastSeenAt: { gte: twentyFourHoursAgo } } }),
     prisma.analyticsVisitor.count({ where: { lastSeenAt: { gte: sevenDaysAgo } } }),
     prisma.analyticsVisitor.count({ where: { lastSeenAt: { gte: thirtyDaysAgo } } }),
+    prisma.analyticsVisitor.groupBy({
+      by: ['deviceType'],
+      _count: { visitorId: true },
+      where: { lastSeenAt: { gte: sevenDaysAgo }, deviceType: { not: null } },
+    }),
     prisma.analyticsVisitor.aggregate({
       where: { isRegistered: false },
       _sum: { plannedDays: true },
@@ -107,6 +135,11 @@ export async function GET() {
       orderBy: { _count: { subdivision: 'desc' } },
       take: 10,
     }),
+    prisma.analyticsVisitor.groupBy({
+      by: ['userId'],
+      _max: { lastSeenAt: true },
+      where: { userId: { not: null } },
+    }),
     getSafeAdminOAuthSettings(),
     getSafeAdminSmtpSettings(),
     prisma.user.findMany({
@@ -124,8 +157,88 @@ export async function GET() {
     }),
   ])
 
+  const visitorLastSeenMap = new Map<string, Date>()
+  for (const row of visitorLastSeenByUser) {
+    if (row.userId && row._max.lastSeenAt) {
+      visitorLastSeenMap.set(row.userId, row._max.lastSeenAt)
+    }
+  }
+
+  const mappedUsers = usersList.map(u => {
+    const pingSeen = visitorLastSeenMap.get(u.id)
+    const effectiveLastActive =
+      u.lastActiveAt && pingSeen
+        ? (u.lastActiveAt > pingSeen ? u.lastActiveAt : pingSeen)
+        : (u.lastActiveAt ?? pingSeen ?? null)
+    const isOnlineNow = Boolean(effectiveLastActive && effectiveLastActive >= threeMinutesAgo)
+
+    return {
+      id: u.id,
+      username: u.username,
+      name: u.name,
+      email: u.email,
+      isAdmin: isUserAdmin(u),
+      hasPassword: Boolean(u.passwordHash),
+      googleLinked: Boolean(u.googleId || u.keycloakId.startsWith('google:')),
+      githubLinked: Boolean(u.githubId || u.keycloakId.startsWith('github:')),
+      vacationsCount: u._count.vacations,
+      sharesCount: u._count.shares,
+      feedsCount: u._count.calendarFeeds + 1,
+      lastActiveAt: effectiveLastActive,
+      isOnlineNow,
+      createdAt: u.createdAt,
+      updatedAt: u.updatedAt,
+    }
+  })
+
+  // Combine visitor pings in last 3m with signed-in accounts whose lastActiveAt is in last 3m (excluding current admin if only on /admin unless also browsing site)
+  const activeGuestsNow = activeVisitorsNowList.filter(v => !v.isRegistered && !v.userId).length
+  const onlineAuthedUserIds = new Set<string>(
+    activeVisitorsNowList.map(v => v.userId).filter((id): id is string => Boolean(id))
+  )
+  for (const u of mappedUsers) {
+    if (u.isOnlineNow && u.id !== user.id) {
+      onlineAuthedUserIds.add(u.id)
+    }
+  }
+  const activeAuthedNow = onlineAuthedUserIds.size
+  const activeNow = activeGuestsNow + activeAuthedNow
+
+  const pathCounts = new Map<string, number>()
+  const liveDevices = { desktop: 0, mobile: 0, tablet: 0 }
+  for (const v of activeVisitorsNowList) {
+    const p = v.currentPath || '/'
+    pathCounts.set(p, (pathCounts.get(p) ?? 0) + 1)
+    if (v.deviceType === 'mobile') liveDevices.mobile++
+    else if (v.deviceType === 'tablet') liveDevices.tablet++
+    else liveDevices.desktop++
+  }
+
+  const activePaths = [...pathCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([path, count]) => ({ path, count }))
+
+  const devices7d = { desktop: 0, mobile: 0, tablet: 0 }
+  for (const row of deviceBreakdown7d) {
+    if (row.deviceType === 'mobile') devices7d.mobile = row._count.visitorId
+    else if (row.deviceType === 'tablet') devices7d.tablet = row._count.visitorId
+    else if (row.deviceType === 'desktop') devices7d.desktop = row._count.visitorId
+  }
+
   return NextResponse.json({
     currentAdminId: user.id,
+    serverTimestamp: now.toISOString(),
+    live: {
+      activeNow,
+      activeAuthedNow,
+      activeGuestsNow,
+      active30m: activeVisitors30m,
+      active24h: activeVisitors24h,
+      activePaths,
+      liveDevices,
+      devices7d,
+    },
     overview: {
       totalRegisteredUsers,
       activeRegisteredUsers,
@@ -142,21 +255,7 @@ export async function GET() {
       totalGuestPlannedDays: guestDaysAgg._sum?.plannedDays ?? 0,
       totalShares,
     },
-    users: usersList.map(u => ({
-      id: u.id,
-      username: u.username,
-      name: u.name,
-      email: u.email,
-      isAdmin: isUserAdmin(u),
-      hasPassword: Boolean(u.passwordHash),
-      googleLinked: Boolean(u.googleId || u.keycloakId.startsWith('google:')),
-      githubLinked: Boolean(u.githubId || u.keycloakId.startsWith('github:')),
-      vacationsCount: u._count.vacations,
-      sharesCount: u._count.shares,
-      feedsCount: u._count.calendarFeeds + 1,
-      createdAt: u.createdAt,
-      updatedAt: u.updatedAt,
-    })),
+    users: mappedUsers,
     regions: visitorRegions.map(r => ({
       subdivision: r.subdivision ?? 'Unbekannt',
       count: r._count.subdivision,

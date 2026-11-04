@@ -22,7 +22,15 @@ export async function authenticate(identifierInput: unknown, passwordInput: unkn
   // Spend the same password work for unknown users to reduce enumeration.
   const fallback = `scrypt:${'0'.repeat(32)}:${'0'.repeat(128)}`
   const valid = await verifyPassword(passwordInput, user?.passwordHash ?? fallback)
-  return user && valid ? user : null
+  if (!user || !valid) return null
+
+  const now = new Date()
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { lastActiveAt: now },
+  }).catch(() => undefined)
+  user.lastActiveAt = now
+  return user
 }
 
 export async function registerAccount(usernameInput: unknown, password: unknown, nameInput: unknown, emailInput?: unknown) {
@@ -46,6 +54,7 @@ export async function registerAccount(usernameInput: unknown, password: unknown,
       username,
       email,
       isAdmin: isOwner,
+      lastActiveAt: new Date(),
       calendarToken: randomBytes(32).toString('base64url'),
       keycloakId: `local:${randomUUID()}`,
       passwordHash: await hashPassword(password),

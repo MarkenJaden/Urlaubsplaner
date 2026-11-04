@@ -3,8 +3,11 @@ import Link from 'next/link'
 import { CookieSettingsButton } from '@/components/legal/cookie-banner'
 
 export const metadata: Metadata = {
-  title: 'Datenschutzerklärung · Urlaubsplaner',
+  title: 'Datenschutzerklärung',
   description: 'Informationen zum Datenschutz gemäß DSGVO und TDDDG für den Urlaubsplaner.',
+  alternates: {
+    canonical: '/datenschutz',
+  },
 }
 
 export default function PrivacyPage() {
@@ -60,10 +63,10 @@ export default function PrivacyPage() {
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">3. Nutzerkonto &amp; Synchronisierung</h2>
         <p>
-          Wenn du ein kostenloses Konto anlegst, speichern wir: deinen gewählten Benutzernamen, optional einen Anzeigenamen, dein Passwort ausschließlich als kryptografischen <code>scrypt</code>-Hash, einen Hash deines Wiederherstellungsschlüssels, deine Einstellungen (z. B. Region, Urlaubs- und Gleitzeitkontingent, Kalender-Feed-Filter), deine geplanten Tage samt Notizen sowie ein zufälliges Token für dein persönliches Kalender-Abonnement. Eine E-Mail-Adresse ist für die Registrierung nicht erforderlich.
+          Wenn du ein kostenloses Konto anlegst, speichern wir: deinen gewählten Benutzernamen, optional deine E-Mail-Adresse (z. B. für die Anmeldung oder das Zurücksetzen des Passworts), optional verknüpfte OAuth-Kennungen (Google oder GitHub, falls du diese Anmeldemethode wählst), dein Passwort ausschließlich als kryptografischen <code>scrypt</code>-Hash, einen Hash deines Wiederherstellungsschlüssels, den Zeitpunkt der letzten Kontoaktivität, deine Einstellungen (z. B. Region, Urlaubs- und Gleitzeitkontingent), deine geplanten Tage samt Notizen sowie zufällige Tokens für deine persönlichen Kalender-Abonnements. Eine E-Mail-Adresse ist optional; ein Konto kann auch rein mit Benutzername und Wiederherstellungsschlüssel genutzt werden.
         </p>
         <p>
-          Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung bzw. Bereitstellung des gewünschten Kontodienstes). Deine Daten bleiben gespeichert, bis du einzelne Einträge oder dein gesamtes Konto unter <em>Einstellungen → Konto löschen</em> entfernst; bei einer Kontolöschung werden sämtliche zugehörigen Urlaubseinträge und Freigabelinks endgültig aus der Datenbank gelöscht.
+          Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO (Vertragserfüllung bzw. Bereitstellung des gewünschten Kontodienstes). Deine Daten bleiben gespeichert, bis du einzelne Einträge oder dein gesamtes Konto unter <em>Einstellungen → Konto löschen</em> entfernst; bei einer Kontolöschung werden sämtliche zugehörigen Urlaubseinträge, Kalender-Feeds und Freigabelinks endgültig aus der Datenbank gelöscht.
         </p>
       </section>
 
@@ -73,7 +76,7 @@ export default function PrivacyPage() {
           <strong>Teilen-Funktion:</strong> Du kannst deinen Urlaubsplan aktiv mit anderen Personen teilen. Im Gastmodus werden die von dir freigegebenen Tage direkt im erzeugten Link kodiert. Mit einem Konto kannst du Freigabelinks (mit Lese- oder Bearbeitungsrecht) erzeugen und diese jederzeit im Teilen-Dialog wieder widerrufen.
         </p>
         <p>
-          <strong>Kalender-Abonnement (iCal / Google Kalender):</strong> Über deine persönliche Feed-URL können Kalender-Programme (z. B. Google Kalender, Apple Kalender, Outlook) deine geplanten Tage abrufen. Welche Inhalte (Urlaub, Gleittage, Notizen, Feiertage, Schulferien) im Feed enthalten sind, bestimmst du selbst. Wenn du den Link an einen Drittanbieter wie Google Kalender übergibst, ruft dieser Anbieter die URL regelmäßig von unserem Server ab; du kannst das Token jederzeit in den Einstellungen neu generieren, wodurch der bisherige Link sofort ungültig wird.
+          <strong>Kalender-Abonnement (iCal / Google Kalender):</strong> Über deine persönliche Feed-URL können Kalender-Programme (z. B. Google Kalender, Apple Kalender, Outlook) deine geplanten Tage abrufen. Welche Inhalte (Urlaub, Gleittage, Notizen, Feiertage, Schulferien) im jeweiligen Feed enthalten sind, bestimmst du selbst. Wenn du den Link an einen Drittanbieter wie Google Kalender übergibst, ruft dieser Anbieter die URL regelmäßig von unserem Server ab; du kannst das Token jederzeit in den Einstellungen neu generieren oder einzelne Feeds löschen, wodurch der bisherige Link sofort ungültig wird.
         </p>
       </section>
 
@@ -102,7 +105,7 @@ export default function PrivacyPage() {
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">6. Nutzungsstatistik &amp; Reichweitenmessung</h2>
         <p>
-          Um die Stabilität des Dienstes zu gewährleisten und zu erkennen, wie viele registrierte und nicht registrierte Nutzer den Planer verwenden, erfassen wir aggregierte technische Kennzahlen (Tageszähler und eine zufällige, nicht personenbezogene Kennung ohne IP-Speicherung in der Statistik-Datenbank, Rechtsgrundlage Art. 6 Abs. 1 lit. f DSGVO). Darüber hinaus betreiben wir bei erteilter Einwilligung (Art. 6 Abs. 1 lit. a DSGVO) auf unserem eigenen Server unter <code>umami.urlaubsplaner.me</code> die datenschutzfreundliche Open-Source-Software Umami. Es werden dabei keinerlei Daten an Werbenetzwerke oder sonstige Dritte weitergegeben.
+          Um die Stabilität des Dienstes zu gewährleisten und in Echtzeit zu erkennen, wie viele registrierte und nicht registrierte Nutzer den Planer verwenden, erfassen wir aggregierte technische Kennzahlen (Tageszähler, Geräteklasse, aufgerufener Seitenpfad ohne private Query-Parameter sowie eine zufällige Kennung ohne IP-Speicherung in der Statistik-Datenbank; Rechtsgrundlage Art. 6 Abs. 1 lit. f DSGVO). Darüber hinaus betreiben wir bei erteilter Einwilligung (Art. 6 Abs. 1 lit. a DSGVO) auf unserem eigenen Server unter <code>umami.urlaubsplaner.me</code> die datenschutzfreundliche Open-Source-Software Umami. Es werden dabei keinerlei Daten an Werbenetzwerke oder sonstige Dritte weitergegeben.
         </p>
       </section>
 

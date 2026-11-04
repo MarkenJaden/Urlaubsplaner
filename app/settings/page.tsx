@@ -1,10 +1,16 @@
 export const dynamic = 'force-dynamic'
 
+import type { Metadata } from 'next'
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
 import { getPublicOAuthStatus } from '@/lib/admin'
 import { SettingsClient } from '@/components/settings/settings-client'
+
+export const metadata: Metadata = {
+  title: 'Kontoeinstellungen',
+  robots: { index: false, follow: false },
+}
 
 export default async function SettingsPage() {
   const session = await auth()

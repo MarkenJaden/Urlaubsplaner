@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import Link from 'next/link'
 import { Header } from '@/components/layout/header'
 import { Toolbar, type SharedPlanStatSummary } from '@/components/calendar/toolbar'
 import { YearView } from '@/components/calendar/year-view'
@@ -31,6 +32,8 @@ import {
 } from '@/lib/vacation-accounting'
 import { recalculateSuggestionBlock, type VacationSuggestionBlock } from '@/lib/vacation-suggester'
 import { decodeSharePayload, type ImportData } from '@/lib/export'
+import { updateAnalyticsContext } from '@/components/analytics/analytics-heartbeat'
+import { SEO_REGIONS } from '@/lib/seo-regions'
 import {
   X,
   CheckCircle2,
@@ -62,6 +65,9 @@ interface CalendarClientProps {
   preferences: Record<string, unknown>
   isLoggedIn: boolean
   initialTodayKey?: string
+  initialYear?: number
+  initialCountry?: string
+  initialSubdivision?: string
 }
 
 const SHARED_OVERLAYS_STORAGE_KEY = 'urlaubsplaner_shared_overlays_v1'
@@ -230,9 +236,18 @@ function mapApiShareToOverlay(
   }
 }
 
-export function CalendarClient({ preferences: serverPrefs, isLoggedIn, initialTodayKey }: CalendarClientProps) {
+export function CalendarClient({
+  preferences: serverPrefs,
+  isLoggedIn,
+  initialTodayKey,
+  initialYear,
+  initialCountry,
+  initialSubdivision,
+}: CalendarClientProps) {
   const [todayKey, setTodayKey] = useState(() => initialTodayKey ?? format(new Date(), 'yyyy-MM-dd'))
-  const [year, setYear] = useState(() => Number((initialTodayKey ?? format(new Date(), 'yyyy-MM-dd')).slice(0, 4)))
+  const [year, setYear] = useState(
+    () => initialYear ?? Number((initialTodayKey ?? format(new Date(), 'yyyy-MM-dd')).slice(0, 4))
+  )
 
   // Align todayKey with the browser's local calendar date after hydration and across midnight
   // without causing an SSR/client hydration mismatch when UTC and local dates differ.
@@ -275,7 +290,19 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn, initialTo
   useEffect(() => {
     const loaded = loadConfig()
     if (!isLoggedIn) {
-      setConfig(loaded)
+      if (initialCountry || initialSubdivision) {
+        setConfig({
+          ...loaded,
+          ...(initialCountry ? { country: initialCountry } : {}),
+          ...(initialSubdivision
+            ? { subdivision: initialSubdivision, holidayGroup: undefined }
+            : initialCountry && initialCountry !== loaded.country
+              ? { subdivision: undefined, holidayGroup: undefined }
+              : {}),
+        })
+      } else {
+        setConfig(loaded)
+      }
     } else {
       setGuestEntriesCount(loaded.entries?.length ?? 0)
       try {
@@ -284,7 +311,7 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn, initialTo
         // ignore
       }
     }
-  }, [isLoggedIn])
+  }, [isLoggedIn, initialCountry, initialSubdivision])
 
   // Load saved shared plan overlays from localStorage
   useEffect(() => {
@@ -538,30 +565,13 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn, initialTo
     return baseEntries
   }, [activeCollab, collabMode, baseEntries, year])
 
-  // Lightweight anonymous/registered analytics heartbeat for the Admin Dashboard
+  // Sync active region and planned entry count with the global AnalyticsHeartbeat
   useEffect(() => {
-    if (typeof window === 'undefined' || process.env.NODE_ENV === 'test') return
-    try {
-      let visitorId = localStorage.getItem('urlaubsplaner_visitor_id')
-      if (!visitorId) {
-        visitorId = typeof crypto !== 'undefined' && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `v-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-        localStorage.setItem('urlaubsplaner_visitor_id', visitorId)
-      }
-      void fetch('/api/analytics/ping', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          visitorId,
-          country,
-          subdivision,
-          plannedDaysCount: baseEntries.length,
-        }),
-      }).catch(() => {})
-    } catch {
-      // ignore
-    }
+    updateAnalyticsContext({
+      country,
+      subdivision,
+      plannedDaysCount: baseEntries.length,
+    })
   }, [country, subdivision, baseEntries.length])
 
   const { data: publicHolidays = [], isError: holidaysError, refetch: refetchHolidays } = useHolidays({
@@ -1374,6 +1384,9 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn, initialTo
       />
 
       <main className="container space-y-4 py-3 sm:py-4">
+        <h1 className="sr-only">
+          Urlaubsplaner {year} – Brückentage, Schulferien &amp; Optimale Urlaubsplanung
+        </h1>
         {/* Guest Welcome & Quick Actions Bar */}
         {!isLoggedIn && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200/80 bg-blue-50/80 dark:border-blue-900/50 dark:bg-blue-950/30 px-3.5 py-2.5 text-sm text-blue-900 dark:text-blue-100">
@@ -1888,38 +1901,68 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn, initialTo
         <details className="group rounded-xl border bg-card/60 p-4 text-sm">
           <summary className="flex cursor-pointer list-none items-center justify-between font-medium text-foreground">
             <span className="flex items-center gap-2">
-              <HelpCircle className="h-4 w-4 text-primary" />
-              Tipps zur optimalen Urlaubsplanung {year}, Brückentage &amp; Häufige Fragen
+              <HelpCircle className="h-4 w-4 text-primary" aria-hidden="true" />
+              Tipps zur optimalen Urlaubsplanung {year}, Brückentage nach Bundesland &amp; Häufige Fragen
             </span>
-            <span className="text-xs text-muted-foreground group-open:rotate-180 transition-transform">▼</span>
+            <span className="text-xs text-muted-foreground group-open:rotate-180 transition-transform" aria-hidden="true">▼</span>
           </summary>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 text-xs text-muted-foreground leading-relaxed border-t pt-4">
-            <div className="space-y-1.5">
-              <h3 className="font-semibold text-foreground flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-primary" />
-                Maximale freie Tage durch Brückentage &amp; 4-Tage-Woche
-              </h3>
-              <p>
-                Mit dem Button <strong>„Planen“</strong> (Taste <kbd className="rounded border px-1">P</kbd>) analysiert der smarte Algorithmus alle gesetzlichen Feiertage, deine individuellen Arbeitstage (z.B. 5-Tage- oder 4-Tage-Woche) und Schulferien. Du kannst die Vorschläge anschließend direkt auf dem Kalender verschieben oder an den Enden länger/kürzer ziehen.
-              </p>
+          <div className="mt-4 space-y-5 text-xs text-muted-foreground leading-relaxed border-t pt-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="space-y-1.5">
+                <h2 className="font-semibold text-foreground flex items-center gap-1.5 text-xs">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+                  Maximale freie Tage durch Brückentage &amp; 4-Tage-Woche
+                </h2>
+                <p>
+                  Mit dem Button <strong>„Planen“</strong> (Taste <kbd className="rounded border px-1">P</kbd>) analysiert der smarte Algorithmus alle gesetzlichen Feiertage, deine individuellen Arbeitstage (z.B. 5-Tage- oder 4-Tage-Woche) und Schulferien. Du kannst die Vorschläge anschließend direkt auf dem Kalender verschieben oder an den Enden länger/kürzer ziehen.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <h2 className="font-semibold text-foreground flex items-center gap-1.5 text-xs">
+                  <Share2 className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+                  Mehrfachauswahl &amp; gemeinsam planen
+                </h2>
+                <p>
+                  Halte die Maustaste auf einem Tag gedrückt und ziehe über mehrere Tage (oder nutze <kbd className="rounded border px-1">Shift</kbd> + Klick), um ganze Zeiträume als Urlaub, Gleittag oder mehrtägige Notiz/Event einzutragen. Über <strong>„Teilen“</strong> kannst du Pläne mit Familie oder Kollegen vergleichen und gemeinsam bearbeiten.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <h2 className="font-semibold text-foreground flex items-center gap-1.5 text-xs">
+                  <CalendarPlus className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+                  Mehrere Kalender-Abos für Google, Apple &amp; Outlook
+                </h2>
+                <p>
+                  Binde deinen Urlaubsplan per Direkt-Button in <strong>Google Kalender</strong>, Apple Kalender oder Outlook ein. Mit einem kostenlosen Konto kannst du mehrere getrennte Kalender-Feeds mit eigenen Filtern anlegen – z. B. einen Feed fürs Büro ohne private Notizen und einen privaten Feed mit Feiertagen &amp; Schulferien.
+                </p>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <h3 className="font-semibold text-foreground flex items-center gap-1.5">
-                <Share2 className="h-3.5 w-3.5 text-primary" />
-                Mehrfachauswahl &amp; gemeinsam planen
-              </h3>
-              <p>
-                Halte die Maustaste auf einem Tag gedrückt und ziehe über mehrere Tage (oder nutze <kbd className="rounded border px-1">Shift</kbd> + Klick), um ganze Zeiträume als Urlaub, Gleittag oder mehrtägige Notiz/Event einzutragen. Über <strong>„Teilen“</strong> kannst du Pläne mit Familie oder Kollegen vergleichen und gemeinsam bearbeiten.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <h3 className="font-semibold text-foreground flex items-center gap-1.5">
-                <CalendarPlus className="h-3.5 w-3.5 text-primary" />
-                Google Kalender, Outlook &amp; Vorgesetzte
-              </h3>
-              <p>
-                Binde deinen Urlaubsplan per Direkt-Button in <strong>Google Kalender</strong>, Apple Kalender oder Outlook ein und entscheide selbst, ob Feiertage, Schulferien oder Notizen enthalten sein sollen. Für deinen Urlaubsantrag beim Arbeitgeber gibt es fertige E-Mail-, Tabellen- und Chat-Vorlagen zum Kopieren.
-              </p>
+
+            <div className="border-t pt-4 space-y-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-semibold text-foreground text-xs">
+                  Brückentage &amp; Schulferien {year} nach Bundesland (Direktübersicht)
+                </h2>
+                <div className="flex items-center gap-2">
+                  <Link href={`/brueckentage/${year}`} className="text-primary underline font-medium">
+                    Alle Brückentage {year}
+                  </Link>
+                  <span>·</span>
+                  <Link href={`/brueckentage/${year + 1}`} className="text-primary underline font-medium">
+                    Vorschau {year + 1}
+                  </Link>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {SEO_REGIONS.map(r => (
+                  <Link
+                    key={r.slug}
+                    href={`/brueckentage/${year}/${r.slug}`}
+                    className="rounded-md border bg-background px-2.5 py-1 text-[11px] font-medium text-foreground hover:border-primary hover:text-primary transition-colors"
+                  >
+                    {r.name} {year}
+                  </Link>
+                ))}
+              </div>
             </div>
           </div>
         </details>

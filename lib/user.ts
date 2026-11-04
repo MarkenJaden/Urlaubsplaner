@@ -8,10 +8,11 @@ export async function getOrCreateUser(
   name?: string | null
 ) {
   const normalizedEmail = normalizeOptionalEmail(email) ?? undefined
+  const now = new Date()
   return await prisma.user.upsert({
     where: { keycloakId },
-    update: { email: normalizedEmail, name: name ?? undefined },
-    create: { keycloakId, email: normalizedEmail, name },
+    update: { email: normalizedEmail, name: name ?? undefined, lastActiveAt: now },
+    create: { keycloakId, email: normalizedEmail, name, lastActiveAt: now },
   })
 }
 
@@ -66,6 +67,7 @@ export async function linkOrCreateOAuthUser(params: {
           [idField]: providerAccountId,
           email: currentUser.email || normalizedEmail || undefined,
           name: currentUser.name || name || undefined,
+          lastActiveAt: new Date(),
         },
       })
     }
@@ -103,6 +105,7 @@ export async function linkOrCreateOAuthUser(params: {
           data: {
             [idField]: providerAccountId,
             name: matchingEmailUser.name || name || undefined,
+            lastActiveAt: new Date(),
           },
         })
       }
@@ -114,6 +117,7 @@ export async function linkOrCreateOAuthUser(params: {
         [idField]: providerAccountId,
         email: existingByProvider.email || normalizedEmail || undefined,
         name: existingByProvider.name || name || undefined,
+        lastActiveAt: new Date(),
       },
     })
   }
@@ -132,6 +136,7 @@ export async function linkOrCreateOAuthUser(params: {
           [idField]: providerAccountId,
           email: normalizedEmail,
           name: existingByEmail.name || name || undefined,
+          lastActiveAt: new Date(),
         },
       })
     }
@@ -144,6 +149,7 @@ export async function linkOrCreateOAuthUser(params: {
       [idField]: providerAccountId,
       email: normalizedEmail,
       name: name ?? null,
+      lastActiveAt: new Date(),
       calendarToken: randomBytes(32).toString('base64url'),
     },
   })
@@ -167,6 +173,17 @@ export async function getCalendarFeedByToken(token: string) {
   })
 }
 
+const ACTIVITY_UPDATE_INTERVAL_MS = 60_000
+
 export async function getUserFromSession(session: { user: { id: string } }) {
-  return prisma.user.findUniqueOrThrow({ where: { id: session.user.id } })
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: session.user.id } })
+  const now = new Date()
+  if (!user.lastActiveAt || now.getTime() - user.lastActiveAt.getTime() >= ACTIVITY_UPDATE_INTERVAL_MS) {
+    void prisma.user.update({
+      where: { id: user.id },
+      data: { lastActiveAt: now },
+    }).catch(() => undefined)
+    user.lastActiveAt = now
+  }
+  return user
 }

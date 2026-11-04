@@ -23,6 +23,7 @@ model User {
   name                String?
   calendarToken       String          @unique @default(cuid())
   preferences         Json            @default("{}")
+  lastActiveAt        DateTime?
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
   vacations           VacationEntry[]
@@ -30,6 +31,7 @@ model User {
   calendarFeeds       CalendarFeed[]
 
   @@index([email])
+  @@index([lastActiveAt])
 }
 
 model CalendarFeed {
@@ -88,6 +90,7 @@ model AnalyticsVisitor {
   country      String?
   subdivision  String?
   deviceType   String?
+  currentPath  String?
   plannedDays  Int      @default(0)
   firstSeenAt  DateTime @default(now())
   lastSeenAt   DateTime @default(now())
@@ -96,6 +99,7 @@ model AnalyticsVisitor {
 
   @@index([lastSeenAt])
   @@index([isRegistered])
+  @@index([userId])
 }
 
 model AnalyticsDaily {

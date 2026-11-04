@@ -5,6 +5,8 @@ import './globals.css'
 import { Providers } from './providers'
 import { themeScript } from '@/lib/theme'
 import { CookieBanner, CookieSettingsButton } from '@/components/legal/cookie-banner'
+import { AnalyticsHeartbeat } from '@/components/analytics/analytics-heartbeat'
+import { getSeoPlanningYears } from '@/lib/seo-regions'
 
 const inter = Inter({ subsets: ['latin', 'latin-ext'] })
 
@@ -20,19 +22,21 @@ export const metadata: Metadata = {
     'Kostenloser Online-Urlaubsplaner für Deutschland, Österreich & die Schweiz: Maximale freie Tage durch smarte Brückentage-Optimierung, Schulferien-Heatmap aller Bundesländer, gemeinsam planen & Google-Kalender-Abo.',
   keywords: [
     'Urlaubsplaner',
+    'Brückentage',
     'Brückentage Rechner',
     'Schulferien Kalender',
     'Urlaubsplanung optimieren',
     'Feiertage Bundesländer',
+    'Urlaubstage verdoppeln',
     'Urlaub teilen',
     'Google Kalender Urlaub abonnieren',
     'Gleittage planen',
+    'Fenstertage Österreich',
   ],
   authors: [{ name: 'Jan Jaden Schmidt', url: siteUrl }],
   creator: 'Jan Jaden Schmidt',
-  alternates: {
-    canonical: '/',
-  },
+  publisher: 'Jan Jaden Schmidt',
+  category: 'productivity',
   openGraph: {
     type: 'website',
     locale: 'de_DE',
@@ -51,6 +55,12 @@ export const metadata: Metadata = {
   robots: {
     index: true,
     follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
   },
 }
 
@@ -58,12 +68,19 @@ const jsonLd = {
   '@context': 'https://schema.org',
   '@graph': [
     {
+      '@type': 'WebSite',
+      name: 'Urlaubsplaner',
+      url: siteUrl,
+      inLanguage: 'de-DE',
+    },
+    {
       '@type': 'WebApplication',
       name: 'Urlaubsplaner',
       url: siteUrl,
       applicationCategory: 'ProductivityApplication',
       operatingSystem: 'All',
       inLanguage: 'de-DE',
+      isAccessibleForFree: true,
       description:
         'Smarter Online-Urlaubsplaner mit automatischer Brückentage-Optimierung, Schulferien-Heatmap für alle Bundesländer, Teilen-Funktion und Google-Kalender-Abonnement.',
       offers: {
@@ -76,35 +93,6 @@ const jsonLd = {
         name: 'Jan Jaden Schmidt',
       },
     },
-    {
-      '@type': 'FAQPage',
-      mainEntity: [
-        {
-          '@type': 'Question',
-          name: 'Wie hole ich mit Brückentagen das Maximum aus meinem Jahresurlaub heraus?',
-          acceptedAnswer: {
-            '@type': 'Answer',
-            text: 'Klicke im Urlaubsplaner auf „Optimaler Plan“. Der Algorithmus kombiniert gesetzliche Feiertage, Wochenenden und auf Wunsch Schulferien deines Bundeslandes so, dass du mit möglichst wenigen Urlaubstagen maximale zusammenhängende Freizeit erhältst.',
-          },
-        },
-        {
-          '@type': 'Question',
-          name: 'Kann ich meinen Urlaubsplan mit Partnern oder Kollegen teilen?',
-          acceptedAnswer: {
-            '@type': 'Answer',
-            text: 'Ja! Über den Button „Teilen“ kannst du deinen Plan entweder zum Einblenden und Vergleichen freigeben oder einen Link erstellen, mit dem andere gemeinsam mit dir denselben Plan bearbeiten können.',
-          },
-        },
-        {
-          '@type': 'Question',
-          name: 'Wie abonniere ich meinen Urlaubsplan im Google Kalender oder Apple Kalender?',
-          acceptedAnswer: {
-            '@type': 'Answer',
-            text: 'Klicke auf „Kalender-Abo“, wähle aus, welche Einträge (Urlaub, Gleittage, Notizen, Feiertage, Schulferien) enthalten sein sollen, und nutze den direkten Button „In Google Kalender abonnieren“ oder „In Apple Kalender / Outlook öffnen“.',
-          },
-        },
-      ],
-    },
   ],
 }
 
@@ -113,10 +101,8 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
-  const copyrightYear = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Europe/Berlin',
-    year: 'numeric',
-  }).format(new Date())
+  const years = getSeoPlanningYears()
+  const copyrightYear = String(years[0])
 
   return (
     <html lang="de" suppressHydrationWarning>
@@ -130,25 +116,42 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <Providers>
+          <AnalyticsHeartbeat />
           {children}
           <footer className="border-t bg-muted/20 mt-8">
-            <div className="container flex flex-col sm:flex-row items-center justify-between gap-4 py-6 text-xs text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <img src="/icon.svg" alt="" className="h-4 w-4" />
-                <span>© {copyrightYear} Urlaubsplaner · Jan Jaden Schmidt</span>
+            <div className="container flex flex-col gap-4 py-6 text-xs text-muted-foreground">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <img src="/icon.svg" alt="" width={16} height={16} className="h-4 w-4" />
+                  <span>© {copyrightYear} Urlaubsplaner · Jan Jaden Schmidt</span>
+                </div>
+                <nav aria-label="Ratgeber und Brückentage" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
+                  <Link href="/brueckentage" className="hover:text-foreground underline transition-colors">
+                    Brückentage-Ratgeber
+                  </Link>
+                  {years.slice(0, 2).map(y => (
+                    <Link
+                      key={y}
+                      href={`/brueckentage/${y}`}
+                      className="hover:text-foreground underline transition-colors"
+                    >
+                      Brückentage {y}
+                    </Link>
+                  ))}
+                </nav>
+                <nav aria-label="Rechtliches und Kontakt" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+                  <Link href="/impressum" className="underline hover:text-foreground transition-colors">
+                    Impressum
+                  </Link>
+                  <Link href="/datenschutz" className="underline hover:text-foreground transition-colors">
+                    Datenschutzerklärung
+                  </Link>
+                  <Link href="/kontakt" className="underline hover:text-foreground transition-colors">
+                    Kontakt
+                  </Link>
+                  <CookieSettingsButton />
+                </nav>
               </div>
-              <nav aria-label="Rechtliches und Kontakt" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
-                <Link href="/impressum" className="underline hover:text-foreground transition-colors">
-                  Impressum
-                </Link>
-                <Link href="/datenschutz" className="underline hover:text-foreground transition-colors">
-                  Datenschutzerklärung
-                </Link>
-                <Link href="/kontakt" className="underline hover:text-foreground transition-colors">
-                  Kontakt
-                </Link>
-                <CookieSettingsButton />
-              </nav>
             </div>
           </footer>
           <CookieBanner />
