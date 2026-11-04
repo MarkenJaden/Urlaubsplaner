@@ -11,14 +11,34 @@ export interface VacationEntry {
   updatedAt: string
 }
 
+export interface CalendarFeedSubscription {
+  id: string
+  name: string
+  token: string
+  includeVacations: boolean
+  includeGleittage: boolean
+  includeNotes: boolean
+  includeNoteTitles: boolean
+  includePublicHolidays: boolean
+  includeSchoolHolidays: boolean
+  includeBridgeDays: boolean
+  createdAt: string
+  updatedAt: string
+}
+
 export interface UserProfile {
   username?: string | null
   hasLocalAccount: boolean
+  googleLinked?: boolean
+  githubLinked?: boolean
+  googleOAuthEnabled?: boolean
+  githubOAuthEnabled?: boolean
   isAdmin?: boolean
   id: string
   name?: string | null
   email?: string | null
   calendarToken: string
+  calendarFeeds?: CalendarFeedSubscription[]
   preferences: UserPreferences
 }
 

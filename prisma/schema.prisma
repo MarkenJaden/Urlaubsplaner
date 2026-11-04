@@ -8,21 +8,47 @@ datasource db {
 }
 
 model User {
-  id             String          @id @default(cuid())
-  keycloakId     String          @unique
-  username       String?         @unique
-  passwordHash   String?
-  recoveryHash   String?
-  sessionVersion Int             @default(0)
-  isAdmin        Boolean         @default(false)
-  email          String?
-  name           String?
-  calendarToken  String          @unique @default(cuid())
-  preferences    Json            @default("{}")
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  vacations      VacationEntry[]
-  shares         PlanShare[]
+  id                  String          @id @default(cuid())
+  keycloakId          String          @unique
+  googleId            String?         @unique
+  githubId            String?         @unique
+  username            String?         @unique
+  passwordHash        String?
+  recoveryHash        String?
+  resetTokenHash      String?
+  resetTokenExpiresAt DateTime?
+  sessionVersion      Int             @default(0)
+  isAdmin             Boolean         @default(false)
+  email               String?
+  name                String?
+  calendarToken       String          @unique @default(cuid())
+  preferences         Json            @default("{}")
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  vacations           VacationEntry[]
+  shares              PlanShare[]
+  calendarFeeds       CalendarFeed[]
+
+  @@index([email])
+}
+
+model CalendarFeed {
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name                  String   @default("Mein Kalender-Abo")
+  token                 String   @unique @default(cuid())
+  includeVacations      Boolean  @default(true)
+  includeGleittage      Boolean  @default(true)
+  includeNotes          Boolean  @default(false)
+  includeNoteTitles     Boolean  @default(true)
+  includePublicHolidays Boolean  @default(false)
+  includeSchoolHolidays Boolean  @default(false)
+  includeBridgeDays     Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model VacationEntry {

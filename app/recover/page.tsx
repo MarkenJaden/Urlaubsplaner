@@ -1,2 +1,9 @@
+import { getPublicOAuthStatus } from '@/lib/admin'
 import { CredentialsForm } from '@/components/account/credentials-form'
-export default function RecoverPage() { return <CredentialsForm mode="recover" /> }
+
+export const dynamic = 'force-dynamic'
+
+export default async function RecoverPage() {
+  const status = await getPublicOAuthStatus()
+  return <CredentialsForm mode="recover" smtpEnabled={status.smtpEnabled} />
+}

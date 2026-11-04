@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { CalendarDays, Copy, Check, ExternalLink, RefreshCw, ShieldCheck, Download, LogIn } from 'lucide-react'
 import { useProfile, useUpdatePreferences } from '@/hooks/use-profile'
+import { CalendarFeedsList } from '@/components/calendar/calendar-feeds-list'
 import { createCalendar } from '@/lib/calendar'
 import { downloadFile } from '@/lib/export'
 import type { UserPreferences, UserProfile, VacationEntry } from '@/types'
@@ -51,6 +52,7 @@ export function SubscribeDialog({
 
   const prefs = (profile.data?.preferences ?? {}) as UserPreferences
   const token = profile.data?.calendarToken ?? ''
+  const customFeeds = profile.data?.calendarFeeds ?? []
 
   const includeVacations = prefs.feedIncludeVacations ?? true
   const includeGleittage = prefs.feedIncludeGleittage ?? true
@@ -116,12 +118,12 @@ export function SubscribeDialog({
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogTitle className="flex items-center gap-2 text-xl font-bold">
-          <CalendarDays className="h-5 w-5 text-primary" /> Kalender abonnieren & verbinden
+          <CalendarDays className="h-5 w-5 text-primary" /> Kalender abonnieren &amp; verbinden
         </DialogTitle>
         <p className="text-sm text-muted-foreground mb-3">
-          Binde deine Urlaubsplanung direkt in Google Kalender, Apple Kalender oder Outlook ein und wähle genau aus, welche Einträge enthalten sein sollen.
+          Binde deine Urlaubsplanung direkt in Google Kalender, Apple Kalender oder Outlook ein – als Gesamt-Feed oder aufgeteilt in mehrere Kalender mit eigenen Einstellungen.
         </p>
 
         {isLoggedIn ? (
@@ -134,7 +136,7 @@ export function SubscribeDialog({
 
             <div className="space-y-2 rounded-xl border bg-muted/20 p-3">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">
-                1. Inhalte im Kalender-Abo konfigurieren
+                1. Haupt-Kalender-Abo konfigurieren
               </span>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 text-xs">
                 <label className="flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-md border bg-background px-2.5 py-1.5">
@@ -201,7 +203,7 @@ export function SubscribeDialog({
             {/* Direct Subscription Buttons */}
             <div className="space-y-2">
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">
-                2. Direkt mit deinem Kalender verbinden
+                2. Haupt-Feed direkt mit deinem Kalender verbinden
               </span>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {googleCalendarUrl && (
@@ -235,7 +237,7 @@ export function SubscribeDialog({
             {/* Link Input */}
             <div>
               <label htmlFor="sub-dialog-link" className="block text-xs font-medium text-muted-foreground mb-1">
-                Dein persönlicher Kalender-Feed (iCal / Webcal)
+                Dein persönlicher Haupt-Feed (iCal / Webcal)
               </label>
               <input
                 id="sub-dialog-link"
@@ -254,15 +256,23 @@ export function SubscribeDialog({
                 <RefreshCw className="h-3.5 w-3.5" /> Link erneuern
               </Button>
             </div>
+
+            {/* Multiple Calendar Feeds Section */}
+            <CalendarFeedsList
+              feeds={customFeeds}
+              origin={origin}
+              locationReady={locationReady}
+              regionLabel={regionLabel}
+            />
           </div>
         ) : (
           <div className="space-y-4 text-sm">
             <div className="rounded-xl border border-primary/30 bg-primary/5 p-3.5 space-y-2">
               <p className="font-medium text-foreground">
-                💡 Live-Synchronisierung mit Google Kalender, Apple & Outlook
+                💡 Live-Synchronisierung mit Google Kalender, Apple &amp; Outlook
               </p>
               <p className="text-xs text-muted-foreground">
-                Für ein automatisches Kalender-Abo (damit Änderungen sofort in deinem Google- oder Smartphone-Kalender erscheinen) benötigst du ein kostenloses Konto – ganz ohne E-Mail-Adresse.
+                Für automatische Kalender-Abos (auch mehrere getrennte Kalender für Urlaub, Ferien oder Team-Übersicht) benötigst du ein kostenloses Konto.
               </p>
               <div className="flex flex-wrap gap-2 pt-1">
                 <Button size="sm" asChild>

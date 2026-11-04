@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useQueryClient } from '@tanstack/react-query'
 import { Header } from '@/components/layout/header'
 import { AccountPanel } from '@/components/account/account-panel'
+import { CalendarFeedsList } from '@/components/calendar/calendar-feeds-list'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { LocationFields } from '@/components/calendar/location-fields'
@@ -14,7 +15,7 @@ import { useProfile, useUpdatePreferences } from '@/hooks/use-profile'
 import { countryChangePatch } from '@/lib/preferences'
 import { DEFAULT_WORK_DAYS } from '@/lib/vacation-accounting'
 import { CalendarDays, Copy, Check, RefreshCw, MapPin, ExternalLink, ShieldCheck, Briefcase } from 'lucide-react'
-import type { UserPreferences, UserProfile } from '@/types'
+import type { CalendarFeedSubscription, UserPreferences, UserProfile } from '@/types'
 
 const WEEKDAYS_CONFIG = [
   { day: 1, short: 'Mo', full: 'Montag' },
@@ -35,13 +36,29 @@ function sameDays(a: number[], b: number[]): boolean {
 
 interface SettingsClientProps {
   calendarToken: string
+  initialFeeds?: CalendarFeedSubscription[]
   preferences: Record<string, unknown>
   username?: string | null
   email?: string | null
   hasLocalAccount: boolean
+  googleLinked?: boolean
+  githubLinked?: boolean
+  googleOAuthEnabled?: boolean
+  githubOAuthEnabled?: boolean
 }
 
-export function SettingsClient({ calendarToken, preferences, username, email, hasLocalAccount }: SettingsClientProps) {
+export function SettingsClient({
+  calendarToken,
+  initialFeeds = [],
+  preferences,
+  username,
+  email,
+  hasLocalAccount,
+  googleLinked = false,
+  githubLinked = false,
+  googleOAuthEnabled = false,
+  githubOAuthEnabled = false,
+}: SettingsClientProps) {
   const profile = useProfile()
   const prefs = (profile.data?.preferences ?? preferences) as UserPreferences
   const updatePrefs = useUpdatePreferences()
@@ -60,6 +77,7 @@ export function SettingsClient({ calendarToken, preferences, username, email, ha
   const subscriptionUrl = calendarUrl.replace(/^https?:/, 'webcal:')
   const googleCalendarUrl = origin ? `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(subscriptionUrl)}` : ''
   const outlookWebUrl = origin ? `https://outlook.live.com/calendar/0/addfromweb?url=${encodeURIComponent(calendarUrl)}&name=${encodeURIComponent('Urlaubsplaner')}` : ''
+  const feeds = profile.data?.calendarFeeds ?? initialFeeds
 
   async function copyUrl() {
     try { await navigator.clipboard.writeText(calendarUrl); setCopied(true); setTimeout(() => setCopied(false), 2000) }
@@ -160,7 +178,7 @@ export function SettingsClient({ calendarToken, preferences, username, email, ha
 
       <section className="space-y-4 rounded-xl border bg-card p-4 sm:p-6">
         <h2 className="flex items-center gap-2 text-lg font-semibold"><CalendarDays className="h-5 w-5" /> Kalender automatisch aktualisieren</h2>
-        <p className="text-sm text-muted-foreground">Abonniere deinen Plan einmal. Neue oder gelöschte Urlaubstage erscheinen beim nächsten Abruf in deiner Kalender-App.</p>
+        <p className="text-sm text-muted-foreground">Abonniere deinen Plan einmal als Haupt-Feed oder lege darunter beliebig viele getrennte Kalender-Abos mit unterschiedlichen Einstellungen an.</p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm">
             <span>🌴 Urlaubstage</span>
@@ -194,7 +212,7 @@ export function SettingsClient({ calendarToken, preferences, username, email, ha
         {!home.locationReady && <p className="text-xs text-muted-foreground">Wähle zuerst deine Region, um Ferien, Feiertage und Brückentage einzuschließen.</p>}
         {home.region.ambiguous && prefs.feedIncludeSchoolHolidays && <p className="text-xs text-muted-foreground">Wähle deine Ferienregion, damit das Abo nur deine Schulferien enthält.</p>}
         <p className="text-xs text-muted-foreground">Ferien und Feiertage umfassen das vorherige, aktuelle und nächste Jahr.</p>
-        <label className="block text-sm font-medium">Dein privater Abo-Link<input aria-label="Privater Kalender-Abo-Link" readOnly value={calendarUrl} className="mt-1 min-h-11 w-full rounded-lg border bg-muted px-3 font-mono text-xs" /></label>
+        <label className="block text-sm font-medium">Dein privater Haupt-Abo-Link<input aria-label="Privater Kalender-Abo-Link" readOnly value={calendarUrl} className="mt-1 min-h-11 w-full rounded-lg border bg-muted px-3 font-mono text-xs" /></label>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={copyUrl}>{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? 'Kopiert' : 'Link kopieren'}</Button>
           {origin && <Button asChild className="bg-blue-600 hover:bg-blue-700 text-white"><a href={googleCalendarUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" /> In Google Kalender abonnieren</a></Button>}
@@ -209,11 +227,22 @@ export function SettingsClient({ calendarToken, preferences, username, email, ha
         </div>
         <p className="flex items-start gap-2 text-xs text-muted-foreground"><ShieldCheck className="h-4 w-4 shrink-0" /> Wer diesen Link kennt, kann die freigegebenen Kalenderdaten lesen. Gib ihn nur in deinen Kalender-Apps ein.</p>
         <Button variant="ghost" disabled={busy} onClick={rotateToken}><RefreshCw className="h-4 w-4" /> Kalender-Link erneuern</Button>
+
+        <CalendarFeedsList
+          feeds={feeds}
+          origin={origin}
+          locationReady={home.locationReady}
+          regionLabel={regionLabel}
+        />
       </section>
       <AccountPanel
         username={profile.data?.username ?? username}
         email={profile.data?.email ?? email}
         hasLocalAccount={profile.data?.hasLocalAccount ?? hasLocalAccount}
+        googleLinked={profile.data?.googleLinked ?? googleLinked}
+        githubLinked={profile.data?.githubLinked ?? githubLinked}
+        googleOAuthEnabled={profile.data?.googleOAuthEnabled ?? googleOAuthEnabled}
+        githubOAuthEnabled={profile.data?.githubOAuthEnabled ?? githubOAuthEnabled}
       />
       <p role="status" className="text-xs text-muted-foreground">{updatePrefs.isPending ? 'Einstellungen werden gespeichert…' : 'Änderungen werden automatisch gespeichert.'}</p>
     </main>

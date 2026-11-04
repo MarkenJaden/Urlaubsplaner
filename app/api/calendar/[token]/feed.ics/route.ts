@@ -1,4 +1,4 @@
-import { getUserByToken } from '@/lib/user'
+import * as userLib from '@/lib/user'
 import { createCalendar, holidayEvents } from '@/lib/calendar'
 import type { CalendarEntry } from '@/lib/calendar'
 import { fetchHolidays, fetchSubdivisions, resolveSchoolGroup } from '@/lib/holiday-api'
@@ -23,7 +23,26 @@ export async function GET(
   const { token } = await params
   if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) return new Response('Not found', { status: 404, headers: { 'Cache-Control': 'no-store' } })
 
-  const user = await getUserByToken(token)
+  let user = await userLib.getUserByToken(token)
+  let feedOverride: {
+    name: string
+    includeVacations: boolean
+    includeGleittage: boolean
+    includeNotes: boolean
+    includeNoteTitles: boolean
+    includePublicHolidays: boolean
+    includeSchoolHolidays: boolean
+    includeBridgeDays: boolean
+  } | null = null
+
+  if (!user && typeof userLib.getCalendarFeedByToken === 'function') {
+    const customFeed = await userLib.getCalendarFeedByToken(token)
+    if (customFeed) {
+      user = customFeed.user
+      feedOverride = customFeed
+    }
+  }
+
   if (!user) {
     return new Response('Not found', { status: 404, headers: { 'Cache-Control': 'no-store' } })
   }
@@ -31,13 +50,41 @@ export async function GET(
   const { searchParams } = new URL(request.url)
   const prefs = user.preferences as UserPreferences
 
-  const includeVacations = boolParam(searchParams, 'vacations', prefs.feedIncludeVacations ?? true)
-  const includeGleittage = boolParam(searchParams, 'gleittag', prefs.feedIncludeGleittage ?? true)
-  const includeNotes = boolParam(searchParams, 'notes', Boolean(prefs.feedIncludeNotes))
-  const includeNoteTitles = boolParam(searchParams, 'noteTitles', prefs.feedIncludeNoteTitles ?? true)
-  const includePublicHolidays = boolParam(searchParams, 'public', Boolean(prefs.feedIncludePublicHolidays))
-  const includeSchoolHolidays = boolParam(searchParams, 'school', Boolean(prefs.feedIncludeSchoolHolidays))
-  const includeBridgeDays = boolParam(searchParams, 'bridge', Boolean(prefs.feedIncludeBridgeDays))
+  const includeVacations = boolParam(
+    searchParams,
+    'vacations',
+    feedOverride ? feedOverride.includeVacations : (prefs.feedIncludeVacations ?? true)
+  )
+  const includeGleittage = boolParam(
+    searchParams,
+    'gleittag',
+    feedOverride ? feedOverride.includeGleittage : (prefs.feedIncludeGleittage ?? true)
+  )
+  const includeNotes = boolParam(
+    searchParams,
+    'notes',
+    feedOverride ? feedOverride.includeNotes : Boolean(prefs.feedIncludeNotes)
+  )
+  const includeNoteTitles = boolParam(
+    searchParams,
+    'noteTitles',
+    feedOverride ? feedOverride.includeNoteTitles : (prefs.feedIncludeNoteTitles ?? true)
+  )
+  const includePublicHolidays = boolParam(
+    searchParams,
+    'public',
+    feedOverride ? feedOverride.includePublicHolidays : Boolean(prefs.feedIncludePublicHolidays)
+  )
+  const includeSchoolHolidays = boolParam(
+    searchParams,
+    'school',
+    feedOverride ? feedOverride.includeSchoolHolidays : Boolean(prefs.feedIncludeSchoolHolidays)
+  )
+  const includeBridgeDays = boolParam(
+    searchParams,
+    'bridge',
+    feedOverride ? feedOverride.includeBridgeDays : Boolean(prefs.feedIncludeBridgeDays)
+  )
 
   const entries: CalendarEntry[] = user.vacations
     .filter(entry => {
@@ -100,13 +147,23 @@ export async function GET(
       return new Response('Holiday data temporarily unavailable', { status: 503, headers: { 'Retry-After': '300', 'Cache-Control': 'no-store' } })
     }
   }
-  return new Response(createCalendar(entries, { name: `Urlaubsplaner - ${user.name ?? 'Mein Plan'}`, refreshInterval: 'PT6H' }), {
+
+  const calendarName = feedOverride
+    ? `Urlaubsplaner – ${feedOverride.name}`
+    : user.name
+      ? `Urlaubsplaner (${user.name})`
+      : 'Urlaubsplaner'
+
+  const ics = createCalendar(entries, {
+    name: calendarName,
+    refreshInterval: 'PT6H',
+  })
+
+  return new Response(ics, {
     headers: {
       'Content-Type': 'text/calendar; charset=utf-8',
       'Content-Disposition': 'inline; filename="urlaubsplaner.ics"',
-      'Cache-Control': 'private, no-cache, no-store',
-      'X-Robots-Tag': 'noindex, nofollow',
-      'Referrer-Policy': 'no-referrer'
-    }
+      'Cache-Control': 'private, no-store, max-age=0',
+    },
   })
 }

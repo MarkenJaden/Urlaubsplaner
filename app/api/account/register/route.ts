@@ -14,6 +14,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ recoveryKey }, { status: 201, headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return jsonError('Dieser Benutzername ist nicht verfügbar.', 409)
+    if (error instanceof Error && error.message === 'EMAIL_TAKEN') return jsonError('Für diese E-Mail-Adresse existiert bereits ein Konto. Bitte melde dich an (z. B. mit E-Mail oder Google).', 409)
     if (error instanceof Error && error.message === 'INVALID_INPUT') return jsonError('Benutzername: 3–32 Zeichen (a–z, 0–9, Punkt, Bindestrich, Unterstrich). Passwort: 6–128 Zeichen. E-Mail (falls angegeben) muss gültig sein.')
     return jsonError('Konto konnte nicht erstellt werden. Bitte erneut versuchen.', 503)
   }

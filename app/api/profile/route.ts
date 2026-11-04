@@ -1,7 +1,6 @@
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
-import { getUserFromSession } from '@/lib/user'
-import { isUserAdmin } from '@/lib/admin'
+import { getPublicOAuthStatus, isUserAdmin } from '@/lib/admin'
 import { NextResponse } from 'next/server'
 import { mergePreferences, parsePreferences } from '@/lib/preferences'
 import { jsonError, readJson, validOrigin } from '@/lib/request'
@@ -11,7 +10,17 @@ import type { UserPreferences } from '@/types'
 export async function GET() {
   const session = await auth()
   if (!session?.user?.id) return jsonError('Unauthorized', 401)
-  const user = await getUserFromSession(session)
+  const [user, oauthStatus] = await Promise.all([
+    prisma.user.findUniqueOrThrow({
+      where: { id: session.user.id },
+      include: {
+        calendarFeeds: {
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    }),
+    getPublicOAuthStatus(),
+  ])
   return NextResponse.json(
     {
       id: user.id,
@@ -19,7 +28,12 @@ export async function GET() {
       email: user.email,
       username: user.username,
       hasLocalAccount: Boolean(user.passwordHash),
+      googleLinked: Boolean(user.googleId || user.keycloakId.startsWith('google:')),
+      githubLinked: Boolean(user.githubId || user.keycloakId.startsWith('github:')),
+      googleOAuthEnabled: oauthStatus.googleEnabled,
+      githubOAuthEnabled: oauthStatus.githubEnabled,
       calendarToken: user.calendarToken,
+      calendarFeeds: user.calendarFeeds,
       preferences: user.preferences,
       isAdmin: isUserAdmin(user),
     },

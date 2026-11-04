@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { nlGroups, nlPublicHolidays2026, nlSchoolHolidays2026, nlSubdivisions } from './__fixtures__/openholidays'
 
-const user = vi.hoisted(() => ({ getUserByToken: vi.fn() }))
+const user = vi.hoisted(() => ({ getUserByToken: vi.fn(), getCalendarFeedByToken: vi.fn() }))
 vi.mock('@/lib/user', () => user)
 
 const { GET } = await import('@/app/api/calendar/[token]/feed.ics/route')
@@ -33,13 +33,14 @@ function mockOpenHolidays() {
   return calls
 }
 
-afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); user.getUserByToken.mockReset() })
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); user.getUserByToken.mockReset(); user.getCalendarFeedByToken.mockReset() })
 
 describe('calendar subscription feed', () => {
   it('rejects malformed and unknown tokens without leaking data', async () => {
     expect((await call('short')).status).toBe(404)
     expect(user.getUserByToken).not.toHaveBeenCalled()
     user.getUserByToken.mockResolvedValue(null)
+    user.getCalendarFeedByToken.mockResolvedValue(null)
     const response = await call()
     expect(response.status).toBe(404)
     expect(await response.text()).toBe('Not found')
@@ -56,6 +57,28 @@ describe('calendar subscription feed', () => {
     expect(ics).toContain('DTSTART;VALUE=DATE:20261231\r\nDTEND;VALUE=DATE:20270101')
     expect(ics).toContain('UID:user-1-2026-12-31-vacation@urlaubsplaner')
     expect(ics).not.toContain('Arzt')
+  })
+  it('serves a secondary custom calendar feed with its own filter settings and title', async () => {
+    user.getUserByToken.mockResolvedValue(null)
+    user.getCalendarFeedByToken.mockResolvedValue({
+      id: 'feed-2',
+      name: 'Private Notizen',
+      token,
+      includeVacations: false,
+      includeGleittage: false,
+      includeNotes: true,
+      includeNoteTitles: true,
+      includePublicHolidays: false,
+      includeSchoolHolidays: false,
+      includeBridgeDays: false,
+      user: stored({}),
+    })
+    const response = await call()
+    expect(response.status).toBe(200)
+    const ics = await response.text()
+    expect(ics).toContain('X-WR-CALNAME:Urlaubsplaner – Private Notizen')
+    expect(ics).toContain('SUMMARY:Notiz: Arzt\\, privat')
+    expect(ics).not.toContain('UID:user-1-2026-12-31-vacation@urlaubsplaner')
   })
   it('includes escaped notes only when enabled', async () => {
     user.getUserByToken.mockResolvedValue(stored({ feedIncludeNotes: true }))
