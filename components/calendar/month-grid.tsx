@@ -2,8 +2,7 @@
 
 import {
   startOfMonth, endOfMonth, startOfWeek, endOfWeek,
-  eachDayOfInterval, isSameMonth, isToday, isBefore,
-  startOfDay, format,
+  eachDayOfInterval, isSameMonth, format,
 } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { DayCell } from './day-cell'
@@ -24,6 +23,7 @@ const WEEKDAY_HEADER = [
 
 interface MonthGridProps {
   date: Date
+  todayKey?: string
   entries: VacationEntry[]
   publicHolidays: Holiday[]
   schoolHolidays: Holiday[]
@@ -47,7 +47,7 @@ interface MonthGridProps {
 }
 
 export function MonthGrid({
-  date, entries, publicHolidays, schoolHolidays,
+  date, todayKey, entries, publicHolidays, schoolHolidays,
   workDays = DEFAULT_WORK_DAYS,
   heatmapData, comparisonByDate, sharedByDate,
   suggestionPreviewByDate, dragSelectedDates,
@@ -55,7 +55,7 @@ export function MonthGrid({
   showBridgeDays, showOtherMonthDays, overBudgetDates,
   onToggle, onCellPointerDown, selectedType, onHover, onSelectDate,
 }: MonthGridProps) {
-  const today = startOfDay(new Date())
+  const activeTodayKey = todayKey ?? format(new Date(), 'yyyy-MM-dd')
   const monthStart = startOfMonth(date)
   const monthEnd = endOfMonth(date)
   const calStart = startOfWeek(monthStart, { weekStartsOn: 1 })
@@ -95,7 +95,7 @@ export function MonthGrid({
               publicHolidays={publicHolidays}
               schoolHolidays={schoolHolidays}
               isWeekend={isOffWeekday}
-              isToday={isToday(day)}
+              isToday={key === activeTodayKey}
               isOtherMonth={!isSameMonth(day, date)}
               isDragSelected={Boolean(dragSelectedDates?.has(key))}
               suggestionPreview={suggestionPreviewByDate?.get(key)}
@@ -103,7 +103,7 @@ export function MonthGrid({
               comparisonStates={comparisonByDate?.get(key)}
               sharedItems={sharedByDate?.get(key)}
               showHeatmap={showHeatmap}
-              isPast={isBefore(day, today)}
+              isPast={key < activeTodayKey}
               isOverBudget={overBudgetDates.has(key)}
               isBridgeDay={bridgeDaySet.has(key)}
               bridgeDayInfo={bridgeDayMap.get(key)}

@@ -21,5 +21,19 @@ export default async function HomePage() {
     }
   }
 
-  return <CalendarClient userId={userId} preferences={preferences} isLoggedIn={!!session?.user?.id} />
+  const initialTodayKey = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Berlin',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+
+  return (
+    <CalendarClient
+      userId={userId}
+      preferences={preferences}
+      isLoggedIn={!!session?.user?.id}
+      initialTodayKey={initialTodayKey}
+    />
+  )
 }

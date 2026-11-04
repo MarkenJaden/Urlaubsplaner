@@ -25,6 +25,15 @@
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
     --heat-lightness: 85%;
+    color-scheme: light dark;
+  }
+
+  :root:has(> head > meta[name="color-scheme"][content="dark"]) {
+    color-scheme: dark;
+  }
+
+  :root:has(> head > meta[name="color-scheme"][content="light"]) {
+    color-scheme: light;
   }
 
   /* Soft dark: blue-grey surfaces instead of near-black, cards lift off the page. */

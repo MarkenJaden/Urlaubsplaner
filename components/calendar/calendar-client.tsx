@@ -61,6 +61,7 @@ interface CalendarClientProps {
   userId?: string
   preferences: Record<string, unknown>
   isLoggedIn: boolean
+  initialTodayKey?: string
 }
 
 const SHARED_OVERLAYS_STORAGE_KEY = 'urlaubsplaner_shared_overlays_v1'
@@ -229,9 +230,21 @@ function mapApiShareToOverlay(
   }
 }
 
-export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: CalendarClientProps) {
-  const currentYear = new Date().getFullYear()
-  const [year, setYear] = useState(currentYear)
+export function CalendarClient({ preferences: serverPrefs, isLoggedIn, initialTodayKey }: CalendarClientProps) {
+  const [todayKey, setTodayKey] = useState(() => initialTodayKey ?? format(new Date(), 'yyyy-MM-dd'))
+  const [year, setYear] = useState(() => Number((initialTodayKey ?? format(new Date(), 'yyyy-MM-dd')).slice(0, 4)))
+
+  // Align todayKey with the browser's local calendar date after hydration and across midnight
+  // without causing an SSR/client hydration mismatch when UTC and local dates differ.
+  useEffect(() => {
+    const syncToday = () => {
+      const localToday = format(new Date(), 'yyyy-MM-dd')
+      setTodayKey(prev => (prev === localToday ? prev : localToday))
+    }
+    syncToday()
+    const timer = window.setInterval(syncToday, 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
   const [selectedType, setSelectedType] = useState<EntryType>('vacation')
   const [localConfig, setConfig] = useState<LocalConfig | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -594,7 +607,7 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
   const vacationDaysUsed = summary.used
   const gleittageCount = entries.filter(e => e.type === 'gleittag').length
   const flex = summarizeFlex(gleittageCount, config ?? {}, year)
-  const remainingWorkDays = countRemainingWorkDays(year, entries, { holidayDates, countWeekendsAsVacation, workDays }, format(new Date(), 'yyyy-MM-dd'))
+  const remainingWorkDays = countRemainingWorkDays(year, entries, { holidayDates, countWeekendsAsVacation, workDays }, todayKey)
   const vacationDateSet = useMemo(
     () => new Set(entries.filter(e => e.type === 'vacation').map(e => e.date.split('T')[0])),
     [entries]
@@ -1774,7 +1787,7 @@ export function CalendarClient({ preferences: serverPrefs, isLoggedIn }: Calenda
           </div>
         ) : (
           <YearView
-            year={year} entries={entries}
+            year={year} todayKey={todayKey} entries={entries}
             publicHolidays={combinedPublicHolidays} schoolHolidays={schoolHolidays}
             workDays={workDays}
             compareHolidays={comparison.holidays}

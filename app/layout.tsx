@@ -113,9 +113,15 @@ export default function RootLayout({
 }: {
   children: React.ReactNode
 }) {
+  const copyrightYear = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Berlin',
+    year: 'numeric',
+  }).format(new Date())
+
   return (
     <html lang="de" suppressHydrationWarning>
       <head>
+        <meta name="color-scheme" content="light dark" />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <script
           type="application/ld+json"
@@ -129,7 +135,7 @@ export default function RootLayout({
             <div className="container flex flex-col sm:flex-row items-center justify-between gap-4 py-6 text-xs text-muted-foreground">
               <div className="flex items-center gap-2">
                 <img src="/icon.svg" alt="" className="h-4 w-4" />
-                <span>© {new Date().getFullYear()} Urlaubsplaner · Jan Jaden Schmidt</span>
+                <span>© {copyrightYear} Urlaubsplaner · Jan Jaden Schmidt</span>
               </div>
               <nav aria-label="Rechtliches und Kontakt" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
                 <Link href="/impressum" className="underline hover:text-foreground transition-colors">

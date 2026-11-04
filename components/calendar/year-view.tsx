@@ -12,6 +12,7 @@ import { DEFAULT_WORK_DAYS, formatWorkDaysLabel, isOffDayKey } from '@/lib/vacat
 
 interface YearViewProps {
   year: number
+  todayKey?: string
   entries: VacationEntry[]
   publicHolidays: Holiday[]
   schoolHolidays: Holiday[]
@@ -52,7 +53,7 @@ function buildRangeSet(a: string | null, b: string | null): Set<string> {
 }
 
 export function YearView({
-  year, entries, publicHolidays, schoolHolidays,
+  year, todayKey, entries, publicHolidays, schoolHolidays,
   workDays = DEFAULT_WORK_DAYS,
   compareHolidays = [], compareLabels = [], overlays = [],
   previewSuggestions = [], selectedPreviewIndex = 0,
@@ -327,6 +328,7 @@ export function YearView({
           <MonthGrid
             key={monthDate.toISOString()}
             date={monthDate}
+            todayKey={todayKey}
             entries={entries}
             publicHolidays={showPublicHolidays ? publicHolidays : []}
             schoolHolidays={showSchoolHolidays ? schoolHolidays : []}
