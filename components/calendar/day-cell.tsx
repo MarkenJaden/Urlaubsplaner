@@ -27,10 +27,12 @@ export interface SuggestionPreviewDayInfo {
 export interface DayInfo {
   date: Date
   publicHoliday?: string
+  isPublicHolidayRegional?: boolean
   schoolHoliday?: string
   isBridgeDay: boolean
   bridgeDayInfo?: BridgeDay
   entry?: VacationEntry
+  noteEntry?: VacationEntry
   comparisonStates?: string[]
   heatmapRatio?: number
   sharedItems?: SharedDayItem[]
@@ -105,9 +107,15 @@ export function DayCell({
   const note = entries.find(e => e.type === 'note' && e.date.slice(0, 10) === key)
   const publicHoliday = getHolidayForDate(publicHolidays, date)
   const schoolHoliday = getHolidayForDate(schoolHolidays, date)
-  const hasEntry = vacation || gleittag || note
+
+  const hasVacation = Boolean(vacation)
+  const hasGleittag = Boolean(gleittag) && !hasVacation
+  const hasVacationOrGleittag = hasVacation || hasGleittag
+  const hasEntry = hasVacationOrGleittag || Boolean(note)
+
+  const isPublicHolidayRegional = Boolean(publicHoliday && !publicHoliday.nationwide)
   const hasHeatmap = showHeatmap && heatmapValue !== undefined && heatmapValue > 0
-  const isVisibleBridgeDay = showBridgeDays && isBridgeDay && !hasEntry && !publicHoliday && !suggestionPreview?.isVacationDay
+  const isVisibleBridgeDay = showBridgeDays && isBridgeDay && !publicHoliday && !suggestionPreview?.isVacationDay
   const isWeekendName = (name?: string) =>
     !name || name === 'Samstag' || name === 'Sonntag' || name === 'Wochenende' || name.endsWith('(frei)')
   const bridgeHolidayBefore = isVisibleBridgeDay && bridgeDayInfo ? !isWeekendName(bridgeDayInfo.connectsBeforeName) : false
@@ -119,19 +127,27 @@ export function DayCell({
       parts.push(`✨ Vorschlag: ${suggestionPreview.label} (${suggestionPreview.cost} UT → ${suggestionPreview.freeDaysGained} Tage frei, ${suggestionPreview.efficiency.toFixed(1)}x)`)
       parts.push('Tipp: Enden ziehen (◀/▶) zum Kürzen/Verlängern oder Mitte ziehen zum Verschieben')
     }
-    if (publicHoliday) parts.push(getHolidayName(publicHoliday))
-    if (schoolHoliday) parts.push(`Eigene Schulferien: ${getHolidayName(schoolHoliday)}`)
+    if (publicHoliday) {
+      const regLabel = isPublicHolidayRegional ? ' (Feiertag im eigenen Bundesland)' : ' (Gesetzlicher Feiertag)'
+      parts.push(`🎉 Feiertag: ${getHolidayName(publicHoliday)}${regLabel}`)
+      if (hasVacation) parts.push('⚠️ Hinweis: Urlaub an einem gesetzlichen Feiertag eingetragen!')
+      if (hasGleittag) parts.push('⚠️ Hinweis: Gleittag an einem gesetzlichen Feiertag eingetragen!')
+    }
+    if (schoolHoliday) {
+      parts.push(`🏫 Schulferien: ${getHolidayName(schoolHoliday)}`)
+      if (hasVacation) parts.push('✓ Liegt in den Schulferien deines Bundeslands')
+    }
     if (showBridgeDays && isBridgeDay && bridgeDayInfo) {
       const before = bridgeDayInfo.connectsBeforeName
       const after = bridgeDayInfo.connectsAfterName
-      parts.push(`Brückentag → verbindet ${before} mit ${after}`)
+      parts.push(`🌉 Brückentag → verbindet ${before} mit ${after}`)
       parts.push(`1 Tag Urlaub → ${bridgeDayInfo.freeDaysGained} Tage frei`)
     } else if (showBridgeDays && isBridgeDay) {
-      parts.push('Brückentag')
+      parts.push('🌉 Brückentag')
     }
-    if (vacation) parts.push('Urlaub')
-    if (gleittag) parts.push('Gleittag')
-    if (note) parts.push(note.title ?? 'Notiz')
+    if (vacation) parts.push('🌴 Urlaub')
+    if (gleittag) parts.push('⏰ Gleittag')
+    if (note) parts.push(`📝 Notiz: ${note.title ?? 'Notiz'}`)
     for (const s of sharedItems) {
       const tLabel =
         s.type === 'vacation'
@@ -152,10 +168,12 @@ export function DayCell({
     comparisonStates,
     heatmapRatio: heatmapValue,
     publicHoliday: publicHoliday ? getHolidayName(publicHoliday) : undefined,
+    isPublicHolidayRegional,
     schoolHoliday: schoolHoliday ? getHolidayName(schoolHoliday) : undefined,
     isBridgeDay: showBridgeDays && isBridgeDay,
     bridgeDayInfo,
     entry: vacation ?? gleittag ?? note ?? undefined,
+    noteEntry: note ?? undefined,
     sharedItems,
     suggestionPreview,
   })
@@ -173,9 +191,12 @@ export function DayCell({
     if (window.matchMedia('(hover: none)').matches) onSelectDate?.(date)
   }
 
-  const heatmapClass = !hasEntry && !publicHoliday && !(showBridgeDays && isBridgeDay) && hasHeatmap && !suggestionPreview?.isVacationDay
+  const heatmapClass = !hasVacationOrGleittag && !publicHoliday && !(showBridgeDays && isBridgeDay) && hasHeatmap && !suggestionPreview?.isVacationDay
     ? getHeatmapClass(heatmapValue)
     : ''
+
+  // Note-only without vacation/gleittag on a public holiday keeps the public holiday styling, decorated with a note marker
+  const isPublicHolidayDominant = Boolean(publicHoliday && !hasVacationOrGleittag && !suggestionPreview?.isVacationDay)
 
   return (
     <button
@@ -196,28 +217,57 @@ export function DayCell({
         // Past days are distinctly dimmed across all states so past vs future is unmistakable:
         isPast && !hasEntry && !publicHoliday && !schoolHoliday && !isBridgeDay && !hasHeatmap && !suggestionPreview && 'opacity-35 bg-muted/40 text-muted-foreground saturate-50',
         isPast && (hasEntry || publicHoliday || schoolHoliday || isBridgeDay || hasHeatmap) && !suggestionPreview && 'opacity-50 saturate-[0.65]',
-        // Entries:
+
+        // Primary entries:
         vacation && !isOverBudget && 'bg-blue-600 text-white hover:bg-blue-700 shadow-2xs',
         vacation && isOverBudget && 'bg-red-600 text-white hover:bg-red-700 shadow-2xs',
-        gleittag && !vacation && 'bg-purple-600 text-white hover:bg-purple-700 shadow-2xs',
-        note && !vacation && !gleittag && 'bg-slate-500 text-white hover:bg-slate-600 dark:bg-slate-600 dark:hover:bg-slate-500',
-        // Public Holiday:
-        publicHoliday && !hasEntry && !suggestionPreview?.isVacationDay && 'bg-emerald-100 text-emerald-900 border border-emerald-300/80 dark:bg-emerald-500/30 dark:text-emerald-100 dark:border-emerald-500/50',
-        // Heatmap background:
+        hasGleittag && 'bg-purple-600 text-white hover:bg-purple-700 shadow-2xs',
+        // Standalone note on a normal day (not on a public holiday)
+        note && !hasVacationOrGleittag && !publicHoliday && 'bg-slate-500 text-white hover:bg-slate-600 dark:bg-slate-600 dark:hover:bg-slate-500',
+
+        // Public Holiday in own Bundesland (empty or with standalone note):
+        // Fine white/light frame (ring-1 ring-inset ring-emerald-700/50 dark:ring-white/80)
+        isPublicHolidayDominant && [
+          'bg-emerald-100 text-emerald-900 border border-emerald-300/90 dark:bg-emerald-500/35 dark:text-emerald-100 dark:border-emerald-500/60',
+          'ring-1 ring-inset ring-emerald-700/50 dark:ring-white/80 font-semibold',
+          isPublicHolidayRegional && 'border-t-2 border-t-emerald-600 dark:border-t-white/90',
+        ],
+
+        // When vacation or gleittag is booked on a Feiertag:
+        // Preserve the requested fine white frame right on top of the vacation/gleittag color
+        publicHoliday && hasVacationOrGleittag && [
+          'ring-2 ring-inset ring-white dark:ring-white shadow-[inset_0_0_0_1px_rgba(16,185,129,0.9)] font-semibold',
+          isPublicHolidayRegional && 'border-t-2 border-t-emerald-300 dark:border-t-emerald-300',
+        ],
+
+        // Heatmap background (when no dominant public holiday and no vacation/gleittag):
         heatmapClass,
+
         // Own School Holiday when Heatmap is OFF:
-        schoolHoliday && !showHeatmap && !hasEntry && !publicHoliday && !suggestionPreview?.isVacationDay && 'bg-amber-100/85 text-amber-950 dark:bg-amber-400/20 dark:text-amber-100',
-        // Own School Holiday when Heatmap is ON (subtle inner frame + bottom accent):
-        schoolHoliday && showHeatmap && !hasEntry && !suggestionPreview?.isVacationDay && 'ring-1 ring-inset ring-foreground/45 border-b-2 border-b-foreground/65 dark:ring-white/60 dark:border-b-white/75 font-semibold',
+        schoolHoliday && !showHeatmap && !hasVacationOrGleittag && !publicHoliday && !suggestionPreview?.isVacationDay && [
+          'bg-amber-100/85 text-amber-950 dark:bg-amber-400/20 dark:text-amber-100',
+          'border-b-2 border-b-amber-400 dark:border-b-amber-400/80',
+        ],
+        // Own School Holiday when Heatmap is ON (fine inner white/foreground frame + bottom accent):
+        schoolHoliday && showHeatmap && !hasVacationOrGleittag && !publicHoliday && !suggestionPreview?.isVacationDay && [
+          'ring-1 ring-inset ring-foreground/45 border-b-2 border-b-foreground/65 dark:ring-white/60 dark:border-b-white/75 font-semibold',
+        ],
+
+        // School holiday visual retention when vacation/gleittag or note is planned:
+        // A distinct amber bottom underline ensures the user still sees that this planned period is inside school holidays
+        schoolHoliday && hasEntry && 'border-b-[3px] border-b-amber-300 dark:border-b-amber-400 rounded-b-md',
+
         // Bridge day with directional edge toward the referenced holiday:
-        isVisibleBridgeDay && 'ring-1 ring-inset ring-orange-400/90 bg-orange-50/95 text-orange-950 dark:bg-orange-500/20 dark:text-orange-100 dark:ring-orange-400/70',
-        bridgeHolidayBefore && !bridgeHolidayAfter && 'border-l-[3px] border-l-emerald-500 dark:border-l-emerald-400',
-        bridgeHolidayAfter && !bridgeHolidayBefore && 'border-r-[3px] border-r-emerald-500 dark:border-r-emerald-400',
-        bridgeHolidayBefore && bridgeHolidayAfter && 'border-x-[3px] border-x-emerald-500 dark:border-x-emerald-400',
+        isVisibleBridgeDay && !hasVacationOrGleittag && 'ring-1 ring-inset ring-orange-400/90 bg-orange-50/95 text-orange-950 dark:bg-orange-500/20 dark:text-orange-100 dark:ring-orange-400/70',
+        bridgeHolidayBefore && !bridgeHolidayAfter && !hasVacationOrGleittag && 'border-l-[3px] border-l-emerald-500 dark:border-l-emerald-400',
+        bridgeHolidayAfter && !bridgeHolidayBefore && !hasVacationOrGleittag && 'border-r-[3px] border-r-emerald-500 dark:border-r-emerald-400',
+        bridgeHolidayBefore && bridgeHolidayAfter && !hasVacationOrGleittag && 'border-x-[3px] border-x-emerald-500 dark:border-x-emerald-400',
+
         // Interactive Suggestion Preview Overlay on the Calendar:
         suggestionPreview && !suggestionPreview.isVacationDay && 'ring-1 ring-inset ring-teal-500/60 bg-teal-500/15 dark:bg-teal-400/20',
         suggestionPreview?.isVacationDay && 'bg-teal-600 text-white hover:bg-teal-500 shadow-sm cursor-grab active:cursor-grabbing z-10',
         suggestionPreview?.isVacationDay && suggestionPreview.isSelectedBlock && 'ring-2 ring-teal-300 dark:ring-teal-200 scale-[1.03]',
+
         // Drag-to-Select Highlight:
         isDragSelected && selectedType === 'vacation' && 'ring-2 ring-blue-500 bg-blue-500/35 text-blue-950 dark:text-white z-20 scale-105',
         isDragSelected && selectedType === 'gleittag' && 'ring-2 ring-purple-500 bg-purple-500/35 text-purple-950 dark:text-white z-20 scale-105',
@@ -231,7 +281,7 @@ export function DayCell({
       aria-label={`${format(date, 'dd.MM.yyyy')}${buildTitle() ? ` · ${buildTitle()}` : ''}`}
       aria-pressed={Boolean(hasEntry)}
     >
-      {/* Shared plan overlay bar at top of cell (solid = vacation/entry, dashed = partner regular off-day e.g. 4-day week) */}
+      {/* Shared plan overlay bar at top of cell */}
       {sharedItems.length > 0 && (
         <div className="absolute top-0.5 inset-x-1 flex gap-0.5 justify-center pointer-events-none">
           {sharedItems.slice(0, 3).map((s, idx) =>
@@ -250,6 +300,45 @@ export function DayCell({
             )
           )}
         </div>
+      )}
+
+      {/* Note indicator icon on top-left: visible even if placed on a Feiertag or Vacation day */}
+      {note && (
+        <span
+          className="absolute top-0.5 left-1 text-[9px] leading-none pointer-events-none select-none drop-shadow-xs"
+          title={`Notiz: ${note.title ?? 'Notiz'}`}
+          aria-hidden="true"
+        >
+          📝
+        </span>
+      )}
+
+      {/* Feiertags-Indikator oben rechts: wenn an diesem Tag Urlaub oder Gleittag geplant ist,
+          bleibt der Feiertag durch diesen leuchtenden Smaragd-Punkt (bzw. Stern bei regionalem Feiertag) sofort erkennbar */}
+      {publicHoliday && hasVacationOrGleittag && (
+        <span
+          className={cn(
+            'absolute top-1 right-1 flex items-center justify-center rounded-full bg-emerald-400 text-emerald-950 ring-1.5 ring-white dark:ring-slate-900 shadow-xs pointer-events-none',
+            isPublicHolidayRegional ? 'w-2.5 h-2.5 text-[7px] font-extrabold' : 'w-2 h-2'
+          )}
+          title={
+            isPublicHolidayRegional
+              ? `Regionaler Feiertag in deinem Bundesland: ${getHolidayName(publicHoliday)}`
+              : `Gesetzlicher Feiertag: ${getHolidayName(publicHoliday)}`
+          }
+          aria-hidden="true"
+        >
+          {isPublicHolidayRegional ? '★' : ''}
+        </span>
+      )}
+
+      {/* Brückentag-Punkt bei geplantem Urlaub/Gleittag */}
+      {isVisibleBridgeDay && hasVacationOrGleittag && (
+        <span
+          className="absolute bottom-1 left-1.5 w-1.5 h-1.5 rounded-full bg-orange-300 ring-1 ring-white dark:ring-slate-900 pointer-events-none"
+          title="Brückentag"
+          aria-hidden="true"
+        />
       )}
 
       {/* Draggable left/right handles for interactive suggestion blocks on the calendar */}
@@ -272,12 +361,12 @@ export function DayCell({
         </span>
       )}
 
-      <span className={cn('leading-none pointer-events-none', isToday && !hasEntry && !suggestionPreview?.isVacationDay && 'text-primary font-extrabold underline decoration-2 underline-offset-2')}>
+      <span className={cn('leading-none pointer-events-none', isToday && !hasVacationOrGleittag && !suggestionPreview?.isVacationDay && 'text-primary font-extrabold underline decoration-2 underline-offset-2')}>
         {format(date, 'd')}
       </span>
 
       {/* Directional arrow on potential bridge days indicating which holiday it connects to */}
-      {isVisibleBridgeDay && (
+      {isVisibleBridgeDay && !hasVacationOrGleittag && (
         <span
           aria-hidden="true"
           className="mt-0.5 text-[9px] leading-none font-bold text-orange-600 dark:text-orange-300 tracking-tighter pointer-events-none"

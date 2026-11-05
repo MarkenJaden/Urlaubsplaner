@@ -19,6 +19,7 @@ import {
   Map as MapIcon,
   ChevronLeft,
   ChevronRight,
+  Users,
 } from 'lucide-react'
 import type { VacationSuggestionBlock, PlanningPreferences, PeriodPreference } from '@/lib/vacation-suggester'
 import { DEFAULT_PREFERENCES, recalculateSuggestionBlock } from '@/lib/vacation-suggester'
@@ -32,6 +33,7 @@ import type {
   PlanStartMode,
   ExcludedDateRange,
   Holiday,
+  SharedPlanOverlay,
 } from '@/types'
 import { formatDays, DEFAULT_WORK_DAYS } from '@/lib/vacation-accounting'
 
@@ -68,6 +70,7 @@ interface SuggestionsPanelProps {
   schoolHolidays?: Holiday[]
   existingVacationDates: string[]
   noteDates: string[]
+  partnerOverlays?: SharedPlanOverlay[]
   onApply: (dates: string[], type: EntryType, replace: boolean) => void
   onRemove: (dates: string[]) => void
   onOpenCalendarPreview?: (blocks: VacationSuggestionBlock[], overwrite: boolean) => void
@@ -90,6 +93,7 @@ export function SuggestionsPanel({
   schoolHolidays = [],
   existingVacationDates,
   noteDates,
+  partnerOverlays = [],
   onApply,
   onRemove,
   onOpenCalendarPreview,
@@ -102,6 +106,8 @@ export function SuggestionsPanel({
     workDays,
   })
   const [overwrite, setOverwrite] = useState(false)
+  const [alignWithPartner, setAlignWithPartner] = useState(true)
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string>('')
   const [suggestions, setSuggestions] = useState<VacationSuggestionBlock[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -263,6 +269,12 @@ export function SuggestionsPanel({
     }))
   }
 
+  const activePartners = useMemo(() => partnerOverlays.filter(o => o.enabled), [partnerOverlays])
+  const selectedPartner = useMemo(
+    () => activePartners.find(p => p.id === selectedPartnerId) ?? activePartners[0] ?? null,
+    [activePartners, selectedPartnerId],
+  )
+
   const handleGenerate = async () => {
     setLoading(true)
     setError(null)
@@ -279,6 +291,16 @@ export function SuggestionsPanel({
       })
       if (subdivision) params.set('subdivision', subdivision)
       if (group) params.set('group', group)
+      if (alignWithPartner && selectedPartner) {
+        params.set('alignWithPartner', 'true')
+        const pDates = selectedPartner.entries
+          .filter(e => (e.type === 'vacation' || e.type === 'gleittag') && e.date.startsWith(`${year}-`))
+          .map(e => e.date.slice(0, 10))
+        if (pDates.length > 0) params.set('partnerDates', [...new Set(pDates)].join(','))
+        if (selectedPartner.workDays?.length) params.set('partnerWorkDays', selectedPartner.workDays.join(','))
+        if (selectedPartner.country) params.set('partnerCountry', selectedPartner.country)
+        if (selectedPartner.subdivision) params.set('partnerSubdivision', selectedPartner.subdivision)
+      }
       const res = await fetch(`/api/suggestions?${params}`)
       if (!res.ok) throw new Error(res.status === 502 ? 'Feiertage konnten nicht geladen werden. Bitte erneut versuchen.' : 'Fehler beim Laden der Vorschläge')
       setSuggestions(await res.json())
@@ -382,6 +404,41 @@ export function SuggestionsPanel({
             Für Optimierung: {formatDays(availableBudget)} Tage
           </Badge>
         </div>
+
+        {/* Paar- & Gemeinsam-Optimierer Bar (wenn Partner-Plan eingeblendet ist) */}
+        {activePartners.length > 0 && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-3.5 py-2.5 text-xs">
+            <label className="flex cursor-pointer items-center gap-2.5 font-medium text-foreground">
+              <Switch checked={alignWithPartner} onCheckedChange={setAlignWithPartner} />
+              <span className="flex items-center gap-1.5">
+                <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                <span>
+                  🤝 Gemeinsam frei optimieren mit{' '}
+                  {activePartners.length === 1 ? <strong>{activePartners[0].label}</strong> : 'Partner-Plan'}
+                </span>
+              </span>
+            </label>
+            {activePartners.length > 1 ? (
+              <select
+                aria-label="Partner-Plan für Optimierung auswählen"
+                value={selectedPartner?.id ?? ''}
+                onChange={e => setSelectedPartnerId(e.target.value)}
+                disabled={!alignWithPartner}
+                className="rounded-md border bg-background px-2.5 py-1 text-xs"
+              >
+                {activePartners.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="text-[11px] text-muted-foreground">
+                Berücksichtigt {activePartners[0].label}s Urlaub, Feiertage &amp; Arbeitswoche
+              </span>
+            )}
+          </div>
+        )}
 
         {/* 1. Optimierungs-Strategie */}
         <div className="mb-4 space-y-2">
@@ -940,6 +997,11 @@ export function SuggestionsPanel({
                         {s.inSchoolHolidays && (
                           <Badge variant="outline" className="text-[11px] border-amber-400 text-amber-700 dark:text-amber-300">
                             🏫 In den Schulferien
+                          </Badge>
+                        )}
+                        {Boolean(s.partnerFreeOverlapDays && s.partnerFreeOverlapDays > 0) && (
+                          <Badge variant="outline" className="text-[11px] border-emerald-500/50 text-emerald-700 dark:text-emerald-300">
+                            🤝 {s.partnerFreeOverlapDays} Tage gemeinsam frei
                           </Badge>
                         )}
                       </div>

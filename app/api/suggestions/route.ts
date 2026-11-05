@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server'
-import { suggestVacation, DEFAULT_PREFERENCES } from '@/lib/vacation-suggester'
+import { suggestVacation, buildNonWorkSet, DEFAULT_PREFERENCES } from '@/lib/vacation-suggester'
 import type { PlanningPreferences } from '@/lib/vacation-suggester'
 import { fetchHolidays, fetchSubdivisions, validateRegion } from '@/lib/holiday-api'
+import { isCountryCode, isRegionCode } from '@/lib/holiday-regions'
 import { countHolidayStates } from '@/lib/holidays'
 import type { Holiday } from '@/types'
 
 const DATE_LIST = /^(?:\d{4}-\d{2}-\d{2}(?:,\d{4}-\d{2}-\d{2})*)?$/
+const WORKDAYS_LIST = /^(?:[0-6](?:,[0-6])*)?$/
 
 function parsePlanningPreferences(value: string | null): PlanningPreferences | null {
   if (!value) return { ...DEFAULT_PREFERENCES }
@@ -31,7 +33,27 @@ export async function GET(request: Request) {
   const prefs = parsePlanningPreferences(searchParams.get('preferences'))
   const existingParam = searchParams.get('existingDates') ?? ''
   const noteParam = searchParams.get('noteDates') ?? ''
-  if (!/^\d{4}$/.test(yearParam) || year < 1900 || year > 2200 || !Number.isFinite(remainingDays) || remainingDays < 0 || remainingDays > 366 || !prefs || !DATE_LIST.test(existingParam) || !DATE_LIST.test(noteParam)) {
+  const alignWithPartner = searchParams.get('alignWithPartner') === 'true'
+  const partnerDatesParam = searchParams.get('partnerDates') ?? ''
+  const partnerWorkDaysParam = searchParams.get('partnerWorkDays') ?? ''
+  const rawPartnerCountry = searchParams.get('partnerCountry')?.toUpperCase()
+  const partnerCountry = isCountryCode(rawPartnerCountry) ? rawPartnerCountry : undefined
+  const rawPartnerSub = searchParams.get('partnerSubdivision')?.toUpperCase()
+  const partnerSubdivision = isRegionCode(rawPartnerSub, partnerCountry) ? rawPartnerSub : null
+
+  if (
+    !/^\d{4}$/.test(yearParam) ||
+    year < 1900 ||
+    year > 2200 ||
+    !Number.isFinite(remainingDays) ||
+    remainingDays < 0 ||
+    remainingDays > 366 ||
+    !prefs ||
+    !DATE_LIST.test(existingParam) ||
+    !DATE_LIST.test(noteParam) ||
+    !DATE_LIST.test(partnerDatesParam) ||
+    !WORKDAYS_LIST.test(partnerWorkDaysParam)
+  ) {
     return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 })
   }
 
@@ -49,6 +71,7 @@ export async function GET(request: Request) {
 
   let publicHolidays: Holiday[], schoolHolidays: Holiday[]
   let heatmapDensityByDate: Map<string, number> | undefined
+  let partnerFreeDates: Set<string> | undefined
 
   try {
     const invalid = await validateRegion({ country, subdivision, group })
@@ -58,6 +81,30 @@ export async function GET(request: Request) {
       fetchHolidays(country, subdivision, year, 'public'),
       needSchool ? fetchHolidays(country, subdivision, year, 'school', group) : Promise.resolve([] as Holiday[]),
     ])
+
+    if (alignWithPartner) {
+      const partnerWorkDays = partnerWorkDaysParam
+        ? partnerWorkDaysParam.split(',').map(Number)
+        : undefined
+      let partnerPublicHolidays = publicHolidays
+      if (partnerCountry && (partnerCountry !== country || (partnerSubdivision ?? null) !== subdivision)) {
+        partnerPublicHolidays = await fetchHolidays(partnerCountry, partnerSubdivision, year, 'public').catch(
+          () => publicHolidays,
+        )
+      }
+      partnerFreeDates = buildNonWorkSet(
+        new Date(year, 0, 1),
+        new Date(year, 11, 31),
+        partnerPublicHolidays,
+        false,
+        partnerWorkDays,
+      )
+      if (partnerDatesParam) {
+        for (const d of partnerDatesParam.split(',')) {
+          partnerFreeDates.add(d)
+        }
+      }
+    }
 
     if (needAllStatesHeatmap) {
       const subs = await fetchSubdivisions(country)
@@ -85,6 +132,7 @@ export async function GET(request: Request) {
     prefs,
     overwriteExisting,
     heatmapDensityByDate,
+    partnerFreeDates,
   )
 
   return NextResponse.json(suggestions)

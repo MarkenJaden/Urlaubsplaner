@@ -318,5 +318,46 @@ describe('suggestVacation smart optimizer', () => {
       // And May 24-26 (3 days) around Fronleichnam = 10 days off for 3 days!
       expect(totalFree).toBeGreaterThanOrEqual(19)
     })
+
+    it('prioritizes shared free weeks when partnerFreeDates are provided (couple optimizer)', () => {
+      const partnerFree = new Set([
+        '2027-09-04',
+        '2027-09-05',
+        '2027-09-06',
+        '2027-09-07',
+        '2027-09-08',
+        '2027-09-09',
+        '2027-09-10',
+        '2027-09-11',
+        '2027-09-12',
+      ])
+      const blocks = suggestVacation(
+        2027,
+        holidays2027NRW,
+        schoolHolidays2027NRW,
+        new Set(),
+        5,
+        new Set(),
+        {
+          ...DEFAULT_PREFERENCES,
+          goal: 'long_breaks',
+          planStartMode: 'year_start',
+          minDaysPerBlock: 5,
+          maxDaysPerBlock: 5,
+        },
+        false,
+        undefined,
+        partnerFree,
+      )
+      expect(blocks).toHaveLength(1)
+      expect(blocks[0].vacationDays).toEqual([
+        '2027-09-06',
+        '2027-09-07',
+        '2027-09-08',
+        '2027-09-09',
+        '2027-09-10',
+      ])
+      expect(blocks[0].partnerFreeOverlapDays).toBe(9)
+    })
   })
 })

@@ -65,6 +65,8 @@ export interface VacationSuggestionBlock {
   category: 'bridge' | 'holiday_combo' | 'long_vacation' | 'custom_period' | 'relax'
   holidaysIncluded: string[]
   inSchoolHolidays: boolean
+  /** Calendar days in startDate..endDate where the aligned partner is already free. */
+  partnerFreeOverlapDays?: number
 }
 
 export const DEFAULT_PREFERENCES: PlanningPreferences = {
@@ -459,6 +461,7 @@ export function suggestVacation(
   prefs: PlanningPreferences,
   overwriteExisting: boolean,
   heatmapDensityByDate?: Map<string, number>,
+  partnerFreeDates?: Set<string>,
 ): VacationSuggestionBlock[] {
   const goal = resolveGoal(prefs)
   const schoolStrategy = resolveSchoolStrategy(prefs)
@@ -682,6 +685,16 @@ export function suggestVacation(
       }
     }
 
+    // Partner alignment: reward candidates where the partner is already off on our working days
+    // (e.g. partner's planned vacation, 4-day-week off-days, or regional public holidays).
+    if (partnerFreeDates && partnerFreeDates.size > 0) {
+      const partnerWorkdayMatches = newVacationDays.filter(d => partnerFreeDates.has(d)).length
+      if (partnerWorkdayMatches > 0) {
+        const matchRatio = partnerWorkdayMatches / newVacationDays.length
+        score *= 1 + 1.45 * matchRatio + (matchRatio === 1 ? 0.35 : 0)
+      }
+    }
+
     const { label, reason, category } = buildSmartLabelAndReason(
       newVacationDays,
       spanStart,
@@ -734,6 +747,24 @@ export function suggestVacation(
     if (prefs.maxDaysPerBlock !== null && prefs.maxDaysPerBlock < seg.workDays.length) {
       addCandidate(createCandidate(seg.workDays.slice(0, prefs.maxDaysPerBlock)))
       addCandidate(createCandidate(seg.workDays.slice(-prefs.maxDaysPerBlock)))
+    }
+
+    // 2b. Partner alignment sub-slices: if the partner is off on specific workdays inside this segment
+    // (e.g. Friday of a 4-day week, or Mon–Wed planned trip), generate exact matching sub-slices.
+    if (partnerFreeDates && partnerFreeDates.size > 0 && seg.workDays.length > 1) {
+      let runStart = -1
+      for (let k = 0; k <= seg.workDays.length; k++) {
+        const isPartnerOff = k < seg.workDays.length && partnerFreeDates.has(seg.workDays[k])
+        if (isPartnerOff && runStart === -1) {
+          runStart = k
+        } else if (!isPartnerOff && runStart !== -1) {
+          const slice = seg.workDays.slice(runStart, k)
+          if (slice.length < seg.workDays.length) {
+            addCandidate(createCandidate(slice))
+          }
+          runStart = -1
+        }
+      }
     }
 
     // 3. Multi-segment combinations (2, 3, 4, or 5 consecutive segments across weekends/holidays for 1-3 week vacations!)
@@ -1050,6 +1081,13 @@ export function suggestVacation(
       customLabels[0],
     )
 
+    const partnerFreeOverlapDays =
+      partnerFreeDates && partnerFreeDates.size > 0
+        ? eachDayOfInterval({ start: parseISO(spanStart), end: parseISO(spanEnd) }).filter(d =>
+            partnerFreeDates.has(format(d, 'yyyy-MM-dd')),
+          ).length
+        : undefined
+
     finalBlocks.push({
       id: `sug-${finalBlocks.length}-${mergedVacDays[0]}`,
       vacationDays: mergedVacDays,
@@ -1063,6 +1101,7 @@ export function suggestVacation(
       category,
       holidaysIncluded,
       inSchoolHolidays,
+      ...(partnerFreeOverlapDays && partnerFreeOverlapDays > 0 ? { partnerFreeOverlapDays } : {}),
     })
 
     idx = nextIdx

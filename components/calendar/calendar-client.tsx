@@ -128,7 +128,7 @@ function DayInfoDetails({ day }: { day: DayInfo }) {
 
   return (
     <>
-      <p className="font-medium">{format(day.date, 'dd.MM.yyyy (EEEE)', { locale: de })}</p>
+      <p className="font-semibold">{format(day.date, 'dd.MM.yyyy (EEEE)', { locale: de })}</p>
       {day.suggestionPreview && (
         <div className="my-1 rounded-md border border-teal-500/40 bg-teal-500/10 p-1.5 text-xs text-teal-700 dark:text-teal-300">
           <p className="font-semibold">✨ Vorschlag: {day.suggestionPreview.label}</p>
@@ -138,8 +138,28 @@ function DayInfoDetails({ day }: { day: DayInfo }) {
           <p className="text-[10px] opacity-85">Ziehe ◀ / ▶ an den Enden oder verschiebe den Block direkt im Kalender.</p>
         </div>
       )}
-      {day.publicHoliday && <p className="text-green-600 dark:text-green-400">🎉 {day.publicHoliday}</p>}
-      {day.schoolHoliday && <p className="text-sky-600 dark:text-sky-400 font-medium">🏫 Eigene Schulferien: {day.schoolHoliday}</p>}
+      {day.publicHoliday && (
+        <div className="flex flex-wrap items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+          <span>🎉 {day.publicHoliday}</span>
+          {day.isPublicHolidayRegional && (
+            <span className="text-[10px] rounded bg-emerald-500/15 px-1 py-0.5 text-emerald-700 dark:text-emerald-300 font-semibold">
+              Bundesland-Feiertag
+            </span>
+          )}
+        </div>
+      )}
+      {viewerHasVacationOrFlex && day.publicHoliday && (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-1.5 text-[11px] text-amber-700 dark:text-amber-300 leading-snug">
+          <p className="font-semibold">💡 Gesetzlicher Feiertag</p>
+          <p>An diesem Tag hast du bereits einen Feiertag. Wenn du hier arbeitsfrei hast, sparst du deinen Urlaubstag!</p>
+        </div>
+      )}
+      {day.schoolHoliday && (
+        <p className="text-sky-600 dark:text-sky-400 font-medium">
+          🏫 Eigene Schulferien: {day.schoolHoliday}
+          {day.entry?.type === 'vacation' && <span className="ml-1 text-[11px] text-sky-500 dark:text-sky-300">(im Urlaubszeitraum)</span>}
+        </p>
+      )}
       {day.isBridgeDay && day.bridgeDayInfo && (
         <div className="text-orange-500">
           <p>🌉 Brückentag</p>
@@ -155,7 +175,12 @@ function DayInfoDetails({ day }: { day: DayInfo }) {
       )}
       {day.entry && (
         <p className={day.entry.type === 'vacation' ? 'text-blue-500 font-medium' : day.entry.type === 'gleittag' ? 'text-purple-500 font-medium' : 'text-muted-foreground'}>
-          {day.entry.type === 'vacation' ? '🌴 Urlaub' : day.entry.type === 'gleittag' ? '⏰ Gleittag' : `📝 ${day.entry.title ?? 'Notiz'}`}
+          {day.entry.type === 'vacation' ? '🌴 Geplanter Urlaub' : day.entry.type === 'gleittag' ? '⏰ Geplanter Gleittag' : `📝 ${day.entry.title ?? 'Notiz'}`}
+        </p>
+      )}
+      {day.noteEntry && day.noteEntry !== day.entry && (
+        <p className="text-xs text-muted-foreground">
+          📝 Notiz: {day.noteEntry.title ?? ''}
         </p>
       )}
       {Boolean(day.sharedItems?.length) && (
@@ -1270,9 +1295,10 @@ export function CalendarClient({
     if (!activeDayKey) return null
 
     const date = parseISO(activeDayKey)
-    const entry = entries.find(e => e.type === 'vacation' && e.date.split('T')[0] === activeDayKey)
-      ?? entries.find(e => e.type === 'gleittag' && e.date.split('T')[0] === activeDayKey)
-      ?? entries.find(e => e.type === 'note' && e.date.split('T')[0] === activeDayKey)
+    const vacation = entries.find(e => e.type === 'vacation' && e.date.split('T')[0] === activeDayKey)
+    const gleittag = entries.find(e => e.type === 'gleittag' && e.date.split('T')[0] === activeDayKey)
+    const note = entries.find(e => e.type === 'note' && e.date.split('T')[0] === activeDayKey)
+    const entry = vacation ?? gleittag ?? note
     const publicHoliday = getHolidayForDate(combinedPublicHolidays, date)
     const schoolHoliday = getHolidayForDate(schoolHolidays, date)
     const bridgeDayInfo = bridgeDayMap.get(activeDayKey)
@@ -1281,10 +1307,12 @@ export function CalendarClient({
       date,
       comparisonStates: showHeatmap ? comparison.holidays.flatMap((holidays, i) => getHolidayForDate(holidays, date) ? [regionName(compareSubdivisions[i])] : []) : [],
       publicHoliday: publicHoliday ? getHolidayName(publicHoliday) : undefined,
+      isPublicHolidayRegional: Boolean(publicHoliday && !publicHoliday.nationwide),
       schoolHoliday: schoolHoliday ? getHolidayName(schoolHoliday) : undefined,
       isBridgeDay: showBridgeDays && bridgeDaySet.has(activeDayKey),
       bridgeDayInfo,
       entry,
+      noteEntry: note,
       sharedItems,
     }
 
@@ -1849,10 +1877,19 @@ export function CalendarClient({
               <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-blue-600 shadow-2xs" /> Urlaub</span>
               <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-red-600" /> Über Budget</span>
               <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-purple-600" /> Gleittag</span>
-              <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-slate-500 dark:bg-slate-600" /> Notiz</span>
-              <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-emerald-100 border border-emerald-400 dark:bg-emerald-500/30 dark:border-emerald-500/60" /> Feiertag</span>
+              <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-slate-500 dark:bg-slate-600 flex items-center justify-center text-[8px]">📝</span> Notiz</span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-3.5 h-3.5 rounded-sm bg-emerald-100 ring-1 ring-inset ring-emerald-700/50 dark:ring-white/80 border border-emerald-400 dark:bg-emerald-500/35 dark:border-emerald-500/60" />
+                <span>Feiertag (eigener Bundesland-Rahmen)</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="relative w-3.5 h-3.5 rounded-sm bg-blue-600 ring-1 ring-inset ring-white border-b-2 border-b-amber-300">
+                  <span className="absolute top-0.5 right-0.5 w-1 h-1 rounded-full bg-emerald-400 ring-0.5 ring-white" />
+                </span>
+                <span>Urlaub auf Feiertag/Ferien (Marker &amp; Rahmen)</span>
+              </span>
               {!showHeatmap && (
-                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-amber-100/85 border border-amber-300 dark:bg-amber-400/20 dark:border-amber-400/50" /> Eigene Schulferien</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-amber-100/85 border border-amber-300 border-b-2 border-b-amber-400 dark:bg-amber-400/20 dark:border-amber-400/50" /> Eigene Schulferien</span>
               )}
               <span className="flex items-center gap-1.5">
                 <span className="w-4 h-3.5 rounded-sm bg-orange-50 ring-1 ring-inset ring-orange-400 border-l-[3px] border-l-emerald-500 dark:bg-orange-500/20 flex items-center justify-center text-[8px] font-bold text-orange-600 dark:text-orange-300">←</span>
