@@ -61,7 +61,7 @@ describe('DayCell visual indicators and Bundesland frame', () => {
     expect(cell.className).toContain('bg-emerald-100')
   })
 
-  it('renders regional public holidays with an additional top accent in the own Bundesland', () => {
+  it('renders regional public holidays with a consistent bottom accent in the own Bundesland', () => {
     const fronleichnamDate = new Date(2026, 5, 4) // 4. Juni 2026
     render(
       <DayCell
@@ -85,8 +85,43 @@ describe('DayCell visual indicators and Bundesland frame', () => {
 
     const cell = screen.getByRole('button', { name: /Fronleichnam/ })
     expect(cell.className).toContain('dark:ring-white/80')
-    expect(cell.className).toContain('border-t-2')
-    expect(cell.className).toContain('border-t-emerald-600')
+    expect(cell.className).toContain('border-b-2')
+    expect(cell.className).toContain('border-b-emerald-600')
+  })
+
+  it('renders a prominent StickyNote vector icon for note entries', () => {
+    const noteEntry: VacationEntry = {
+      id: 'n1',
+      userId: 'u1',
+      date: '2026-05-01',
+      type: 'note',
+      title: 'Wichtiger Termin',
+      year: 2026,
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    }
+    const { container } = render(
+      <DayCell
+        date={dummyDate}
+        entries={[noteEntry]}
+        publicHolidays={[]}
+        schoolHolidays={[]}
+        isWeekend={false}
+        isToday={false}
+        isOtherMonth={false}
+        isPast={false}
+        isOverBudget={false}
+        showHeatmap={false}
+        isBridgeDay={false}
+        showBridgeDays={false}
+        showOtherMonthDays={true}
+        onToggle={vi.fn()}
+        selectedType="vacation"
+      />
+    )
+    const noteMarker = container.querySelector('[title="Notiz: Wichtiger Termin"]')
+    expect(noteMarker).toBeTruthy()
+    expect(noteMarker?.querySelector('svg.lucide-sticky-note')).toBeTruthy()
   })
 
   it('preserves the fine white frame and renders a Feiertag indicator dot when vacation is booked on a holiday', () => {
@@ -203,6 +238,6 @@ describe('DayCell visual indicators and Bundesland frame', () => {
     expect(cell.className).toContain('bg-emerald-100')
     expect(cell.className).toContain('dark:ring-white/80')
     // Note icon rendered:
-    expect(cell.querySelector('span[title*="Familienausflug"]')?.textContent).toBe('📝')
+    expect(cell.querySelector('span[title*="Familienausflug"] svg.lucide-sticky-note')).toBeTruthy()
   })
 })

@@ -52,6 +52,7 @@ interface ToolbarProps {
   onToggleBridgeDays: (val: boolean) => void
   vacationDaysUsed: number
   vacationDaysTotal: number
+  workDays?: number[]
   workDaysLabel?: string
   flex: FlexSummary
   remainingWorkDays: number
@@ -77,7 +78,7 @@ export function Toolbar({
   showPublicHolidays, onTogglePublicHolidays,
   showSchoolHolidays, onToggleSchoolHolidays,
   showBridgeDays, onToggleBridgeDays,
-  vacationDaysUsed, vacationDaysTotal, workDaysLabel,
+  vacationDaysUsed, vacationDaysTotal, workDays, workDaysLabel,
   flex, remainingWorkDays, sharedPlanSummaries = [],
   canUndo, onUndo,
   entries, preferences, localConfig,
@@ -90,7 +91,8 @@ export function Toolbar({
   const configInputRef = useRef<HTMLInputElement>(null)
 
   const handleExportCSV = () => {
-    downloadFile(exportToCSV(entries), `urlaubsplaner-${year}.csv`)
+    const activeWorkDays = workDays ?? localConfig?.workDays ?? (preferences?.workDays as number[] | undefined)
+    downloadFile(exportToCSV(entries, { onlyWorkdays: true, workDays: activeWorkDays }), `urlaubsplaner-${year}.csv`)
   }
 
   const handleExportJSON = () => {

@@ -2,7 +2,7 @@ import type { VacationEntry, EntryType } from '@/types'
 import { format, parseISO, getISOWeek, differenceInCalendarDays } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { createCalendar } from './calendar'
-import { formatDays } from './vacation-accounting'
+import { formatDays, isOffDayKey } from './vacation-accounting'
 
 const TYPE_LABELS: Record<string, string> = {
   vacation: 'Urlaub',
@@ -10,9 +10,30 @@ const TYPE_LABELS: Record<string, string> = {
   note: 'Notiz',
 }
 
-export function exportToCSV(entries: VacationEntry[]): string {
+export function isNonWorkingGap(startDateKey: string, endDateKey: string, workDays?: number[]): boolean {
+  const gap = differenceInCalendarDays(parseISO(endDateKey), parseISO(startDateKey))
+  if (gap <= 1) return true
+  if (gap > 4) return false
+  for (let i = 1; i < gap; i++) {
+    const d = new Date(`${startDateKey}T00:00:00Z`)
+    d.setUTCDate(d.getUTCDate() + i)
+    const key = d.toISOString().slice(0, 10)
+    if (!isOffDayKey(key, workDays)) {
+      return false
+    }
+  }
+  return true
+}
+
+export function exportToCSV(
+  entries: VacationEntry[],
+  options?: { onlyWorkdays?: boolean; workDays?: number[] }
+): string {
   const header = 'Datum;Typ;Titel'
-  const rows = [...entries]
+  const filtered = options?.onlyWorkdays
+    ? entries.filter(e => e.type === 'note' || !isOffDayKey(e.date.slice(0, 10), options.workDays))
+    : entries
+  const rows = [...filtered]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map(e => {
       const dateStr = format(parseISO(e.date.slice(0, 10)), 'dd.MM.yyyy', { locale: de })
@@ -23,8 +44,14 @@ export function exportToCSV(entries: VacationEntry[]): string {
   return [header, ...rows].join('\n')
 }
 
-export function exportToClipboardText(entries: VacationEntry[]): string {
-  return [...entries]
+export function exportToClipboardText(
+  entries: VacationEntry[],
+  options?: { onlyWorkdays?: boolean; workDays?: number[] }
+): string {
+  const filtered = options?.onlyWorkdays
+    ? entries.filter(e => e.type === 'note' || !isOffDayKey(e.date.slice(0, 10), options.workDays))
+    : entries
+  return [...filtered]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map(e => {
       const dateStr = format(parseISO(e.date.slice(0, 10)), 'dd.MM.yyyy (EEEE)', { locale: de })
@@ -53,6 +80,8 @@ export interface ClipboardExportOptions {
   includeWeekdays: boolean
   includeSummary: boolean
   onlyFuture: boolean
+  onlyWorkdays?: boolean
+  workDays?: number[]
   year?: number
   vacationDaysUsed?: number
   vacationDaysTotal?: number
@@ -69,7 +98,10 @@ export interface GroupedEntryBlock {
   titles: string[]
 }
 
-export function groupEntriesIntoBlocks(entries: VacationEntry[]): GroupedEntryBlock[] {
+export function groupEntriesIntoBlocks(
+  entries: VacationEntry[],
+  options?: { workDays?: number[] }
+): GroupedEntryBlock[] {
   const sorted = [...entries].sort((a, b) => a.date.slice(0, 10).localeCompare(b.date.slice(0, 10)) || a.type.localeCompare(b.type))
   const blocks: GroupedEntryBlock[] = []
 
@@ -78,9 +110,11 @@ export function groupEntriesIntoBlocks(entries: VacationEntry[]): GroupedEntryBl
     const last = blocks.at(-1)
     if (last && last.type === entry.type) {
       const gap = differenceInCalendarDays(parseISO(dKey), parseISO(last.endDate))
-      // Group consecutive days or days separated only by a weekend (Fri -> Mon = 3 days) for vacation/gleittag
-      const maxGap = entry.type === 'vacation' ? 3 : 1
-      if (gap >= 0 && gap <= maxGap) {
+      const canMerge =
+        entry.type === 'vacation' || entry.type === 'gleittag'
+          ? isNonWorkingGap(last.endDate, dKey, options?.workDays)
+          : gap <= 1
+      if (gap >= 0 && canMerge) {
         if (gap > 0) {
           last.endDate = dKey
           last.daysCount += 1
@@ -115,12 +149,16 @@ export function formatCustomClipboardExport(
   options: ClipboardExportOptions,
 ): string {
   const todayStr = format(new Date(), 'yyyy-MM-dd')
+  const onlyWorkdays = options.onlyWorkdays ?? true
   const filtered = [...entries]
     .filter(e => {
       if (e.type === 'vacation' && !options.includeVacations) return false
       if (e.type === 'gleittag' && !options.includeGleittage) return false
       if (e.type === 'note' && !options.includeNotes) return false
       if (options.onlyFuture && e.date.slice(0, 10) < todayStr) return false
+      if (onlyWorkdays && (e.type === 'vacation' || e.type === 'gleittag') && isOffDayKey(e.date.slice(0, 10), options.workDays)) {
+        return false
+      }
       return true
     })
     .sort((a, b) => a.date.slice(0, 10).localeCompare(b.date.slice(0, 10)))
@@ -157,10 +195,11 @@ export function formatCustomClipboardExport(
     return lines.join('\n')
   }
 
-  const blocks = groupEntriesIntoBlocks(filtered)
+  const blocks = groupEntriesIntoBlocks(filtered, { workDays: options.workDays })
 
   if (options.format === 'excel_tsv') {
-    const header = ['Von', 'Bis', 'Typ', 'Tage', ...(options.includeWeekNumbers ? ['KW'] : []), ...(options.includeTitles ? ['Notiz / Hinweis'] : [])].join('\t')
+    const dayHeader = onlyWorkdays ? 'Arbeitstage' : 'Tage'
+    const header = ['Von', 'Bis', 'Typ', dayHeader, ...(options.includeWeekNumbers ? ['KW'] : []), ...(options.includeTitles ? ['Notiz / Hinweis'] : [])].join('\t')
     const rows = blocks.map(b => {
       const start = format(parseISO(b.startDate), 'dd.MM.yyyy', { locale: de })
       const end = format(parseISO(b.endDate), 'dd.MM.yyyy', { locale: de })
@@ -174,7 +213,8 @@ export function formatCustomClipboardExport(
   }
 
   if (options.format === 'markdown_table') {
-    const headers = ['Zeitraum', 'Typ', 'Tage', ...(options.includeWeekNumbers ? ['KW'] : []), ...(options.includeTitles ? ['Hinweis'] : [])]
+    const dayHeader = onlyWorkdays ? 'Arbeitstage' : 'Tage'
+    const headers = ['Zeitraum', 'Typ', dayHeader, ...(options.includeWeekNumbers ? ['KW'] : []), ...(options.includeTitles ? ['Hinweis'] : [])]
     const sep = headers.map(() => '---')
     const rows = blocks.map(b => {
       const span = b.startDate === b.endDate ? fmtDate(b.startDate) : `${fmtDate(b.startDate)} – ${fmtDate(b.endDate)}`
@@ -193,7 +233,8 @@ export function formatCustomClipboardExport(
     const span = b.startDate === b.endDate ? fmtDate(b.startDate) : `${fmtDate(b.startDate)} – ${fmtDate(b.endDate)}`
     const kw = options.includeWeekNumbers ? ` (${formatWeekSpan(b.startDate, b.endDate)})` : ''
     const type = TYPE_LABELS[b.type] ?? b.type
-    const count = b.type === 'note' ? '' : ` · ${b.daysCount} ${b.daysCount === 1 ? 'Tag' : 'Tage'}`
+    const dayLabel = onlyWorkdays ? (b.daysCount === 1 ? 'Arbeitstag' : 'Arbeitstage') : (b.daysCount === 1 ? 'Tag' : 'Tage')
+    const count = b.type === 'note' ? '' : ` · ${b.daysCount} ${dayLabel}`
     const title = options.includeTitles && b.titles.length > 0 ? ` — ${b.titles.join(', ')}` : ''
     const icon = options.format === 'chat_short' ? (b.type === 'vacation' ? '🌴 ' : b.type === 'gleittag' ? '⏰ ' : '📝 ') : '• '
     return `${icon}${span}${kw}: ${type}${count}${title}`

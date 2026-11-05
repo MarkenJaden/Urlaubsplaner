@@ -15,6 +15,7 @@ interface ClipboardExportDialogProps {
   year: number
   vacationDaysUsed: number
   vacationDaysTotal: number
+  workDays?: number[]
 }
 
 export function ClipboardExportDialog({
@@ -24,6 +25,7 @@ export function ClipboardExportDialog({
   year,
   vacationDaysUsed,
   vacationDaysTotal,
+  workDays,
 }: ClipboardExportDialogProps) {
   const [formatType, setFormatType] = useState<ClipboardFormat>('compact_periods')
   const [includeVacations, setIncludeVacations] = useState(true)
@@ -34,6 +36,7 @@ export function ClipboardExportDialog({
   const [includeWeekdays, setIncludeWeekdays] = useState(true)
   const [includeSummary, setIncludeSummary] = useState(true)
   const [onlyFuture, setOnlyFuture] = useState(false)
+  const [onlyWorkdays, setOnlyWorkdays] = useState(true)
   const [recipientName, setRecipientName] = useState('')
   const [senderName, setSenderName] = useState('')
   const [customPreview, setCustomPreview] = useState<string | null>(null)
@@ -51,6 +54,8 @@ export function ClipboardExportDialog({
         includeWeekdays,
         includeSummary,
         onlyFuture,
+        onlyWorkdays,
+        workDays,
         year,
         vacationDaysUsed,
         vacationDaysTotal,
@@ -68,6 +73,8 @@ export function ClipboardExportDialog({
       includeWeekdays,
       includeSummary,
       onlyFuture,
+      onlyWorkdays,
+      workDays,
       year,
       vacationDaysUsed,
       vacationDaysTotal,
@@ -206,6 +213,10 @@ export function ClipboardExportDialog({
             <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md border bg-card px-2.5 py-1.5">
               <Switch checked={onlyFuture} onCheckedChange={setOnlyFuture} />
               <span>Nur ab heute</span>
+            </label>
+            <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md border bg-card px-2.5 py-1.5 col-span-2 sm:col-span-4 bg-muted/20">
+              <Switch checked={onlyWorkdays} onCheckedChange={setOnlyWorkdays} />
+              <span className="font-medium">Nur tatsächliche Arbeitstage (Wochenenden &amp; freie Tage ausblenden)</span>
             </label>
           </div>
         </div>

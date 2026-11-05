@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import type { VacationEntry, Holiday, EntryType } from '@/types'
 import type { BridgeDay } from '@/lib/bridge-days'
 import { format, parseISO } from 'date-fns'
+import { StickyNote } from 'lucide-react'
 
 export interface SharedDayItem {
   label: string
@@ -230,14 +231,14 @@ export function DayCell({
         isPublicHolidayDominant && [
           'bg-emerald-100 text-emerald-900 border border-emerald-300/90 dark:bg-emerald-500/35 dark:text-emerald-100 dark:border-emerald-500/60',
           'ring-1 ring-inset ring-emerald-700/50 dark:ring-white/80 font-semibold',
-          isPublicHolidayRegional && 'border-t-2 border-t-emerald-600 dark:border-t-white/90',
+          isPublicHolidayRegional && 'border-b-2 border-b-emerald-600 dark:border-b-white/90',
         ],
 
         // When vacation or gleittag is booked on a Feiertag:
         // Preserve the requested fine white frame right on top of the vacation/gleittag color
         publicHoliday && hasVacationOrGleittag && [
           'ring-2 ring-inset ring-white dark:ring-white shadow-[inset_0_0_0_1px_rgba(16,185,129,0.9)] font-semibold',
-          isPublicHolidayRegional && 'border-t-2 border-t-emerald-300 dark:border-t-emerald-300',
+          isPublicHolidayRegional && 'border-b-2 border-b-emerald-300 dark:border-b-emerald-300',
         ],
 
         // Heatmap background (when no dominant public holiday and no vacation/gleittag):
@@ -305,11 +306,11 @@ export function DayCell({
       {/* Note indicator icon on top-left: visible even if placed on a Feiertag or Vacation day */}
       {note && (
         <span
-          className="absolute top-0.5 left-1 text-[9px] leading-none pointer-events-none select-none drop-shadow-xs"
+          className="absolute top-1 left-1 pointer-events-none select-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)]"
           title={`Notiz: ${note.title ?? 'Notiz'}`}
           aria-hidden="true"
         >
-          📝
+          <StickyNote className="h-3.5 w-3.5 text-amber-300 fill-amber-400/50 dark:text-amber-200 dark:fill-amber-300/50" />
         </span>
       )}
 

@@ -49,6 +49,7 @@ import {
   ChevronLeft,
   ChevronRight,
   SlidersHorizontal,
+  StickyNote,
 } from 'lucide-react'
 import { useProfile, useUpdatePreferences } from '@/hooks/use-profile'
 import { useQueryClient } from '@tanstack/react-query'
@@ -1361,6 +1362,7 @@ export function CalendarClient({
         year={year}
         vacationDaysUsed={vacationDaysUsed}
         vacationDaysTotal={vacationDaysTotal}
+        workDays={workDays}
       />
 
       <ShareDialog
@@ -1657,6 +1659,7 @@ export function CalendarClient({
 
         <Toolbar
           year={year} onYearChange={setYear}
+          workDays={workDays}
           selectedType={selectedType} onTypeChange={setSelectedType}
           showHeatmap={showHeatmap} onToggleHeatmap={(v) => updateConfig({ showHeatmap: v })}
           showPublicHolidays={showPublicHolidays} onTogglePublicHolidays={(v) => updateConfig({ showPublicHolidays: v })}
@@ -1877,16 +1880,16 @@ export function CalendarClient({
               <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-blue-600 shadow-2xs" /> Urlaub</span>
               <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-red-600" /> Über Budget</span>
               <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-purple-600" /> Gleittag</span>
-              <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-slate-500 dark:bg-slate-600 flex items-center justify-center text-[8px]">📝</span> Notiz</span>
+              <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-slate-500 dark:bg-slate-600 flex items-center justify-center"><StickyNote className="h-2.5 w-2.5 text-amber-200 fill-amber-300/40" /></span> Notiz</span>
               <span className="flex items-center gap-1.5">
                 <span className="w-3.5 h-3.5 rounded-sm bg-emerald-100 ring-1 ring-inset ring-emerald-700/50 dark:ring-white/80 border border-emerald-400 dark:bg-emerald-500/35 dark:border-emerald-500/60" />
-                <span>Feiertag (eigener Bundesland-Rahmen)</span>
+                <span>Feiertag</span>
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="relative w-3.5 h-3.5 rounded-sm bg-blue-600 ring-1 ring-inset ring-white border-b-2 border-b-amber-300">
                   <span className="absolute top-0.5 right-0.5 w-1 h-1 rounded-full bg-emerald-400 ring-0.5 ring-white" />
                 </span>
-                <span>Urlaub auf Feiertag/Ferien (Marker &amp; Rahmen)</span>
+                <span>Urlaub auf Feiertag/Ferien</span>
               </span>
               {!showHeatmap && (
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-amber-100/85 border border-amber-300 border-b-2 border-b-amber-400 dark:bg-amber-400/20 dark:border-amber-400/50" /> Eigene Schulferien</span>
@@ -1928,7 +1931,7 @@ export function CalendarClient({
               </div>
               <div className="flex items-center gap-1.5 font-medium text-foreground/85">
                 <span className="w-3.5 h-3.5 rounded-sm ring-1 ring-inset ring-foreground/45 border-b-2 border-b-foreground/65 dark:ring-white/60 dark:border-b-white/75 bg-amber-200 dark:bg-amber-500/30" />
-                <span>Feiner Rahmen + Unterlinie = Schulferien in deinem eigenen Bundesland</span>
+                <span>Unterlinie = Eigene Schulferien &amp; regionale Feiertage</span>
               </div>
             </div>
           )}

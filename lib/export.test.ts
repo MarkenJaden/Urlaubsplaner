@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { exportToCSV, exportToClipboardText, exportToJSON, exportToICS, parseImportFile, parseConfigJSON, exportConfigJSON } from './export'
+import { exportToCSV, exportToClipboardText, exportToJSON, exportToICS, parseImportFile, parseConfigJSON, exportConfigJSON, formatCustomClipboardExport } from './export'
 import type { VacationEntry } from '@/types'
 
 const mkEntry = (date: string, type: 'vacation' | 'gleittag' | 'note', title?: string): VacationEntry => ({
@@ -169,5 +169,102 @@ describe('export does not change the displayed plan', () => {
     const unsorted = [mkEntry('2026-06-01', 'note', 'B'), mkEntry('2026-01-01T00:00:00.000Z', 'vacation')]
     expect(exportToCSV(unsorted).split('\n')[1]).toBe('01.01.2026;Urlaub;')
     expect(unsorted[0].date).toBe('2026-06-01')
+  })
+})
+
+describe('onlyWorkdays export filtering', () => {
+  // 2026-06-01 is Monday, 2026-06-07 is Sunday
+  const wholeWeek = [
+    mkEntry('2026-06-01', 'vacation'),
+    mkEntry('2026-06-02', 'vacation'),
+    mkEntry('2026-06-03', 'vacation'),
+    mkEntry('2026-06-04', 'vacation'),
+    mkEntry('2026-06-05', 'vacation'),
+    mkEntry('2026-06-06', 'vacation'), // Saturday
+    mkEntry('2026-06-07', 'vacation'), // Sunday
+  ]
+
+  it('filters out weekend days by default in compact_periods', () => {
+    const text = formatCustomClipboardExport(wholeWeek, {
+      format: 'compact_periods',
+      includeVacations: true,
+      includeGleittage: true,
+      includeNotes: false,
+      includeTitles: false,
+      includeWeekNumbers: false,
+      includeWeekdays: false,
+      includeSummary: false,
+      onlyFuture: false,
+      onlyWorkdays: true,
+    })
+    expect(text).toContain('01.06.2026 – 05.06.2026: Urlaub · 5 Arbeitstage')
+    expect(text).not.toContain('07.06.2026')
+  })
+
+  it('preserves weekend days when onlyWorkdays is explicitly false', () => {
+    const text = formatCustomClipboardExport(wholeWeek, {
+      format: 'compact_periods',
+      includeVacations: true,
+      includeGleittage: true,
+      includeNotes: false,
+      includeTitles: false,
+      includeWeekNumbers: false,
+      includeWeekdays: false,
+      includeSummary: false,
+      onlyFuture: false,
+      onlyWorkdays: false,
+    })
+    expect(text).toContain('01.06.2026 – 07.06.2026: Urlaub · 7 Tage')
+  })
+
+  it('correctly merges two weeks across the weekend into 10 Arbeitstage', () => {
+    const twoWeeks = [
+      ...wholeWeek,
+      mkEntry('2026-06-08', 'vacation'),
+      mkEntry('2026-06-09', 'vacation'),
+      mkEntry('2026-06-10', 'vacation'),
+      mkEntry('2026-06-11', 'vacation'),
+      mkEntry('2026-06-12', 'vacation'),
+    ]
+    const text = formatCustomClipboardExport(twoWeeks, {
+      format: 'compact_periods',
+      includeVacations: true,
+      includeGleittage: true,
+      includeNotes: false,
+      includeTitles: false,
+      includeWeekNumbers: false,
+      includeWeekdays: false,
+      includeSummary: false,
+      onlyFuture: false,
+      onlyWorkdays: true,
+    })
+    expect(text).toContain('01.06.2026 – 12.06.2026: Urlaub · 10 Arbeitstage')
+  })
+
+  it('omits weekend lines in single_days format when onlyWorkdays is true', () => {
+    const text = formatCustomClipboardExport(wholeWeek, {
+      format: 'single_days',
+      includeVacations: true,
+      includeGleittage: true,
+      includeNotes: false,
+      includeTitles: false,
+      includeWeekNumbers: false,
+      includeWeekdays: true,
+      includeSummary: false,
+      onlyFuture: false,
+      onlyWorkdays: true,
+    })
+    expect(text).toContain('Freitag')
+    expect(text).not.toContain('Samstag')
+    expect(text).not.toContain('Sonntag')
+  })
+
+  it('supports onlyWorkdays in exportToCSV', () => {
+    const csv = exportToCSV(wholeWeek, { onlyWorkdays: true })
+    const lines = csv.split('\n').filter(Boolean)
+    expect(lines).toHaveLength(6) // header + 5 workdays
+    expect(csv).toContain('05.06.2026')
+    expect(csv).not.toContain('06.06.2026')
+    expect(csv).not.toContain('07.06.2026')
   })
 })
