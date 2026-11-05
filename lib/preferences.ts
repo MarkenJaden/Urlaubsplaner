@@ -112,7 +112,7 @@ export function countryChangePatch(country: string): PreferencesPatch {
 export function parseEntry(input: unknown): { date: Date; type: EntryType; title: string | null; year: number } | null {
   if (!input || typeof input !== 'object') return null
   const { date, type, title } = input as Record<string, unknown>
-  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)?$/.test(date) || !['vacation', 'gleittag', 'note'].includes(type as string)) return null
+  if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)?$/.test(date) || !['vacation', 'gleittag', 'special', 'note'].includes(type as string)) return null
   const dateKey = date.slice(0, 10)
   const parsed = new Date(`${dateKey}T00:00:00Z`)
   if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== dateKey || parsed.getUTCFullYear() < 1900 || parsed.getUTCFullYear() > 2200) return null

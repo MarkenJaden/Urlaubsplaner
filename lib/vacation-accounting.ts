@@ -107,7 +107,7 @@ export function remainingWorkDays(
 ): number {
   const first = `${year}-01-01`, last = `${year}-12-31`
   const start = today > first ? today : first
-  const taken = new Set(entries.filter(e => e.type === 'vacation' || e.type === 'gleittag').map(e => dateKey(e.date)))
+  const taken = new Set(entries.filter(e => e.type === 'vacation' || e.type === 'gleittag' || e.type === 'special').map(e => dateKey(e.date)))
   let count = 0
   for (let key = start; key <= last; key = addDays(key, 1)) {
     if (options.holidayDates.has(key) || taken.has(key)) continue

@@ -1,4 +1,4 @@
-export type EntryType = 'vacation' | 'gleittag' | 'note'
+export type EntryType = 'vacation' | 'gleittag' | 'special' | 'note'
 
 export interface VacationEntry {
   id: string

@@ -41,8 +41,8 @@ interface SettingsPanelProps {
   onVacationDaysChange: (n: number) => void
   workDays?: number[]
   onWorkDaysChange?: (days: number[]) => void
-  countWeekendsAsVacation: boolean
-  onCountWeekendsChange: (v: boolean) => void
+  countWeekendsAsVacation?: boolean
+  onCountWeekendsChange?: (v: boolean) => void
   halfDaysChristmas: boolean
   onHalfDaysChange: (v: boolean) => void
   showOtherMonthDays?: boolean
@@ -82,7 +82,6 @@ export function SettingsPanel({
   countries, selectedCountries, onCountriesChange,
   vacationDaysTotal, onVacationDaysChange,
   workDays = DEFAULT_WORK_DAYS, onWorkDaysChange,
-  countWeekendsAsVacation, onCountWeekendsChange,
   halfDaysChristmas, onHalfDaysChange,
   showOtherMonthDays = false, onShowOtherMonthDaysChange,
   vacationDaysUsed, gleittageCount, remainingWorkDays,
@@ -302,11 +301,6 @@ export function SettingsPanel({
                   <span className="text-xs">24./31.12. als halbe Tage zählen (0,5)</span>
                 </label>
 
-                <label className="flex min-h-8 cursor-pointer items-center gap-2 py-0.5">
-                  <input type="checkbox" checked={countWeekendsAsVacation}
-                    onChange={e => onCountWeekendsChange(e.target.checked)} className="h-4 w-4 rounded accent-primary" />
-                  <span className="text-xs">Wochenende als Urlaubstage zählen</span>
-                </label>
 
                 {onShowOtherMonthDaysChange && (
                   <label className="flex min-h-8 cursor-pointer items-center gap-2 py-0.5">

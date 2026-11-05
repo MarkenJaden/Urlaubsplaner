@@ -162,13 +162,13 @@ export function Toolbar({
         <div className="hidden h-5 w-px bg-border md:block" />
 
         {/* Entry Type Selector with Hotkey Hints & Matching Calendar Colors */}
-        <div className="grid grid-cols-3 gap-1 md:flex" role="group" aria-label="Eintragstyp auswählen">
+        <div className="grid grid-cols-2 gap-1 sm:grid-cols-4 md:flex" role="group" aria-label="Eintragstyp auswählen">
           <Button
             size="sm"
             variant={selectedType === 'vacation' ? 'default' : 'outline'}
             onClick={() => onTypeChange('vacation')}
             aria-pressed={selectedType === 'vacation'}
-            title="Urlaub eintragen (Tastenkürzel: U)"
+            title="Urlaub eintragen (Tastenkürzel: U oder 1)"
             className={`h-8 px-2.5 ${selectedType === 'vacation' ? 'bg-blue-600 hover:bg-blue-700 text-white border-transparent' : ''}`}
           >
             Urlaub <span className="hidden sm:inline text-[11px] opacity-80">(U)</span>
@@ -178,17 +178,27 @@ export function Toolbar({
             variant={selectedType === 'gleittag' ? 'default' : 'outline'}
             onClick={() => onTypeChange('gleittag')}
             aria-pressed={selectedType === 'gleittag'}
-            title="Gleittag eintragen (Tastenkürzel: G)"
+            title="Gleittag eintragen (Tastenkürzel: G oder 2)"
             className={`h-8 px-2.5 ${selectedType === 'gleittag' ? 'bg-purple-600 hover:bg-purple-700 text-white border-transparent' : ''}`}
           >
             Gleittag <span className="hidden sm:inline text-[11px] opacity-80">(G)</span>
           </Button>
           <Button
             size="sm"
+            variant={selectedType === 'special' ? 'default' : 'outline'}
+            onClick={() => onTypeChange('special')}
+            aria-pressed={selectedType === 'special'}
+            title="Sonderurlaub / Frei / Schichtfrei eintragen (Tastenkürzel: S oder 3)"
+            className={`h-8 px-2.5 ${selectedType === 'special' ? 'bg-cyan-600 hover:bg-cyan-700 text-white border-transparent' : ''}`}
+          >
+            Sonderurlaub <span className="hidden sm:inline text-[11px] opacity-80">(S)</span>
+          </Button>
+          <Button
+            size="sm"
             variant={selectedType === 'note' ? 'default' : 'outline'}
             onClick={() => onTypeChange('note')}
             aria-pressed={selectedType === 'note'}
-            title="Notiz eintragen (Tastenkürzel: N)"
+            title="Notiz eintragen (Tastenkürzel: N oder 4)"
             className={`h-8 px-2.5 ${selectedType === 'note' ? 'bg-slate-500 hover:bg-slate-600 text-white dark:bg-slate-600 dark:hover:bg-slate-500 border-transparent' : ''}`}
           >
             Notiz <span className="hidden sm:inline text-[11px] opacity-80">(N)</span>

@@ -42,7 +42,7 @@ export function createCalendar(entries: CalendarEntry[], options: CalendarOption
   const { name = 'Urlaubsplaner', refreshInterval } = typeof options === 'string' ? { name: options } : options
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Urlaubsplaner//DE', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', `X-WR-CALNAME:${escapeText(name)}`]
   if (refreshInterval) lines.push(`REFRESH-INTERVAL;VALUE=DURATION:${refreshInterval}`, `X-PUBLISHED-TTL:${refreshInterval}`)
-  const labels: Record<string, string> = { vacation: 'Urlaub', gleittag: 'Gleittag', note: 'Notiz', public: 'Feiertag', school: 'Schulferien' }
+  const labels: Record<string, string> = { vacation: 'Urlaub', gleittag: 'Gleittag', special: 'Sonderurlaub / Frei', note: 'Notiz', public: 'Feiertag', school: 'Schulferien' }
   for (const entry of [...entries].sort((a, b) => a.date.localeCompare(b.date) || a.type.localeCompare(b.type) || a.id.localeCompare(b.id))) {
     const date = entry.date.split('T')[0]
     const start = new Date(`${date}T00:00:00Z`)
@@ -52,7 +52,7 @@ export function createCalendar(entries: CalendarEntry[], options: CalendarOption
     const timestamp = (Number.isFinite(stamp.getTime()) ? stamp.toISOString() : `${date}T00:00:00.000Z`).replace(/[-:]/g, '').replace(/\.\d{3}/, '')
     const label = labels[entry.type] ?? entry.type
     lines.push('BEGIN:VEVENT',
-      `UID:${encodeURIComponent(entry.userId)}-${date}-${encodeURIComponent(entry.type)}${['vacation', 'gleittag', 'note'].includes(entry.type) ? '' : `-${encodeURIComponent(entry.id)}`}@urlaubsplaner`,
+      `UID:${encodeURIComponent(entry.userId)}-${date}-${encodeURIComponent(entry.type)}${['vacation', 'gleittag', 'special', 'note'].includes(entry.type) ? '' : `-${encodeURIComponent(entry.id)}`}@urlaubsplaner`,
       `DTSTAMP:${timestamp}`,
       `DTSTART;VALUE=DATE:${date.replace(/-/g, '')}`,
       // DTEND is exclusive for all-day events: the day after the last day.

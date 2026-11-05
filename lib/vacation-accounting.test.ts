@@ -42,8 +42,8 @@ describe('planned and remaining vacation days', () => {
     expect([...summary.overBudget]).toEqual(['2026-12-24'])
     expect(2 - summary.used).toBe(-0.5)
   })
-  it('ignores Gleittage, notes and duplicate entries for the vacation budget', () => {
-    const entries = [vacation('2026-05-04'), vacation('2026-05-04'), { date: '2026-05-05', type: 'gleittag' }, { date: '2026-05-06', type: 'note' }]
+  it('ignores Gleittage, special leave, notes and duplicate entries for the vacation budget', () => {
+    const entries = [vacation('2026-05-04'), vacation('2026-05-04'), { date: '2026-05-05', type: 'gleittag' }, { date: '2026-05-06', type: 'special' }, { date: '2026-05-07', type: 'note' }]
     expect(summarizeVacation(entries, 30, options).used).toBe(1)
   })
   it('is independent of the browser time zone', () => {

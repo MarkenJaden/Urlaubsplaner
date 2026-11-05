@@ -30,6 +30,7 @@ export function ClipboardExportDialog({
   const [formatType, setFormatType] = useState<ClipboardFormat>('compact_periods')
   const [includeVacations, setIncludeVacations] = useState(true)
   const [includeGleittage, setIncludeGleittage] = useState(true)
+  const [includeSpecial, setIncludeSpecial] = useState(true)
   const [includeNotes, setIncludeNotes] = useState(false)
   const [includeTitles, setIncludeTitles] = useState(true)
   const [includeWeekNumbers, setIncludeWeekNumbers] = useState(true)
@@ -48,6 +49,7 @@ export function ClipboardExportDialog({
         format: formatType,
         includeVacations,
         includeGleittage,
+        includeSpecial,
         includeNotes,
         includeTitles,
         includeWeekNumbers,
@@ -67,6 +69,7 @@ export function ClipboardExportDialog({
       formatType,
       includeVacations,
       includeGleittage,
+      includeSpecial,
       includeNotes,
       includeTitles,
       includeWeekNumbers,
@@ -189,6 +192,10 @@ export function ClipboardExportDialog({
             <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md border bg-card px-2.5 py-1.5">
               <Switch checked={includeGleittage} onCheckedChange={setIncludeGleittage} />
               <span>⏰ Gleittage</span>
+            </label>
+            <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md border bg-card px-2.5 py-1.5">
+              <Switch checked={includeSpecial} onCheckedChange={setIncludeSpecial} />
+              <span>✨ Sonderurlaub</span>
             </label>
             <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-md border bg-card px-2.5 py-1.5">
               <Switch checked={includeNotes} onCheckedChange={setIncludeNotes} />

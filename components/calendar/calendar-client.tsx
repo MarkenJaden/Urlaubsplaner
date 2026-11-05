@@ -943,7 +943,10 @@ export function CalendarClient({
       } else if (key === 'g' || key === '2') {
         e.preventDefault()
         setSelectedType('gleittag')
-      } else if (key === 'n' || key === '3') {
+      } else if (key === 's' || key === '3') {
+        e.preventDefault()
+        setSelectedType('special')
+      } else if (key === 'n' || key === '4') {
         e.preventDefault()
         setSelectedType('note')
       } else if (key === 'p') {
@@ -1032,15 +1035,13 @@ export function CalendarClient({
       end: parseISO(lastKey),
     }).map(d => format(d, 'yyyy-MM-dd'))
 
-    // For vacation and gleittag, skip public holidays and non-working weekdays unless countWeekendsAsVacation is enabled
+    // For vacation and gleittag, skip public holidays and non-working weekdays; for special, allow weekends (shift workers) but skip public holidays
     const targetKeys =
       type === 'note'
         ? allRangeKeys
-        : allRangeKeys.filter(
-            k =>
-              !holidayDates.has(k) &&
-              (countWeekendsAsVacation || !isOffDayKey(k, workDays)),
-          )
+        : type === 'special'
+          ? allRangeKeys.filter(k => !holidayDates.has(k))
+          : allRangeKeys.filter(k => !holidayDates.has(k) && !isOffDayKey(k, workDays))
 
     if (targetKeys.length === 0) return
 
@@ -1095,7 +1096,7 @@ export function CalendarClient({
         ),
       )
     }
-  }, [holidayDates, countWeekendsAsVacation, workDays, isLoggedIn, entries, localConfig, recordUndo, serverEntries, removeMutation, updateLocalEntries, defaultNoteText, importSavedData])
+  }, [holidayDates, workDays, isLoggedIn, entries, localConfig, recordUndo, serverEntries, removeMutation, updateLocalEntries, defaultNoteText, importSavedData])
 
   const handleApplySuggestions = (dates: string[], type: EntryType, replace = false) => {
     const dateKeys = [...new Set(dates.map(date => date.split('T')[0]))]
@@ -1637,8 +1638,6 @@ export function CalendarClient({
           onVacationDaysChange={(n) => updateConfig({ vacationDaysPerYear: { [year]: n } })}
           workDays={workDays}
           onWorkDaysChange={(days) => updateConfig({ workDays: days })}
-          countWeekendsAsVacation={countWeekendsAsVacation}
-          onCountWeekendsChange={(v) => updateConfig({ countWeekendsAsVacation: v })}
           halfDaysChristmas={halfDaysChristmas}
           onHalfDaysChange={(v) => updateConfig({ halfDaysChristmas: v })}
           vacationDaysUsed={vacationDaysUsed}
@@ -1880,6 +1879,7 @@ export function CalendarClient({
               <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-blue-600 shadow-2xs" /> Urlaub</span>
               <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-red-600" /> Über Budget</span>
               <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-purple-600" /> Gleittag</span>
+              <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-cyan-600 shadow-2xs" /> Sonderurlaub / Frei</span>
               <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-slate-500 dark:bg-slate-600 flex items-center justify-center"><StickyNote className="h-2.5 w-2.5 text-amber-200 fill-amber-300/40" /></span> Notiz</span>
               <span className="flex items-center gap-1.5">
                 <span className="w-3.5 h-3.5 rounded-sm bg-emerald-100 ring-1 ring-inset ring-emerald-700/50 dark:ring-white/80 border border-emerald-400 dark:bg-emerald-500/35 dark:border-emerald-500/60" />
@@ -1903,7 +1903,7 @@ export function CalendarClient({
             <div className="hidden sm:flex items-center gap-2 text-[11px] text-muted-foreground">
               <Keyboard className="h-3.5 w-3.5" />
               <span>
-                Mehrfachauswahl: <strong>Gedrückt halten &amp; ziehen</strong> oder <kbd className="rounded border bg-muted px-1 py-0.5">Shift</kbd>+Klick · Kürzel: <kbd className="rounded border bg-muted px-1 py-0.5">U</kbd> <kbd className="rounded border bg-muted px-1 py-0.5">G</kbd> <kbd className="rounded border bg-muted px-1 py-0.5">N</kbd> <kbd className="rounded border bg-muted px-1 py-0.5">P</kbd>
+                Mehrfachauswahl: <strong>Gedrückt halten &amp; ziehen</strong> oder <kbd className="rounded border bg-muted px-1 py-0.5">Shift</kbd>+Klick · Kürzel: <kbd className="rounded border bg-muted px-1 py-0.5">U</kbd> <kbd className="rounded border bg-muted px-1 py-0.5">G</kbd> <kbd className="rounded border bg-muted px-1 py-0.5">S</kbd> <kbd className="rounded border bg-muted px-1 py-0.5">N</kbd> <kbd className="rounded border bg-muted px-1 py-0.5">P</kbd>
               </span>
             </div>
           </div>

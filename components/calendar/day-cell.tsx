@@ -105,14 +105,16 @@ export function DayCell({
   const key = format(date, 'yyyy-MM-dd')
   const vacation = entries.find(e => e.type === 'vacation' && e.date.slice(0, 10) === key)
   const gleittag = entries.find(e => e.type === 'gleittag' && e.date.slice(0, 10) === key)
+  const special = entries.find(e => e.type === 'special' && e.date.slice(0, 10) === key)
   const note = entries.find(e => e.type === 'note' && e.date.slice(0, 10) === key)
   const publicHoliday = getHolidayForDate(publicHolidays, date)
   const schoolHoliday = getHolidayForDate(schoolHolidays, date)
 
   const hasVacation = Boolean(vacation)
   const hasGleittag = Boolean(gleittag) && !hasVacation
-  const hasVacationOrGleittag = hasVacation || hasGleittag
-  const hasEntry = hasVacationOrGleittag || Boolean(note)
+  const hasSpecial = Boolean(special) && !hasVacation && !hasGleittag
+  const hasPlannedOff = hasVacation || hasGleittag || hasSpecial
+  const hasEntry = hasPlannedOff || Boolean(note)
 
   const isPublicHolidayRegional = Boolean(publicHoliday && !publicHoliday.nationwide)
   const hasHeatmap = showHeatmap && heatmapValue !== undefined && heatmapValue > 0
@@ -148,6 +150,7 @@ export function DayCell({
     }
     if (vacation) parts.push('🌴 Urlaub')
     if (gleittag) parts.push('⏰ Gleittag')
+    if (special) parts.push(`✨ Sonderurlaub / Frei${special.title ? `: ${special.title}` : ''}`)
     if (note) parts.push(`📝 Notiz: ${note.title ?? 'Notiz'}`)
     for (const s of sharedItems) {
       const tLabel =
@@ -173,7 +176,7 @@ export function DayCell({
     schoolHoliday: schoolHoliday ? getHolidayName(schoolHoliday) : undefined,
     isBridgeDay: showBridgeDays && isBridgeDay,
     bridgeDayInfo,
-    entry: vacation ?? gleittag ?? note ?? undefined,
+    entry: vacation ?? gleittag ?? special ?? note ?? undefined,
     noteEntry: note ?? undefined,
     sharedItems,
     suggestionPreview,
@@ -192,12 +195,12 @@ export function DayCell({
     if (window.matchMedia('(hover: none)').matches) onSelectDate?.(date)
   }
 
-  const heatmapClass = !hasVacationOrGleittag && !publicHoliday && !(showBridgeDays && isBridgeDay) && hasHeatmap && !suggestionPreview?.isVacationDay
+  const heatmapClass = !hasPlannedOff && !publicHoliday && !(showBridgeDays && isBridgeDay) && hasHeatmap && !suggestionPreview?.isVacationDay
     ? getHeatmapClass(heatmapValue)
     : ''
 
   // Note-only without vacation/gleittag on a public holiday keeps the public holiday styling, decorated with a note marker
-  const isPublicHolidayDominant = Boolean(publicHoliday && !hasVacationOrGleittag && !suggestionPreview?.isVacationDay)
+  const isPublicHolidayDominant = Boolean(publicHoliday && !hasPlannedOff && !suggestionPreview?.isVacationDay)
 
   return (
     <button
@@ -223,8 +226,9 @@ export function DayCell({
         vacation && !isOverBudget && 'bg-blue-600 text-white hover:bg-blue-700 shadow-2xs',
         vacation && isOverBudget && 'bg-red-600 text-white hover:bg-red-700 shadow-2xs',
         hasGleittag && 'bg-purple-600 text-white hover:bg-purple-700 shadow-2xs',
+        hasSpecial && 'bg-cyan-600 text-white hover:bg-cyan-700 shadow-2xs',
         // Standalone note on a normal day (not on a public holiday)
-        note && !hasVacationOrGleittag && !publicHoliday && 'bg-slate-500 text-white hover:bg-slate-600 dark:bg-slate-600 dark:hover:bg-slate-500',
+        note && !hasPlannedOff && !publicHoliday && 'bg-slate-500 text-white hover:bg-slate-600 dark:bg-slate-600 dark:hover:bg-slate-500',
 
         // Public Holiday in own Bundesland (empty or with standalone note):
         // Fine white/light frame (ring-1 ring-inset ring-emerald-700/50 dark:ring-white/80)
@@ -236,7 +240,7 @@ export function DayCell({
 
         // When vacation or gleittag is booked on a Feiertag:
         // Preserve the requested fine white frame right on top of the vacation/gleittag color
-        publicHoliday && hasVacationOrGleittag && [
+        publicHoliday && hasPlannedOff && [
           'ring-2 ring-inset ring-white dark:ring-white shadow-[inset_0_0_0_1px_rgba(16,185,129,0.9)] font-semibold',
           isPublicHolidayRegional && 'border-b-2 border-b-emerald-300 dark:border-b-emerald-300',
         ],
@@ -245,12 +249,12 @@ export function DayCell({
         heatmapClass,
 
         // Own School Holiday when Heatmap is OFF:
-        schoolHoliday && !showHeatmap && !hasVacationOrGleittag && !publicHoliday && !suggestionPreview?.isVacationDay && [
+        schoolHoliday && !showHeatmap && !hasPlannedOff && !publicHoliday && !suggestionPreview?.isVacationDay && [
           'bg-amber-100/85 text-amber-950 dark:bg-amber-400/20 dark:text-amber-100',
           'border-b-2 border-b-amber-400 dark:border-b-amber-400/80',
         ],
         // Own School Holiday when Heatmap is ON (fine inner white/foreground frame + bottom accent):
-        schoolHoliday && showHeatmap && !hasVacationOrGleittag && !publicHoliday && !suggestionPreview?.isVacationDay && [
+        schoolHoliday && showHeatmap && !hasPlannedOff && !publicHoliday && !suggestionPreview?.isVacationDay && [
           'ring-1 ring-inset ring-foreground/45 border-b-2 border-b-foreground/65 dark:ring-white/60 dark:border-b-white/75 font-semibold',
         ],
 
@@ -259,10 +263,10 @@ export function DayCell({
         schoolHoliday && hasEntry && 'border-b-[3px] border-b-amber-300 dark:border-b-amber-400 rounded-b-md',
 
         // Bridge day with directional edge toward the referenced holiday:
-        isVisibleBridgeDay && !hasVacationOrGleittag && 'ring-1 ring-inset ring-orange-400/90 bg-orange-50/95 text-orange-950 dark:bg-orange-500/20 dark:text-orange-100 dark:ring-orange-400/70',
-        bridgeHolidayBefore && !bridgeHolidayAfter && !hasVacationOrGleittag && 'border-l-[3px] border-l-emerald-500 dark:border-l-emerald-400',
-        bridgeHolidayAfter && !bridgeHolidayBefore && !hasVacationOrGleittag && 'border-r-[3px] border-r-emerald-500 dark:border-r-emerald-400',
-        bridgeHolidayBefore && bridgeHolidayAfter && !hasVacationOrGleittag && 'border-x-[3px] border-x-emerald-500 dark:border-x-emerald-400',
+        isVisibleBridgeDay && !hasPlannedOff && 'ring-1 ring-inset ring-orange-400/90 bg-orange-50/95 text-orange-950 dark:bg-orange-500/20 dark:text-orange-100 dark:ring-orange-400/70',
+        bridgeHolidayBefore && !bridgeHolidayAfter && !hasPlannedOff && 'border-l-[3px] border-l-emerald-500 dark:border-l-emerald-400',
+        bridgeHolidayAfter && !bridgeHolidayBefore && !hasPlannedOff && 'border-r-[3px] border-r-emerald-500 dark:border-r-emerald-400',
+        bridgeHolidayBefore && bridgeHolidayAfter && !hasPlannedOff && 'border-x-[3px] border-x-emerald-500 dark:border-x-emerald-400',
 
         // Interactive Suggestion Preview Overlay on the Calendar:
         suggestionPreview && !suggestionPreview.isVacationDay && 'ring-1 ring-inset ring-teal-500/60 bg-teal-500/15 dark:bg-teal-400/20',
@@ -272,6 +276,7 @@ export function DayCell({
         // Drag-to-Select Highlight:
         isDragSelected && selectedType === 'vacation' && 'ring-2 ring-blue-500 bg-blue-500/35 text-blue-950 dark:text-white z-20 scale-105',
         isDragSelected && selectedType === 'gleittag' && 'ring-2 ring-purple-500 bg-purple-500/35 text-purple-950 dark:text-white z-20 scale-105',
+        isDragSelected && selectedType === 'special' && 'ring-2 ring-cyan-500 bg-cyan-500/35 text-cyan-950 dark:text-white z-20 scale-105',
         isDragSelected && selectedType === 'note' && 'ring-2 ring-slate-500 bg-slate-500/35 text-slate-950 dark:text-white z-20 scale-105',
       )}
       onPointerDown={e => onCellPointerDown?.(key, e)}
@@ -316,7 +321,7 @@ export function DayCell({
 
       {/* Feiertags-Indikator oben rechts: wenn an diesem Tag Urlaub oder Gleittag geplant ist,
           bleibt der Feiertag durch diesen leuchtenden Smaragd-Punkt (bzw. Stern bei regionalem Feiertag) sofort erkennbar */}
-      {publicHoliday && hasVacationOrGleittag && (
+      {publicHoliday && hasPlannedOff && (
         <span
           className={cn(
             'absolute top-1 right-1 flex items-center justify-center rounded-full bg-emerald-400 text-emerald-950 ring-1.5 ring-white dark:ring-slate-900 shadow-xs pointer-events-none',
@@ -334,7 +339,7 @@ export function DayCell({
       )}
 
       {/* Brückentag-Punkt bei geplantem Urlaub/Gleittag */}
-      {isVisibleBridgeDay && hasVacationOrGleittag && (
+      {isVisibleBridgeDay && hasPlannedOff && (
         <span
           className="absolute bottom-1 left-1.5 w-1.5 h-1.5 rounded-full bg-orange-300 ring-1 ring-white dark:ring-slate-900 pointer-events-none"
           title="Brückentag"
@@ -362,12 +367,12 @@ export function DayCell({
         </span>
       )}
 
-      <span className={cn('leading-none pointer-events-none', isToday && !hasVacationOrGleittag && !suggestionPreview?.isVacationDay && 'text-primary font-extrabold underline decoration-2 underline-offset-2')}>
+      <span className={cn('leading-none pointer-events-none', isToday && !hasPlannedOff && !suggestionPreview?.isVacationDay && 'text-primary font-extrabold underline decoration-2 underline-offset-2')}>
         {format(date, 'd')}
       </span>
 
       {/* Directional arrow on potential bridge days indicating which holiday it connects to */}
-      {isVisibleBridgeDay && !hasVacationOrGleittag && (
+      {isVisibleBridgeDay && !hasPlannedOff && (
         <span
           aria-hidden="true"
           className="mt-0.5 text-[9px] leading-none font-bold text-orange-600 dark:text-orange-300 tracking-tighter pointer-events-none"

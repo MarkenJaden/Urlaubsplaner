@@ -320,7 +320,7 @@ export function YearView({
           role="status"
           className="pointer-events-none fixed top-16 left-1/2 -translate-x-1/2 z-50 rounded-full border bg-card/95 px-4 py-1.5 text-xs font-semibold shadow-lg backdrop-blur"
         >
-          {dragSelectedDates.size} Tage ausgewählt ({selectedType === 'vacation' ? '🌴 Urlaub' : selectedType === 'gleittag' ? '⏰ Gleittag' : '📝 Notiz / Event'}) – Loslassen zum Anwenden
+          {dragSelectedDates.size} Tage ausgewählt ({selectedType === 'vacation' ? '🌴 Urlaub' : selectedType === 'gleittag' ? '⏰ Gleittag' : selectedType === 'special' ? '✨ Sonderurlaub / Frei' : '📝 Notiz / Event'}) – Loslassen zum Anwenden
         </div>
       )}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">

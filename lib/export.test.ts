@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { exportToCSV, exportToClipboardText, exportToJSON, exportToICS, parseImportFile, parseConfigJSON, exportConfigJSON, formatCustomClipboardExport } from './export'
 import type { VacationEntry } from '@/types'
 
-const mkEntry = (date: string, type: 'vacation' | 'gleittag' | 'note', title?: string): VacationEntry => ({
+const mkEntry = (date: string, type: 'vacation' | 'gleittag' | 'special' | 'note', title?: string): VacationEntry => ({
   id: `test-${date}-${type}`,
   date,
   type,
@@ -16,6 +16,7 @@ const mkEntry = (date: string, type: 'vacation' | 'gleittag' | 'note', title?: s
 const entries: VacationEntry[] = [
   mkEntry('2026-05-15', 'vacation', ''),
   mkEntry('2026-05-16', 'gleittag', 'Freitag frei'),
+  mkEntry('2026-05-20', 'special', 'Bildungsurlaub'),
   mkEntry('2026-06-01', 'note', 'Termin'),
 ]
 
@@ -28,7 +29,7 @@ describe('exportToCSV', () => {
   it('includes all entries', () => {
     const csv = exportToCSV(entries)
     const lines = csv.split('\n')
-    expect(lines).toHaveLength(4) // header + 3 entries
+    expect(lines).toHaveLength(5) // header + 4 entries
   })
 
   it('formats dates as dd.MM.yyyy', () => {
@@ -41,6 +42,7 @@ describe('exportToCSV', () => {
     expect(csv).toContain('Urlaub')
     expect(csv).toContain('Gleittag')
     expect(csv).toContain('Notiz')
+    expect(csv).toContain('Sonderurlaub / Frei')
   })
 
   it('sorts by date', () => {
@@ -83,7 +85,7 @@ describe('exportToJSON', () => {
   it('includes vacations and preferences', () => {
     const json = exportToJSON(entries, { budget: 30 })
     const data = JSON.parse(json)
-    expect(data.vacations).toHaveLength(3)
+    expect(data.vacations).toHaveLength(4)
     expect(data.preferences.budget).toBe(30)
   })
 
@@ -104,7 +106,7 @@ describe('exportToICS', () => {
   it('contains VEVENT for each entry', () => {
     const ics = exportToICS(entries)
     const events = ics.split('BEGIN:VEVENT').length - 1
-    expect(events).toBe(3)
+    expect(events).toBe(4)
   })
 
   it('has DTSTART in yyyyMMdd format', () => {

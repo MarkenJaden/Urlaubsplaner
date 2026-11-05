@@ -7,6 +7,7 @@ import { formatDays, isOffDayKey } from './vacation-accounting'
 const TYPE_LABELS: Record<string, string> = {
   vacation: 'Urlaub',
   gleittag: 'Gleittag',
+  special: 'Sonderurlaub / Frei',
   note: 'Notiz',
 }
 
@@ -74,6 +75,7 @@ export interface ClipboardExportOptions {
   format: ClipboardFormat
   includeVacations: boolean
   includeGleittage: boolean
+  includeSpecial?: boolean
   includeNotes: boolean
   includeTitles: boolean
   includeWeekNumbers: boolean
@@ -111,7 +113,7 @@ export function groupEntriesIntoBlocks(
     if (last && last.type === entry.type) {
       const gap = differenceInCalendarDays(parseISO(dKey), parseISO(last.endDate))
       const canMerge =
-        entry.type === 'vacation' || entry.type === 'gleittag'
+        entry.type === 'vacation' || entry.type === 'gleittag' || entry.type === 'special'
           ? isNonWorkingGap(last.endDate, dKey, options?.workDays)
           : gap <= 1
       if (gap >= 0 && canMerge) {
@@ -154,6 +156,7 @@ export function formatCustomClipboardExport(
     .filter(e => {
       if (e.type === 'vacation' && !options.includeVacations) return false
       if (e.type === 'gleittag' && !options.includeGleittage) return false
+      if (e.type === 'special' && options.includeSpecial === false) return false
       if (e.type === 'note' && !options.includeNotes) return false
       if (options.onlyFuture && e.date.slice(0, 10) < todayStr) return false
       if (onlyWorkdays && (e.type === 'vacation' || e.type === 'gleittag') && isOffDayKey(e.date.slice(0, 10), options.workDays)) {
@@ -236,7 +239,7 @@ export function formatCustomClipboardExport(
     const dayLabel = onlyWorkdays ? (b.daysCount === 1 ? 'Arbeitstag' : 'Arbeitstage') : (b.daysCount === 1 ? 'Tag' : 'Tage')
     const count = b.type === 'note' ? '' : ` · ${b.daysCount} ${dayLabel}`
     const title = options.includeTitles && b.titles.length > 0 ? ` — ${b.titles.join(', ')}` : ''
-    const icon = options.format === 'chat_short' ? (b.type === 'vacation' ? '🌴 ' : b.type === 'gleittag' ? '⏰ ' : '📝 ') : '• '
+    const icon = options.format === 'chat_short' ? (b.type === 'vacation' ? '🌴 ' : b.type === 'gleittag' ? '⏰ ' : b.type === 'special' ? '✨ ' : '📝 ') : '• '
     return `${icon}${span}${kw}: ${type}${count}${title}`
   })
 
@@ -286,7 +289,7 @@ export function encodeSharePayload(payload: ShareSnapshotPayload): string {
     vd: payload.vacationDays,
     e: payload.entries.map(item => [
       item.date.slice(0, 10),
-      item.type === 'vacation' ? 'v' : item.type === 'gleittag' ? 'g' : 'n',
+      item.type === 'vacation' ? 'v' : item.type === 'gleittag' ? 'g' : item.type === 'special' ? 's' : 'n',
       ...(item.title ? [item.title.slice(0, 100)] : []),
     ]),
   }
@@ -316,7 +319,7 @@ export function decodeSharePayload(encoded: string): ShareSnapshotPayload | null
     const entries: Array<{ date: string; type: EntryType; title?: string }> = []
     for (const item of parsed.e) {
       if (!Array.isArray(item) || typeof item[0] !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(item[0])) continue
-      const type: EntryType = item[1] === 'g' ? 'gleittag' : item[1] === 'n' ? 'note' : 'vacation'
+      const type: EntryType = item[1] === 'g' ? 'gleittag' : item[1] === 's' ? 'special' : item[1] === 'n' ? 'note' : 'vacation'
       entries.push({ date: item[0], type, ...(typeof item[2] === 'string' && item[2] ? { title: item[2] } : {}) })
     }
     const workDays = Array.isArray(parsed.w)

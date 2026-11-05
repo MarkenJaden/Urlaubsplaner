@@ -240,4 +240,39 @@ describe('DayCell visual indicators and Bundesland frame', () => {
     // Note icon rendered:
     expect(cell.querySelector('span[title*="Familienausflug"] svg.lucide-sticky-note')).toBeTruthy()
   })
+  it('renders Sonderurlaub / Frei with distinct cyan background', () => {
+    const specialEntry: VacationEntry = {
+      id: 's1',
+      userId: 'u1',
+      date: '2026-05-04',
+      type: 'special',
+      title: 'Bildungsurlaub',
+      year: 2026,
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    }
+    const may4Date = new Date(2026, 4, 4)
+    render(
+      <DayCell
+        date={may4Date}
+        entries={[specialEntry]}
+        publicHolidays={[]}
+        schoolHolidays={[]}
+        isWeekend={false}
+        isToday={false}
+        isOtherMonth={false}
+        isPast={false}
+        isOverBudget={false}
+        showHeatmap={false}
+        isBridgeDay={false}
+        showBridgeDays={false}
+        showOtherMonthDays={true}
+        onToggle={vi.fn()}
+        selectedType="special"
+      />
+    )
+    const cell = screen.getByRole('button', { name: /04.05.2026/ })
+    expect(cell.className).toContain('bg-cyan-600')
+    expect(cell.getAttribute('title')).toContain('Sonderurlaub / Frei: Bildungsurlaub')
+  })
 })
