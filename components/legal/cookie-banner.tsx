@@ -123,7 +123,7 @@ export function CookieBanner() {
           role="dialog"
           aria-modal={detailsOpen ? 'true' : 'false'}
           aria-labelledby="cookie-banner-title"
-          className="fixed inset-x-0 bottom-0 z-50 p-3 sm:p-4 pointer-events-none"
+          className="fixed inset-x-0 bottom-0 z-50 p-3 sm:p-4 pointer-events-none print:hidden"
         >
           <div className="pointer-events-auto mx-auto max-w-4xl rounded-2xl border border-border bg-card/98 p-4 sm:p-5 text-card-foreground shadow-2xl backdrop-blur-md">
             <div className="flex items-start justify-between gap-3">
@@ -156,7 +156,7 @@ export function CookieBanner() {
             </div>
 
             <p className="mt-3 text-xs sm:text-sm text-muted-foreground leading-relaxed">
-              Wir nutzen technisch notwendige Speicherfunktionen (LocalStorage &amp; Sitzungs-Cookies), damit deine Urlaubsplanung auf deinem Gerät und in deinem Konto zuverlässig funktioniert. Mit deiner freiwilligen Einwilligung helfen uns datenschutzfreundliche, selbst gehostete Statistiken (ohne Werbe-Tracking oder Weitergabe an Dritte), den Urlaubsplaner weiter zu verbessern. Du kannst deine Auswahl jederzeit im Footer unter „Cookie-Einstellungen“ ändern.
+              Wir nutzen technisch notwendige Speicherfunktionen (LocalStorage &amp; Sitzungs-Cookies), damit deine Urlaubsplanung auf deinem Gerät und in deinem Konto zuverlässig funktioniert. Mit deiner freiwilligen Einwilligung helfen uns datenschutzfreundliche, selbst gehostete Statistiken (ohne Werbe-Tracking oder Weigergabe an Dritte), den Urlaubsplaner weiter zu verbessern. Du kannst deine Auswahl jederzeit im Footer unter „Cookie-Einstellungen“ ändern.
             </p>
 
             {detailsOpen && (

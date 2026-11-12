@@ -323,7 +323,7 @@ export function YearView({
           {dragSelectedDates.size} Tage ausgewählt ({selectedType === 'vacation' ? '🌴 Urlaub' : selectedType === 'gleittag' ? '⏰ Gleittag' : selectedType === 'special' ? '✨ Sonderurlaub / Frei' : '📝 Notiz / Event'}) – Loslassen zum Anwenden
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 print:grid-cols-4 gap-3 sm:gap-4 print:gap-2">
         {months.map(monthDate => (
           <MonthGrid
             key={monthDate.toISOString()}

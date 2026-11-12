@@ -17,7 +17,7 @@ export function Header({ isLoggedIn, isAdmin }: HeaderProps) {
   const showAdmin = Boolean(isAdmin ?? profile.data?.isAdmin)
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 print:hidden">
       <div className="container flex h-14 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-4">
           <Link href="/" className="flex min-w-0 items-center gap-2 text-base font-semibold sm:text-lg">

@@ -4,7 +4,7 @@ import { useRef } from 'react'
 import {
   ChevronLeft, ChevronRight, Sparkles, Download, Upload, Printer,
   Settings2, MoreHorizontal, Clipboard, FileJson, CalendarDays,
-  Trash2, Undo2, Share2,
+  Trash2, Undo2, Share2, Trophy, FileText,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -67,6 +67,9 @@ interface ToolbarProps {
   onOpenClipboardExport?: () => void
   onOpenShare?: () => void
   onOpenSubscribe?: () => void
+  onOpenScorecard?: () => void
+  onPrintCalendar?: () => void
+  onPrintRequestSheet?: () => void
   onImport: (data: { vacations: Array<{ date: string; type: string; title?: string }>; preferences?: Record<string, unknown> }) => void
   onImportConfig?: (config: Record<string, unknown>) => void
   onReset: () => void
@@ -84,6 +87,7 @@ export function Toolbar({
   entries, preferences, localConfig,
   activeOverlaysCount = 0,
   onOpenSuggestions, onOpenClipboardExport, onOpenShare, onOpenSubscribe,
+  onOpenScorecard, onPrintCalendar, onPrintRequestSheet,
   onImport, onImportConfig, onReset,
 }: ToolbarProps) {
   const remaining = vacationDaysTotal - vacationDaysUsed
@@ -146,7 +150,7 @@ export function Toolbar({
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-border bg-card px-3 py-2.5 shadow-sm">
+    <div className="flex flex-col gap-2 rounded-xl border border-border bg-card px-3 py-2.5 shadow-sm print:hidden">
       <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-2.5">
         {/* Year Navigation */}
         <div className="grid grid-cols-[2.25rem_1fr_2.25rem] items-center gap-1 md:flex md:w-auto">
@@ -269,10 +273,31 @@ export function Toolbar({
                     </div>
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={handlePrint}>
+                {onOpenScorecard && (
+                  <DropdownMenuItem onClick={onOpenScorecard}>
+                    <Trophy className="h-4 w-4 text-amber-500" />
+                    <div className="flex flex-col">
+                      <span>Urlaubs-Score teilen (Story-Bild)…</span>
+                      <span className="text-[11px] text-muted-foreground">X Tage Urlaub → Y Tage frei als Grafik</span>
+                    </div>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={onPrintCalendar ?? handlePrint}>
                   <Printer className="h-4 w-4" />
-                  <span>Drucken / Als PDF speichern</span>
+                  <div className="flex flex-col">
+                    <span>Jahreskalender drucken / PDF (A4)</span>
+                    <span className="text-[11px] text-muted-foreground">Alle 12 Monate + Urlaubsblöcke auf 1 Seite</span>
+                  </div>
                 </DropdownMenuItem>
+                {onPrintRequestSheet && (
+                  <DropdownMenuItem onClick={onPrintRequestSheet}>
+                    <FileText className="h-4 w-4 text-primary" />
+                    <div className="flex flex-col">
+                      <span>Urlaubsantrag für Vorgesetzte (A4)…</span>
+                      <span className="text-[11px] text-muted-foreground">Formblatt mit KW, Netto-Tagen &amp; Unterschrift</span>
+                    </div>
+                  </DropdownMenuItem>
+                )}
 
                 <DropdownMenuSeparator />
                 <div className="px-2 py-1 text-xs font-semibold text-muted-foreground">

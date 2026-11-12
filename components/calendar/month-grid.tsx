@@ -65,7 +65,7 @@ export function MonthGrid({
   const activeWorkDays = workDays.length > 0 ? workDays : DEFAULT_WORK_DAYS
 
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-border/70 bg-card/60 p-2.5 shadow-2xs">
+    <div className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-border/70 bg-card/60 p-2.5 shadow-2xs print:break-inside-avoid print:gap-1 print:p-1.5 print:shadow-none">
       <h3 className="text-center text-base font-semibold text-foreground capitalize sm:text-sm">
         {monthName}
       </h3>

@@ -353,7 +353,6 @@ export function ScorecardDialog({
               </Button>
             </div>
 
-            <Button type="button" variant="outline" onClick={() => void handleCopyText} className="hidden" />
             <Button type="button" variant="outline" onClick={handleCopyText} className="w-full text-xs">
               {copiedText ? <Check className="h-4 w-4 text-emerald-600" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
               {copiedText ? 'Spruch & Link kopiert!' : 'Text für WhatsApp / Gruppenchat kopieren'}

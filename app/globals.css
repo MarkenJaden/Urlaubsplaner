@@ -102,3 +102,25 @@
 @media (prefers-reduced-motion: reduce) {
   .respect-pop > span { animation: none; }
 }
+
+/* Clean A4 single-page print layout for wall calendar & HR vacation sheet */
+@media print {
+  @page {
+    size: A4;
+    margin: 9mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .container {
+    max-width: 100% !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+}
