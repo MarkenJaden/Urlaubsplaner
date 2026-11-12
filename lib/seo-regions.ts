@@ -200,8 +200,14 @@ export function getSeoPlanningYears(referenceDate = new Date()): number[] {
   return [currentYear, currentYear + 1, currentYear + 2]
 }
 
-export function isValidSeoYear(year: number): boolean {
-  return Number.isInteger(year) && year >= 2024 && year <= 2030
+export function isValidSeoYear(year: number, referenceDate = new Date()): boolean {
+  if (!Number.isInteger(year)) return false
+  const currentYear = Number(
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin', year: 'numeric' }).format(referenceDate)
+  )
+  const minYear = Math.min(2024, currentYear - 2)
+  const maxYear = Math.max(2030, currentYear + 4)
+  return year >= minYear && year <= maxYear
 }
 
 export function buildPlannerHref(params: {

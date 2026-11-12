@@ -23,7 +23,7 @@ interface PublicYearCalendarProps {
   regionSlug: string
   mode: 'schulferien' | 'brueckentage'
   publicHolidays: Holiday[]
-  schoolHolidays: Holiday[]
+  schoolHolidays?: Holiday[]
   bridgeDays?: BridgeDay[]
   optimalBlocks?: VacationSuggestionBlock[]
   plannerHref: string
@@ -40,7 +40,7 @@ export function PublicYearCalendar({
   regionSlug,
   mode,
   publicHolidays,
-  schoolHolidays,
+  schoolHolidays = [],
   bridgeDays = [],
   optimalBlocks = [],
   plannerHref,

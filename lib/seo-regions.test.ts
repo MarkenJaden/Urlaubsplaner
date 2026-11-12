@@ -30,13 +30,20 @@ describe('seo-regions', () => {
     expect(years).toEqual([2026, 2027, 2028])
   })
 
-  it('validates supported SEO years strictly', () => {
-    expect(isValidSeoYear(2026)).toBe(true)
-    expect(isValidSeoYear(2030)).toBe(true)
-    expect(isValidSeoYear(2023)).toBe(false)
-    expect(isValidSeoYear(2031)).toBe(false)
-    expect(isValidSeoYear(2026.5)).toBe(false)
-    expect(isValidSeoYear(Number.NaN)).toBe(false)
+  it('validates supported SEO years strictly and rolls dynamically with time', () => {
+    const fixed2026 = new Date('2026-06-15T12:00:00Z')
+    expect(isValidSeoYear(2026, fixed2026)).toBe(true)
+    expect(isValidSeoYear(2030, fixed2026)).toBe(true)
+    expect(isValidSeoYear(2023, fixed2026)).toBe(false)
+    expect(isValidSeoYear(2031, fixed2026)).toBe(false)
+    expect(isValidSeoYear(2026.5, fixed2026)).toBe(false)
+    expect(isValidSeoYear(Number.NaN, fixed2026)).toBe(false)
+
+    // Future-proofing: When current year advances to 2028, 2032 becomes valid
+    const fixed2028 = new Date('2028-01-01T00:00:00Z')
+    expect(isValidSeoYear(2028, fixed2028)).toBe(true)
+    expect(isValidSeoYear(2032, fixed2028)).toBe(true)
+    expect(isValidSeoYear(2033, fixed2028)).toBe(false)
   })
 
   it('builds clean deep-link hrefs to the planner', () => {

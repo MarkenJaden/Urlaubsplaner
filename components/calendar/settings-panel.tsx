@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { AlertTriangle, RefreshCw, Settings2, CalendarDays, Share2 } from 'lucide-react'
+import { AlertTriangle, RefreshCw, Settings2, CalendarDays, Share2, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MultiCombobox } from '@/components/ui/combobox'
 import { LocationFields } from './location-fields'
@@ -62,6 +62,7 @@ interface SettingsPanelProps {
   onDefaultNoteTextChange: (text: string) => void
   onOpenSubscribe?: () => void
   onOpenShare?: () => void
+  onOpenApprovalSheet?: () => void
   apiError?: boolean
   onRetryApi?: () => void
 }
@@ -91,7 +92,7 @@ export function SettingsPanel({
   vacationDaysUsed, gleittageCount, remainingWorkDays,
   flex, flexHoursPerDay, onFlexUnitChange, onFlexHoursPerDayChange, onFlexBudgetChange,
   defaultNoteText, onDefaultNoteTextChange,
-  onOpenSubscribe, onOpenShare,
+  onOpenSubscribe, onOpenShare, onOpenApprovalSheet,
   apiError, onRetryApi,
 }: SettingsPanelProps) {
   const [budgetDraft, setBudgetDraft] = useState<string | null>(null)
@@ -248,10 +249,10 @@ export function SettingsPanel({
                   <span className="block text-xs text-muted-foreground">Gleitzeit-Kontingent</span>
                   <div className="flex items-center gap-1.5">
                     <input id="flex-budget" type="number" min={0} max={flex.unit === 'hours' ? 8784 : 366} step={0.5} placeholder="—" aria-label="Gleitzeit-Kontingent"
-                      value={flexDraft ?? (flex.total !== undefined ? String(flex.total) : '')}
-                      onChange={e => { setFlexDraft(e.target.value); const amount = e.target.valueAsNumber; if (Number.isFinite(amount) && amount >= 0 && amount <= (flex.unit === 'hours' ? 8784 : 366)) onFlexBudgetChange(amount) }}
-                      onBlur={() => setFlexDraft(null)}
-                      className="min-h-10 w-full rounded-md border border-input bg-background px-2 py-1.5 text-right text-sm" />
+                    value={flexDraft ?? (flex.total !== undefined ? String(flex.total) : '')}
+                    onChange={e => { setFlexDraft(e.target.value); const amount = e.target.valueAsNumber; if (Number.isFinite(amount) && amount >= 0 && amount <= (flex.unit === 'hours' ? 8784 : 366)) onFlexBudgetChange(amount) }}
+                    onBlur={() => setFlexDraft(null)}
+                    className="min-h-10 w-full rounded-md border border-input bg-background px-2 py-1.5 text-right text-sm" />
                     <select aria-label="Einheit" value={flex.unit} onChange={e => onFlexUnitChange(e.target.value as FlexUnit)}
                       className="min-h-10 rounded-md border border-input bg-background px-2 py-1.5 text-xs">
                       <option value="days">Tage</option>
@@ -437,6 +438,21 @@ export function SettingsPanel({
                       <Share2 className="h-3.5 w-3.5 text-primary" /> Plan teilen
                     </Button>
                   )}
+                </div>
+              )}
+
+              {onOpenApprovalSheet && (
+                <div className="pt-2 border-t border-border/50">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={onOpenApprovalSheet}
+                    className="w-full text-xs gap-1.5 border-primary/40 bg-primary/5 hover:bg-primary/10 text-primary font-medium"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    Urlaubsantrag konfigurieren &amp; drucken (A4)
+                  </Button>
                 </div>
               )}
             </div>
