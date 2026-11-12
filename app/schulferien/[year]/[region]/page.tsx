@@ -113,7 +113,7 @@ export default async function SchulferienRegionPage({ params }: PageProps) {
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container max-w-5xl space-y-8 py-8 text-sm">
-        <nav aria-label="Brotkrumennavigation" className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <nav aria-label="Brotkrumennavigation" className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground print:hidden">
           <Link href="/" className="hover:text-foreground underline">Urlaubsplaner</Link>
           <span>/</span>
           <Link href="/schulferien" className="hover:text-foreground underline">Schulferien</Link>
@@ -123,7 +123,7 @@ export default async function SchulferienRegionPage({ params }: PageProps) {
           <span className="text-foreground font-medium">{region.name}</span>
         </nav>
 
-        <section className="rounded-2xl border bg-gradient-to-br from-sky-500/10 via-card to-card p-6 sm:p-8 space-y-4">
+        <section className="rounded-2xl border bg-gradient-to-br from-sky-500/10 via-card to-card p-6 sm:p-8 space-y-4 print:hidden">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500/15 px-3 py-1 text-xs font-semibold text-sky-700 dark:text-sky-300">
               <GraduationCap className="h-3.5 w-3.5" aria-hidden="true" />
@@ -219,7 +219,7 @@ export default async function SchulferienRegionPage({ params }: PageProps) {
 
         {/* Family Optimizer Suggestions */}
         {familyBlocks.length > 0 && (
-          <section aria-labelledby="family-blocks-heading" className="space-y-3">
+          <section aria-labelledby="family-blocks-heading" className="space-y-3 print:hidden">
             <h2 id="family-blocks-heading" className="text-lg font-bold flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" aria-hidden="true" />
               Optimale Urlaubsblöcke {year} in den Schulferien ({region.name})
@@ -243,7 +243,7 @@ export default async function SchulferienRegionPage({ params }: PageProps) {
         )}
 
         {/* Cross-Links to other states */}
-        <section aria-labelledby="other-states-heading" className="space-y-3 border-t pt-6">
+        <section aria-labelledby="other-states-heading" className="space-y-3 border-t pt-6 print:hidden">
           <h2 id="other-states-heading" className="text-base font-bold">
             Schulferien {year} in weiteren Bundesländern vergleichen
           </h2>

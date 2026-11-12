@@ -249,10 +249,10 @@ export function SettingsPanel({
                   <span className="block text-xs text-muted-foreground">Gleitzeit-Kontingent</span>
                   <div className="flex items-center gap-1.5">
                     <input id="flex-budget" type="number" min={0} max={flex.unit === 'hours' ? 8784 : 366} step={0.5} placeholder="—" aria-label="Gleitzeit-Kontingent"
-                    value={flexDraft ?? (flex.total !== undefined ? String(flex.total) : '')}
-                    onChange={e => { setFlexDraft(e.target.value); const amount = e.target.valueAsNumber; if (Number.isFinite(amount) && amount >= 0 && amount <= (flex.unit === 'hours' ? 8784 : 366)) onFlexBudgetChange(amount) }}
-                    onBlur={() => setFlexDraft(null)}
-                    className="min-h-10 w-full rounded-md border border-input bg-background px-2 py-1.5 text-right text-sm" />
+                      value={flexDraft ?? (flex.total !== undefined ? String(flex.total) : '')}
+                      onChange={e => { setFlexDraft(e.target.value); const amount = e.target.valueAsNumber; if (Number.isFinite(amount) && amount >= 0 && amount <= (flex.unit === 'hours' ? 8784 : 366)) onFlexBudgetChange(amount) }}
+                      onBlur={() => setFlexDraft(null)}
+                      className="min-h-10 w-full rounded-md border border-input bg-background px-2 py-1.5 text-right text-sm" />
                     <select aria-label="Einheit" value={flex.unit} onChange={e => onFlexUnitChange(e.target.value as FlexUnit)}
                       className="min-h-10 rounded-md border border-input bg-background px-2 py-1.5 text-xs">
                       <option value="days">Tage</option>

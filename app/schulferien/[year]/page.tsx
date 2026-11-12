@@ -13,6 +13,7 @@ import {
   getSeoPlanningYears,
   isValidSeoYear,
 } from '@/lib/seo-regions'
+import { SchulferienYearCalendar } from '@/components/calendar/schulferien-year-calendar'
 import type { Holiday } from '@/types'
 import { GraduationCap, Calendar, MapPin, ArrowRight } from 'lucide-react'
 
@@ -62,6 +63,13 @@ export default async function SchulferienYearPage({ params }: PageProps) {
   const germanRegions = SEO_REGIONS.filter(r => r.country === 'DE')
   const years = getSeoPlanningYears()
 
+  let nationwidePublicHolidays: Holiday[] = []
+  try {
+    nationwidePublicHolidays = await fetchHolidays('DE', undefined, year, 'public')
+  } catch {
+    nationwidePublicHolidays = []
+  }
+
   // Fetch school holidays for German states in parallel (cached by Next.js fetch cache)
   const stateSummaries = await Promise.all(
     germanRegions.map(async region => {
@@ -84,6 +92,7 @@ export default async function SchulferienYearPage({ params }: PageProps) {
           summer,
           easter,
           autumn,
+          holidays: list,
         }
       } catch {
         return {
@@ -93,16 +102,24 @@ export default async function SchulferienYearPage({ params }: PageProps) {
           summer: undefined,
           easter: undefined,
           autumn: undefined,
+          holidays: [],
         }
       }
     }),
   )
 
+  const statesCalendarData = stateSummaries.map(s => ({
+    slug: s.region.slug,
+    name: s.region.name,
+    subdivision: s.region.subdivision,
+    schoolHolidays: s.holidays,
+  }))
+
   return (
     <div className="min-h-screen bg-background">
       <Header />
       <main className="container max-w-5xl space-y-8 py-8 text-sm">
-        <nav aria-label="Brotkrumennavigation" className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <nav aria-label="Brotkrumennavigation" className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground print:hidden">
           <Link href="/" className="hover:text-foreground underline">Urlaubsplaner</Link>
           <span>/</span>
           <Link href="/schulferien" className="hover:text-foreground underline">Schulferien</Link>
@@ -110,7 +127,7 @@ export default async function SchulferienYearPage({ params }: PageProps) {
           <span className="text-foreground font-medium">{year}</span>
         </nav>
 
-        <section className="rounded-2xl border bg-gradient-to-br from-sky-500/10 via-card to-card p-6 sm:p-8 space-y-4">
+        <section className="rounded-2xl border bg-gradient-to-br from-sky-500/10 via-card to-card p-6 sm:p-8 space-y-4 print:hidden">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500/15 px-3 py-1 text-xs font-semibold text-sky-700 dark:text-sky-300">
               <GraduationCap className="h-3.5 w-3.5" aria-hidden="true" />
@@ -153,8 +170,15 @@ export default async function SchulferienYearPage({ params }: PageProps) {
           </div>
         </section>
 
+        {/* Graphical 12-Month Calendar (Printable & Embeddable) */}
+        <SchulferienYearCalendar
+          year={year}
+          states={statesCalendarData}
+          nationwidePublicHolidays={nationwidePublicHolidays}
+        />
+
         {/* Overview Table of all 16 Bundesländer */}
-        <section aria-labelledby="table-heading" className="space-y-3">
+        <section aria-labelledby="table-heading" className="space-y-3 print:hidden">
           <h2 id="table-heading" className="text-lg font-bold flex items-center gap-2">
             <MapPin className="h-5 w-5 text-primary" aria-hidden="true" />
             Ferientermine {year} nach Bundesland

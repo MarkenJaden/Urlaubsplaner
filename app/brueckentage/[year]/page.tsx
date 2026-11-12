@@ -10,6 +10,7 @@ import { detectBridgeDays } from '@/lib/bridge-days'
 import { suggestVacation, DEFAULT_PREFERENCES } from '@/lib/vacation-suggester'
 import { localizedName } from '@/lib/holiday-regions'
 import { formatDays } from '@/lib/vacation-accounting'
+import { PublicYearCalendar } from '@/components/calendar/public-year-calendar'
 import {
   SEO_REGIONS,
   buildPlannerHref,
@@ -147,7 +148,7 @@ export default async function BrueckentageYearPage({ params }: PageProps) {
       />
 
       <main className="container max-w-5xl space-y-8 py-8 text-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
           <nav aria-label="Brotkrumennavigation" className="flex items-center gap-2 text-xs text-muted-foreground">
             <Link href="/" className="hover:text-foreground underline">
               Urlaubsplaner
@@ -179,7 +180,7 @@ export default async function BrueckentageYearPage({ params }: PageProps) {
         </div>
 
         {/* Hero */}
-        <section className="rounded-2xl border bg-gradient-to-br from-primary/10 via-card to-card p-6 sm:p-8 space-y-4">
+        <section className="rounded-2xl border bg-gradient-to-br from-primary/10 via-card to-card p-6 sm:p-8 space-y-4 print:hidden">
           <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1 text-xs font-semibold text-primary">
             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
             Optimale Urlaubsplanung {year}
@@ -204,7 +205,7 @@ export default async function BrueckentageYearPage({ params }: PageProps) {
         </section>
 
         {/* KPI Summary */}
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-3 print:hidden">
           <div className="rounded-xl border bg-card p-4">
             <span className="text-xs text-muted-foreground">Bundesweite Feiertage {year}</span>
             <p className="mt-1 text-2xl font-bold">{baseHolidays.length}</p>
@@ -232,9 +233,21 @@ export default async function BrueckentageYearPage({ params }: PageProps) {
           </div>
         </div>
 
+        {/* Graphical 12-Month Calendar (Printable & Embeddable) */}
+        <PublicYearCalendar
+          year={year}
+          regionName="Deutschland (Bundesweit)"
+          regionSlug="deutschland"
+          mode="brueckentage"
+          publicHolidays={baseHolidays}
+          bridgeDays={bridgeDays}
+          optimalBlocks={optimalBlocks}
+          plannerHref={buildPlannerHref({ year, country: 'DE' })}
+        />
+
         {/* Optimal Multi-Day Vacation Blocks */}
         {optimalBlocks.length > 0 && (
-          <section aria-labelledby="optimal-blocks-heading" className="rounded-xl border bg-card p-5 space-y-4">
+          <section aria-labelledby="optimal-blocks-heading" className="rounded-xl border bg-card p-5 space-y-4 print:hidden">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 id="optimal-blocks-heading" className="text-lg font-bold">
@@ -348,7 +361,7 @@ export default async function BrueckentageYearPage({ params }: PageProps) {
 
         {/* Nationwide Public Holidays */}
         {publicHolidays.length > 0 && (
-          <section aria-labelledby="holidays-heading" className="rounded-xl border bg-card p-5 space-y-4">
+          <section aria-labelledby="holidays-heading" className="rounded-xl border bg-card p-5 space-y-4 print:hidden">
             <div>
               <h2 id="holidays-heading" className="text-lg font-bold">
                 Gesetzliche Feiertage {year} in Deutschland
@@ -400,7 +413,7 @@ export default async function BrueckentageYearPage({ params }: PageProps) {
         )}
 
         {/* Regional Links for this Year */}
-        <section id="bundeslaender" aria-labelledby="states-year-heading" className="space-y-4">
+        <section id="bundeslaender" aria-labelledby="states-year-heading" className="space-y-4 print:hidden">
           <div>
             <h2 id="states-year-heading" className="text-lg font-bold flex items-center gap-2">
               <MapPin className="h-5 w-5 text-primary" aria-hidden="true" />
@@ -442,7 +455,7 @@ export default async function BrueckentageYearPage({ params }: PageProps) {
         </section>
 
         {/* FAQ */}
-        <section aria-labelledby="faq-year-heading" className="space-y-3">
+        <section aria-labelledby="faq-year-heading" className="space-y-3 print:hidden">
           <h2 id="faq-year-heading" className="text-lg font-bold flex items-center gap-2">
             <HelpCircle className="h-5 w-5 text-primary" aria-hidden="true" />
             Häufige Fragen zur Urlaubsplanung {year}

@@ -172,7 +172,7 @@ export default async function BrueckentageRegionPage({ params }: PageProps) {
       />
 
       <main className="container max-w-5xl space-y-8 py-8 text-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
           <nav aria-label="Brotkrumennavigation" className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <Link href="/" className="hover:text-foreground underline">
               Urlaubsplaner
@@ -208,7 +208,7 @@ export default async function BrueckentageRegionPage({ params }: PageProps) {
         </div>
 
         {/* Hero */}
-        <section className="rounded-2xl border bg-gradient-to-br from-primary/10 via-card to-card p-6 sm:p-8 space-y-4">
+        <section className="rounded-2xl border bg-gradient-to-br from-primary/10 via-card to-card p-6 sm:p-8 space-y-4 print:hidden">
           <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1 text-xs font-semibold text-primary">
             <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
             {region.name} · Urlaubsplanung {year}
@@ -235,7 +235,7 @@ export default async function BrueckentageRegionPage({ params }: PageProps) {
         </section>
 
         {/* KPI Cards */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 print:hidden">
           <div className="rounded-xl border bg-card p-4">
             <span className="text-xs text-muted-foreground">Gesetzliche Feiertage</span>
             <p className="mt-1 text-2xl font-bold">{publicHolidays.length}</p>
@@ -354,7 +354,7 @@ export default async function BrueckentageRegionPage({ params }: PageProps) {
 
         {/* Single Day Bridges */}
         {bridgeDays.length > 0 && (
-          <section aria-labelledby="region-bridges-heading" className="rounded-xl border bg-card p-5 space-y-4">
+          <section aria-labelledby="region-bridges-heading" className="rounded-xl border bg-card p-5 space-y-4 print:hidden">
             <div>
               <h2 id="region-bridges-heading" className="text-lg font-bold">
                 Einzelne Brückentage {year} {region.preposition}
@@ -399,7 +399,7 @@ export default async function BrueckentageRegionPage({ params }: PageProps) {
 
         {/* Public Holidays Table */}
         {publicHolidays.length > 0 && (
-          <section aria-labelledby="region-holidays-heading" className="rounded-xl border bg-card p-5 space-y-4">
+          <section aria-labelledby="region-holidays-heading" className="rounded-xl border bg-card p-5 space-y-4 print:hidden">
             <div>
               <h2 id="region-holidays-heading" className="text-lg font-bold">
                 Gesetzliche Feiertage {year} {region.preposition}
@@ -461,7 +461,7 @@ export default async function BrueckentageRegionPage({ params }: PageProps) {
 
         {/* School Holidays Table */}
         {schoolHolidays.length > 0 && (
-          <section id="schulferien" aria-labelledby="region-school-heading" className="rounded-xl border bg-card p-5 space-y-4">
+          <section id="schulferien" aria-labelledby="region-school-heading" className="rounded-xl border bg-card p-5 space-y-4 print:hidden">
             <div>
               <h2 id="region-school-heading" className="text-lg font-bold flex items-center gap-2">
                 <GraduationCap className="h-5 w-5 text-sky-600" aria-hidden="true" />
@@ -511,7 +511,7 @@ export default async function BrueckentageRegionPage({ params }: PageProps) {
         )}
 
         {/* FAQ */}
-        <section aria-labelledby="region-faq-heading" className="space-y-3">
+        <section aria-labelledby="region-faq-heading" className="space-y-3 print:hidden">
           <h2 id="region-faq-heading" className="text-lg font-bold flex items-center gap-2">
             <HelpCircle className="h-5 w-5 text-primary" aria-hidden="true" />
             Häufige Fragen zu Brückentagen {year} {region.preposition}
@@ -535,7 +535,7 @@ export default async function BrueckentageRegionPage({ params }: PageProps) {
         </section>
 
         {/* Internal Links to Other Federal States */}
-        <section aria-labelledby="other-regions-heading" className="space-y-3 pt-2 border-t">
+        <section aria-labelledby="other-regions-heading" className="space-y-3 pt-2 border-t print:hidden">
           <h2 id="other-regions-heading" className="text-base font-bold flex items-center gap-2">
             <MapPin className="h-4 w-4 text-primary" aria-hidden="true" />
             Weitere Bundesländer &amp; Nachbarländer {year}

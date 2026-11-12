@@ -1970,6 +1970,7 @@ export function CalendarClient({
           onRetryApi={handleRetryApi}
           onOpenSubscribe={() => setShowSubscribeDialog(true)}
           onOpenShare={() => setShowShareDialog(true)}
+          onOpenApprovalSheet={() => setShowApprovalSheetDialog(true)}
         />
 
         <Toolbar
