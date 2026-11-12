@@ -238,18 +238,6 @@ export function Toolbar({
                 <span className="hidden lg:inline">Kalender-Abo</span>
               </Button>
             )}
-            {onPrintRequestSheet && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={onPrintRequestSheet}
-                className="h-8 gap-1.5 px-2.5 font-medium"
-                title="Urlaubsantrag (A4) konfigurieren, digital signieren & drucken"
-              >
-                <FileText className="h-3.5 w-3.5 text-primary" />
-                <span className="hidden sm:inline">Urlaubsantrag (A4)</span>
-              </Button>
-            )}
             <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button size="icon" variant="outline" className="h-8 w-8" aria-label="Weitere Aktionen">
