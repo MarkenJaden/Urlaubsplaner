@@ -10,6 +10,10 @@ import { SuggestionsPanel } from '@/components/calendar/suggestions-panel'
 import { ClipboardExportDialog } from '@/components/calendar/clipboard-export-dialog'
 import { ShareDialog, GUEST_OWNED_SHARES_STORAGE_KEY, type StoredShareLink } from '@/components/calendar/share-dialog'
 import { SubscribeDialog } from '@/components/calendar/subscribe-dialog'
+import { ScorecardDialog } from '@/components/calendar/scorecard-dialog'
+import { PrintSummaryHeader, PrintSummaryFooter } from '@/components/calendar/print-summary'
+import { ComparisonTimeline } from '@/components/calendar/comparison-timeline'
+import { computePlanScorecard } from '@/lib/vacation-scorecard'
 import { useVacations, useToggleVacation } from '@/hooks/use-vacations'
 import { useHolidays, useCompareHolidays, useCountries, useCountryHolidays } from '@/hooks/use-holidays'
 import { useHomeRegion } from '@/hooks/use-home-region'
@@ -28,7 +32,9 @@ import {
   remainingWorkDays as countRemainingWorkDays,
   summarizeFlex,
   summarizeVacation,
+  summarizeCarryover,
   vacationBudget,
+  carryoverBudget,
 } from '@/lib/vacation-accounting'
 import { recalculateSuggestionBlock, type VacationSuggestionBlock } from '@/lib/vacation-suggester'
 import { decodeSharePayload, type ImportData } from '@/lib/export'
@@ -50,15 +56,19 @@ import {
   ChevronRight,
   SlidersHorizontal,
   StickyNote,
+  Trophy,
+  MapPin,
+  BarChart3,
+  CalendarDays,
 } from 'lucide-react'
 import { useProfile, useUpdatePreferences } from '@/hooks/use-profile'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { parsePreferences, parseEntry, countryChangePatch } from '@/lib/preferences'
+import { parsePreferences, parseEntry, countryChangePatch, mergeSharedOverlays } from '@/lib/preferences'
 import { parseISO, format, eachDayOfInterval, differenceInCalendarDays } from 'date-fns'
 import { de } from 'date-fns/locale'
-import type { EntryType, Holiday, LocalConfig, PreferencesPatch, SharedPlanOverlay } from '@/types'
+import type { EntryType, Holiday, LocalConfig, PreferencesPatch, SharedPlanOverlay, UserPreferences } from '@/types'
 import type { DayInfo, SharedDayItem } from '@/components/calendar/day-cell'
 
 interface CalendarClientProps {
@@ -292,12 +302,19 @@ export function CalendarClient({
   const [showClipboardDialog, setShowClipboardDialog] = useState(false)
   const [showShareDialog, setShowShareDialog] = useState(false)
   const [showSubscribeDialog, setShowSubscribeDialog] = useState(false)
+  const [showScorecardDialog, setShowScorecardDialog] = useState(false)
+  const [printMode, setPrintMode] = useState<'calendar' | 'request'>('calendar')
+  const [viewMode, setViewMode] = useState<'grid' | 'timeline'>('grid')
+  const [arrivedViaShareLabel, setArrivedViaShareLabel] = useState<string | null>(null)
   const [hoveredDay, setHoveredDay] = useState<DayInfo | null>(null)
   const [activeDayKey, setActiveDayKey] = useState<string | null>(null)
   const [defaultNoteText, setDefaultNoteText] = useState('')
   const [undoStack, setUndoStack] = useState<UndoSnapshot[]>([])
   const [undoBusy, setUndoBusy] = useState(false)
-  const [sharedOverlays, setSharedOverlays] = useState<SharedPlanOverlay[]>([])
+  const [sharedOverlays, setSharedOverlays] = useState<SharedPlanOverlay[]>(() => {
+    const initial = (serverPrefs as UserPreferences | undefined)?.sharedOverlays
+    return Array.isArray(initial) ? initial : []
+  })
   const [activeCollab, setActiveCollab] = useState<{
     token: string
     label: string
@@ -308,10 +325,37 @@ export function CalendarClient({
   const [guestEntriesCount, setGuestEntriesCount] = useState(0)
   const [guestImportDismissed, setGuestImportDismissed] = useState(false)
 
+  const profile = useProfile(isLoggedIn)
+  const updatePreferences = useUpdatePreferences()
+  const queryClient = useQueryClient()
+  const [importBusy, setImportBusy] = useState(false)
+  const [syncMessage, setSyncMessage] = useState('')
+  const prefs = profile.data?.preferences ?? serverPrefs
+
   // Interactive Calendar Suggestion Preview state
   const [previewSuggestions, setPreviewSuggestions] = useState<VacationSuggestionBlock[]>([])
   const [previewOverwrite, setPreviewOverwrite] = useState(false)
   const [selectedPreviewIndex, setSelectedPreviewIndex] = useState(0)
+
+  const persistOverlays = useCallback(
+    (next: SharedPlanOverlay[]) => {
+      try {
+        localStorage.setItem(SHARED_OVERLAYS_STORAGE_KEY, JSON.stringify(next))
+      } catch {
+        // ignore
+      }
+      if (isLoggedIn) {
+        updatePreferences.mutate({ sharedOverlays: next })
+      } else {
+        setConfig(prev => {
+          const updated = applyConfigPatch(prev ?? loadConfig(), { sharedOverlays: next })
+          saveConfig(updated)
+          return updated
+        })
+      }
+    },
+    [isLoggedIn, updatePreferences],
+  )
 
   useEffect(() => {
     const loaded = loadConfig()
@@ -339,27 +383,72 @@ export function CalendarClient({
     }
   }, [isLoggedIn, initialCountry, initialSubdivision])
 
-  // Load saved shared plan overlays from localStorage
+  // Load saved shared plan overlays from localStorage and sync with account preferences across devices
+  const initialOverlaySyncRef = useRef(false)
+  const lastServerOverlaysSigRef = useRef<string | null>(null)
+  const serverOverlays = (prefs as UserPreferences | undefined)?.sharedOverlays
+
   useEffect(() => {
+    let localOverlays: SharedPlanOverlay[] = []
     try {
       const raw = localStorage.getItem(SHARED_OVERLAYS_STORAGE_KEY)
       if (raw) {
         const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed)) setSharedOverlays(parsed)
+        if (Array.isArray(parsed)) localOverlays = parsed
       }
     } catch {
       // ignore
     }
-  }, [])
 
-  const saveSharedOverlays = useCallback((next: SharedPlanOverlay[]) => {
-    setSharedOverlays(next)
-    try {
-      localStorage.setItem(SHARED_OVERLAYS_STORAGE_KEY, JSON.stringify(next))
-    } catch {
-      // ignore
+    if (!isLoggedIn) {
+      if (!initialOverlaySyncRef.current) {
+        initialOverlaySyncRef.current = true
+        const fromConfig = loadConfig().sharedOverlays ?? []
+        const merged = mergeSharedOverlays(fromConfig, localOverlays)
+        if (merged.length > 0) setSharedOverlays(merged)
+      }
+      return
     }
-  }, [])
+
+    const accountList = Array.isArray(serverOverlays) ? serverOverlays : []
+    const serverSig = JSON.stringify(accountList.map(o => [o.id, o.token, o.enabled, o.color, o.label]))
+
+    if (!initialOverlaySyncRef.current) {
+      if (profile.isLoading) return
+      initialOverlaySyncRef.current = true
+      lastServerOverlaysSigRef.current = serverSig
+      const merged = mergeSharedOverlays(accountList, localOverlays)
+      setSharedOverlays(merged)
+      try {
+        localStorage.setItem(SHARED_OVERLAYS_STORAGE_KEY, JSON.stringify(merged))
+      } catch {
+        // ignore
+      }
+      // If this browser had local overlays not yet stored in the account, upload them once
+      if (merged.length > accountList.length) {
+        updatePreferences.mutate({ sharedOverlays: merged })
+      }
+      return
+    }
+
+    if (serverSig !== lastServerOverlaysSigRef.current) {
+      lastServerOverlaysSigRef.current = serverSig
+      setSharedOverlays(accountList)
+      try {
+        localStorage.setItem(SHARED_OVERLAYS_STORAGE_KEY, JSON.stringify(accountList))
+      } catch {
+        // ignore
+      }
+    }
+  }, [isLoggedIn, profile.isLoading, serverOverlays, updatePreferences])
+
+  const saveSharedOverlays = useCallback(
+    (next: SharedPlanOverlay[]) => {
+      setSharedOverlays(next)
+      persistOverlays(next)
+    },
+    [persistOverlays],
+  )
 
   const handleAddOverlayByLink = useCallback(async (input: string): Promise<boolean> => {
     const trimmed = input.trim()
@@ -398,11 +487,7 @@ export function CalendarClient({
             entries: decoded.entries,
           }
           const updated = exists ? prev.map(o => o.id === id ? nextOverlay : o) : [...prev, nextOverlay]
-          try {
-            localStorage.setItem(SHARED_OVERLAYS_STORAGE_KEY, JSON.stringify(updated))
-          } catch {
-            // ignore
-          }
+          persistOverlays(updated)
           return updated
         })
         return true
@@ -422,11 +507,7 @@ export function CalendarClient({
           const updated = exists
             ? prev.map(o => (o.id === id || o.token === shareToken ? nextOverlay : o))
             : [...prev, nextOverlay]
-          try {
-            localStorage.setItem(SHARED_OVERLAYS_STORAGE_KEY, JSON.stringify(updated))
-          } catch {
-            // ignore
-          }
+          persistOverlays(updated)
           return updated
         })
         if (data.permission === 'edit') {
@@ -448,7 +529,7 @@ export function CalendarClient({
     } catch {
       return false
     }
-  }, [])
+  }, [persistOverlays])
 
   // Handle ?share= and ?shareToken= URL query parameters
   useEffect(() => {
@@ -481,13 +562,10 @@ export function CalendarClient({
             entries: decoded.entries,
           }
           const updated = exists ? prev.map(o => o.id === id ? nextOverlay : o) : [...prev, nextOverlay]
-          try {
-            localStorage.setItem(SHARED_OVERLAYS_STORAGE_KEY, JSON.stringify(updated))
-          } catch {
-            // ignore
-          }
+          persistOverlays(updated)
           return updated
         })
+        setArrivedViaShareLabel(decoded.label)
         setSyncMessage(`Geteilter Plan „${decoded.label}“ wurde im Kalender eingeblendet.`)
       }
     }
@@ -508,15 +586,12 @@ export function CalendarClient({
             const updated = exists
               ? prev.map(o => (o.id === id || o.token === shareToken ? nextOverlay : o))
               : [...prev, nextOverlay]
-            try {
-              localStorage.setItem(SHARED_OVERLAYS_STORAGE_KEY, JSON.stringify(updated))
-            } catch {
-              // ignore
-            }
+            persistOverlays(updated)
             return updated
           })
           const label = typeof data.label === 'string' ? data.label : 'Geteilter Plan'
           const ownerName = typeof data.ownerName === 'string' ? data.ownerName : 'Partner'
+          setArrivedViaShareLabel(`${label} (${ownerName})`)
           if (data.permission === 'edit') {
             setActiveCollab({
               token: shareToken,
@@ -538,14 +613,8 @@ export function CalendarClient({
         }
       })()
     }
-  }, [])
+  }, [persistOverlays])
 
-  const profile = useProfile(isLoggedIn)
-  const updatePreferences = useUpdatePreferences()
-  const queryClient = useQueryClient()
-  const [importBusy, setImportBusy] = useState(false)
-  const [syncMessage, setSyncMessage] = useState('')
-  const prefs = profile.data?.preferences ?? serverPrefs
   const config = isLoggedIn ? { ...defaultConfig(), ...prefs, entries: [] } as LocalConfig : localConfig
   // Country → subdivision → holiday group (e.g. NL-UT → NL-MI).
   const home = useHomeRegion(config)
@@ -561,7 +630,9 @@ export function CalendarClient({
   const halfDaysChristmas = config?.halfDaysChristmas ?? true
   const countWeekendsAsVacation = config?.countWeekendsAsVacation ?? false
   const workDays = useMemo(() => config?.workDays ?? DEFAULT_WORK_DAYS, [config?.workDays])
-  const vacationDaysTotal = vacationBudget(config ?? {}, year)
+  const baseVacationDaysTotal = vacationBudget(config ?? {}, year)
+  const carryoverDaysTotal = carryoverBudget(config ?? {}, year)
+  const vacationDaysTotal = baseVacationDaysTotal + carryoverDaysTotal
 
   const { data: countriesData = [] } = useCountries()
   const { data: serverEntries = [], isLoading: entriesLoading, isError: entriesError } = useVacations(year, isLoggedIn)
@@ -589,7 +660,7 @@ export function CalendarClient({
         }))
     }
     return baseEntries
-  }, [activeCollab, collabMode, baseEntries, year])
+  } , [activeCollab, collabMode, baseEntries, year])
 
   // Sync active region and planned entry count with the global AnalyticsHeartbeat
   useEffect(() => {
@@ -608,7 +679,7 @@ export function CalendarClient({
   })
   const groupCodes = useMemo(() => new Set(groupsData.map(g => g.code)), [groupsData])
   const compareRegions = useMemo(() => compareSubdivisions.map(code => ({ code, kind: groupCodes.has(code) ? 'group' as const : 'subdivision' as const })), [compareSubdivisions, groupCodes])
-  const comparison = useCompareHolidays(country, compareRegions, year, showHeatmap && !groupsLoading)
+  const comparison = useCompareHolidays(country, compareRegions, year, (showHeatmap || viewMode === 'timeline') && !groupsLoading)
   const countryHolidayArrays = useCountryHolidays(selectedCountries, year, selectedCountries.length > 0)
 
   const allCountryHolidays = useMemo(() => countryHolidayArrays.flat(), [countryHolidayArrays])
@@ -638,6 +709,10 @@ export function CalendarClient({
   const summary = useMemo(
     () => summarizeVacation(entries, vacationDaysTotal, { holidayDates, halfDaysChristmas, countWeekendsAsVacation, workDays }),
     [entries, vacationDaysTotal, holidayDates, halfDaysChristmas, countWeekendsAsVacation, workDays]
+  )
+  const carryoverSummary = useMemo(
+    () => summarizeCarryover(entries, carryoverDaysTotal, year, { holidayDates, halfDaysChristmas, countWeekendsAsVacation, workDays }),
+    [entries, carryoverDaysTotal, year, holidayDates, halfDaysChristmas, countWeekendsAsVacation, workDays]
   )
   const overBudgetDates = summary.overBudget
   const vacationDaysUsed = summary.used
@@ -922,7 +997,7 @@ export function CalendarClient({
       ) {
         return
       }
-      if (showSuggestions || showClipboardDialog || showShareDialog || showSubscribeDialog) {
+      if (showSuggestions || showClipboardDialog || showShareDialog || showSubscribeDialog || showScorecardDialog) {
         return
       }
 
@@ -964,6 +1039,7 @@ export function CalendarClient({
     showClipboardDialog,
     showShareDialog,
     showSubscribeDialog,
+    showScorecardDialog,
   ])
 
   const importSavedData = useCallback(async (vacations: unknown[], preferences?: Record<string, unknown>, successMessage = 'Plan übernommen. Die lokale Kopie bleibt erhalten.') => {
@@ -1140,7 +1216,20 @@ export function CalendarClient({
 
   const importGuestPlan = () => {
     const { entries, ...preferences } = loadConfig()
-    void importSavedData(entries, preferences as Record<string, unknown>, 'Deine lokal gespeicherten Tage wurden in dein Konto übernommen.')
+    let localOverlays: SharedPlanOverlay[] = []
+    try {
+      const raw = localStorage.getItem(SHARED_OVERLAYS_STORAGE_KEY)
+      const parsed = raw ? JSON.parse(raw) : []
+      if (Array.isArray(parsed)) localOverlays = parsed
+    } catch {
+      // ignore
+    }
+    const mergedOverlays = mergeSharedOverlays(preferences.sharedOverlays ?? [], localOverlays)
+    const prefsWithOverlays = {
+      ...preferences,
+      ...(mergedOverlays.length > 0 ? { sharedOverlays: mergedOverlays } : {}),
+    }
+    void importSavedData(entries, prefsWithOverlays as Record<string, unknown>, 'Deine lokal gespeicherten Tage und geteilten Pläne wurden in dein Konto übernommen.')
     setGuestImportDismissed(true)
     try {
       localStorage.setItem(GUEST_IMPORT_DISMISSED_KEY, '1')
@@ -1185,6 +1274,32 @@ export function CalendarClient({
     }
     return merged
   }, [publicHolidays, allCountryHolidays])
+
+  const scorecard = useMemo(
+    () =>
+      computePlanScorecard({
+        year,
+        entries,
+        totalDays: vacationDaysTotal,
+        publicHolidays: combinedPublicHolidays,
+        halfDaysChristmas,
+        countWeekendsAsVacation,
+        workDays,
+      }),
+    [year, entries, vacationDaysTotal, combinedPublicHolidays, halfDaysChristmas, countWeekendsAsVacation, workDays],
+  )
+
+  const triggerPrint = useCallback((mode: 'calendar' | 'request') => {
+    setPrintMode(mode)
+    window.setTimeout(() => {
+      window.print()
+    }, 60)
+  }, [])
+
+  const todayCalendarYear = Number(todayKey.slice(0, 4))
+  const todayMonth = Number(todayKey.slice(5, 7))
+  const isFourthQuarterCurrentYear = todayMonth >= 10 && year === todayCalendarYear
+  const activeRegionLabel = subdivision ? regionName(subdivision) : country
 
   // Interactive Suggestion Preview Drag & Resize Handler on the Calendar
   const handleDragPreviewBlock = useCallback(
@@ -1345,6 +1460,7 @@ export function CalendarClient({
         schoolHolidays={schoolHolidays}
         existingVacationDates={existingVacationDates}
         noteDates={existingNoteDates}
+        partnerOverlays={sharedOverlays}
         onApply={handleApplySuggestions}
         onRemove={handleRemoveSuggestion}
         onOpenCalendarPreview={(blocks, overwrite) => {
@@ -1354,6 +1470,15 @@ export function CalendarClient({
           setShowSuggestions(false)
         }}
         busy={importBusy || addMutation.isPending || removeMutation.isPending}
+      />
+
+      <ScorecardDialog
+        open={showScorecardDialog}
+        onClose={() => setShowScorecardDialog(false)}
+        regionLabel={activeRegionLabel}
+        workDaysLabel={formatWorkDaysLabel(workDays)}
+        scorecard={scorecard}
+        onOpenSuggestions={() => setShowSuggestions(true)}
       />
 
       <ClipboardExportDialog
@@ -1420,7 +1545,7 @@ export function CalendarClient({
         </h1>
         {/* Guest Welcome & Quick Actions Bar */}
         {!isLoggedIn && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200/80 bg-blue-50/80 dark:border-blue-900/50 dark:bg-blue-950/30 px-3.5 py-2.5 text-sm text-blue-900 dark:text-blue-100">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200/80 bg-blue-50/80 dark:border-blue-900/50 dark:bg-blue-950/30 px-3.5 py-2.5 text-sm text-blue-900 dark:text-blue-100 print:hidden">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
               <span>
@@ -1456,7 +1581,7 @@ export function CalendarClient({
 
         {/* Logged-in Friendly Account Status & Optional Guest Plan Import */}
         {isLoggedIn && !hasSyncError && (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-card/70 px-3.5 py-2 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-card/70 px-3.5 py-2 text-xs text-muted-foreground print:hidden">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
               <span>
@@ -1522,7 +1647,7 @@ export function CalendarClient({
 
         {/* Active Collaborative Plan Banner */}
         {activeCollab && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-teal-500/40 bg-teal-50/70 dark:bg-teal-950/30 p-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-teal-500/40 bg-teal-50/70 dark:bg-teal-950/30 p-3 text-sm print:hidden">
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4 text-teal-600 dark:text-teal-400 shrink-0" />
               <div>
@@ -1564,9 +1689,60 @@ export function CalendarClient({
           </div>
         )}
 
+        {/* Guided 1-Click Partner Welcome Card when opening a shared link */}
+        {arrivedViaShareLabel && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-emerald-500/45 bg-emerald-500/10 p-3.5 text-sm print:hidden">
+            <div className="space-y-0.5">
+              <p className="font-semibold text-foreground">
+                👋 Geteilter Urlaubsplan „{arrivedViaShareLabel}“ ist eingeblendet!
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Wähle in einem Klick, wie du deinen Urlaub für {year} danebenlegen oder gemeinsam abstimmen möchtest:
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                className="h-8 text-xs gap-1.5 bg-teal-600 hover:bg-teal-700 text-white"
+                onClick={() => {
+                  setArrivedViaShareLabel(null)
+                  setShowSuggestions(true)
+                }}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Meinen Plan passend dazu optimieren
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs gap-1.5 bg-background"
+                onClick={() => {
+                  setArrivedViaShareLabel(null)
+                  setViewMode('timeline')
+                }}
+              >
+                <BarChart3 className="h-3.5 w-3.5 text-primary" />
+                Vergleichs-Timeline &amp; Überschneidungen
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-8 px-2 text-xs"
+                onClick={() => setArrivedViaShareLabel(null)}
+                aria-label="Willkommenskarte schließen"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Shared Overlays Quick Bar when overlays exist */}
         {sharedOverlays.length > 0 && !activeCollab && (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/40 px-3 py-2 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/40 px-3 py-2 text-xs print:hidden">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium text-muted-foreground flex items-center gap-1">
                 <Users className="h-3.5 w-3.5" /> Eingeblendete Pläne:
@@ -1591,12 +1767,122 @@ export function CalendarClient({
                   </span>
                 </button>
               ))}
+              {entries.length === 0 && (
+                <span className="text-teal-700 dark:text-teal-300 font-medium">
+                  · Deinen Plan danebenlegen? Klicke Tage im Kalender an oder starte den Paar-Optimierer:
+                </span>
+              )}
             </div>
-            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setShowShareDialog(true)}>
-              Verwalten
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <Button
+                variant="secondary"
+                size="sm"
+                className="h-6 px-2.5 text-xs gap-1"
+                onClick={() => setShowSuggestions(true)}
+              >
+                <Sparkles className="h-3 w-3 text-teal-600" />
+                Gemeinsam planen
+              </Button>
+              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setShowShareDialog(true)}>
+                Verwalten
+              </Button>
+            </div>
           </div>
         )}
+
+        {/* Compact Quick-Start & Q4 Next-Year Planning Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 via-card to-teal-500/5 px-3 py-2 text-xs print:hidden">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 font-semibold text-foreground">
+              <MapPin className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+              Region:
+            </span>
+            {subdivisionsData.length > 0 ? (
+              <select
+                aria-label="Schnellauswahl Bundesland oder Region"
+                value={subdivision ?? ''}
+                onChange={e => updateConfig({ subdivision: e.target.value || undefined, holidayGroup: null })}
+                className="h-7 rounded-md border border-input bg-background px-2 text-xs font-medium text-foreground"
+              >
+                <option value="">{country === 'DE' ? 'Bundesland wählen…' : 'Region wählen…'}</option>
+                {subdivisionsData.map(s => (
+                  <option key={s.code} value={s.code}>
+                    {localizedName(s.name, s.code)}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="font-medium">{activeRegionLabel}</span>
+            )}
+            {isFourthQuarterCurrentYear && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-0.5 font-medium text-emerald-800 dark:text-emerald-200">
+                <span>🎯 Jetzt schon für {year + 1} vorplanen:</span>
+                <button
+                  type="button"
+                  onClick={() => setYear(year + 1)}
+                  className="underline font-semibold hover:text-emerald-600"
+                >
+                  Zu {year + 1} wechseln
+                </button>
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <div className="inline-flex items-center rounded-lg border bg-background p-0.5" role="group" aria-label="Ansicht wechseln">
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                aria-pressed={viewMode === 'grid'}
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                  viewMode === 'grid'
+                    ? 'bg-primary text-primary-foreground shadow-2xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
+                Jahresgitter
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('timeline')}
+                aria-pressed={viewMode === 'timeline'}
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                  viewMode === 'timeline'
+                    ? 'bg-primary text-primary-foreground shadow-2xs'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" />
+                Vergleichs-Timeline &amp; Ferien-Check
+              </button>
+            </div>
+            {isFourthQuarterCurrentYear && (
+              <Button
+                type="button"
+                size="sm"
+                className="h-7 px-2.5 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={() => {
+                  setYear(year + 1)
+                  setShowSuggestions(true)
+                }}
+              >
+                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                {year + 1} optimal planen
+              </Button>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 px-2.5 text-xs gap-1"
+              onClick={() => setShowScorecardDialog(true)}
+            >
+              <Trophy className="h-3.5 w-3.5 text-amber-500" aria-hidden="true" />
+              Urlaubs-Score ({scorecard.totalFreeDaysInBlocks}T frei)
+            </Button>
+          </div>
+        </div>
 
         {syncMessage && (
           <div role="status" className="flex items-center justify-between rounded-lg border bg-card p-3 text-sm">
@@ -1634,8 +1920,11 @@ export function CalendarClient({
           countries={countriesData}
           selectedCountries={selectedCountries}
           onCountriesChange={(codes) => updateConfig({ selectedCountries: codes })}
-          vacationDaysTotal={vacationDaysTotal}
+          vacationDaysTotal={baseVacationDaysTotal}
           onVacationDaysChange={(n) => updateConfig({ vacationDaysPerYear: { [year]: n } })}
+          carryoverDaysTotal={carryoverDaysTotal}
+          onCarryoverDaysChange={(n) => updateConfig({ carryoverDaysPerYear: { [year]: n } })}
+          carryoverExpiringDays={carryoverSummary.expiringAfterMarch31}
           workDays={workDays}
           onWorkDaysChange={(days) => updateConfig({ workDays: days })}
           halfDaysChristmas={halfDaysChristmas}
@@ -1676,6 +1965,9 @@ export function CalendarClient({
           onOpenClipboardExport={() => setShowClipboardDialog(true)}
           onOpenShare={() => setShowShareDialog(true)}
           onOpenSubscribe={() => setShowSubscribeDialog(true)}
+          onOpenScorecard={() => setShowScorecardDialog(true)}
+          onPrintCalendar={() => triggerPrint('calendar')}
+          onPrintRequestSheet={() => triggerPrint('request')}
           onImport={handleImport}
           onImportConfig={handleImportConfig}
           onReset={handleReset}
@@ -1822,34 +2114,62 @@ export function CalendarClient({
           </div>
         )}
 
+        <PrintSummaryHeader
+          year={year}
+          regionLabel={activeRegionLabel}
+          workDaysLabel={formatWorkDaysLabel(workDays)}
+          scorecard={scorecard}
+          mode={printMode}
+        />
+
         {entriesLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 print:hidden">
             {Array.from({ length: 12 }).map((_, i) => (
               <div key={i} className="h-48 rounded-lg bg-muted animate-pulse" />
             ))}
           </div>
+        ) : viewMode === 'timeline' ? (
+          <div className="print:hidden">
+            <ComparisonTimeline
+              year={year}
+              todayKey={todayKey}
+              entries={entries}
+              workDays={workDays}
+              publicHolidays={combinedPublicHolidays}
+              schoolHolidays={schoolHolidays}
+              homeRegionLabel={activeRegionLabel}
+              compareHolidays={comparison.holidays}
+              compareLabels={compareSubdivisions.map(code => subdivisionsData.find((s: { code: string }) => s.code === code)?.name?.find((n: { language: string }) => n.language === 'DE')?.text ?? code)}
+              overlays={sharedOverlays}
+              selectedType={selectedType}
+              onToggle={handleToggle}
+              onOpenSuggestions={() => setShowSuggestions(true)}
+            />
+          </div>
         ) : (
-          <YearView
-            year={year} todayKey={todayKey} entries={entries}
-            publicHolidays={combinedPublicHolidays} schoolHolidays={schoolHolidays}
-            workDays={workDays}
-            compareHolidays={comparison.holidays}
-            compareLabels={compareSubdivisions.map(code => subdivisionsData.find((s: { code: string }) => s.code === code)?.name?.find((n: { language: string }) => n.language === 'DE')?.text ?? code)}
-            showHeatmap={showHeatmap} showPublicHolidays={showPublicHolidays} showSchoolHolidays={showSchoolHolidays}
-            bridgeDaySet={bridgeDaySet} bridgeDayMap={bridgeDayMap}
-            showBridgeDays={showBridgeDays} showOtherMonthDays={showOtherMonthDays}
-            overBudgetDates={overBudgetDates}
-            overlays={sharedOverlays}
-            previewSuggestions={previewSuggestions}
-            selectedPreviewIndex={selectedPreviewIndex}
-            onSelectPreviewBlock={setSelectedPreviewIndex}
-            onDragPreviewBlock={handleDragPreviewBlock}
-            onToggle={handleToggle}
-            onSelectRange={handleSelectRange}
-            selectedType={selectedType}
-            onHover={setHoveredDay}
-            onSelectDate={(date) => setActiveDayKey(getDateKey(date))}
-          />
+          <div className={printMode === 'request' ? 'print:hidden' : ''}>
+            <YearView
+              year={year} todayKey={todayKey} entries={entries}
+              publicHolidays={combinedPublicHolidays} schoolHolidays={schoolHolidays}
+              workDays={workDays}
+              compareHolidays={comparison.holidays}
+              compareLabels={compareSubdivisions.map(code => subdivisionsData.find((s: { code: string }) => s.code === code)?.name?.find((n: { language: string }) => n.language === 'DE')?.text ?? code)}
+              showHeatmap={showHeatmap} showPublicHolidays={showPublicHolidays} showSchoolHolidays={showSchoolHolidays}
+              bridgeDaySet={bridgeDaySet} bridgeDayMap={bridgeDayMap}
+              showBridgeDays={showBridgeDays} showOtherMonthDays={showOtherMonthDays}
+              overBudgetDates={overBudgetDates}
+              overlays={sharedOverlays}
+              previewSuggestions={previewSuggestions}
+              selectedPreviewIndex={selectedPreviewIndex}
+              onSelectPreviewBlock={setSelectedPreviewIndex}
+              onDragPreviewBlock={handleDragPreviewBlock}
+              onToggle={handleToggle}
+              onSelectRange={handleSelectRange}
+              selectedType={selectedType}
+              onHover={setHoveredDay}
+              onSelectDate={(date) => setActiveDayKey(getDateKey(date))}
+            />
+          </div>
         )}
 
         {hoveredDay && (
@@ -1873,7 +2193,7 @@ export function CalendarClient({
         )}
 
         {/* Color & Heatmap Legend */}
-        <div className="rounded-xl border bg-card p-3.5 space-y-3">
+        <div className={`rounded-xl border bg-card p-3.5 space-y-3 ${printMode === 'request' ? 'print:hidden' : 'print:p-2 print:text-[10px]'}`}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-blue-600 shadow-2xs" /> Urlaub</span>
@@ -1937,8 +2257,10 @@ export function CalendarClient({
           )}
         </div>
 
+        <PrintSummaryFooter />
+
         {/* Helpful Ratgeber & SEO FAQ Section */}
-        <details className="group rounded-xl border bg-card/60 p-4 text-sm">
+        <details className="group rounded-xl border bg-card/60 p-4 text-sm print:hidden">
           <summary className="flex cursor-pointer list-none items-center justify-between font-medium text-foreground">
             <span className="flex items-center gap-2">
               <HelpCircle className="h-4 w-4 text-primary" aria-hidden="true" />
