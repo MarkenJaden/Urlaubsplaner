@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { christmasPartner, holidayDateSet, remainingWorkDays, summarizeFlex, summarizeVacation, vacationBudget, vacationDayCost } from './vacation-accounting'
+import { carryoverBudget, christmasPartner, holidayDateSet, remainingWorkDays, summarizeCarryover, summarizeFlex, summarizeVacation, vacationBudget, vacationDayCost } from './vacation-accounting'
 import type { Holiday } from '@/types'
 
 const holiday = (startDate: string, endDate = startDate): Holiday => ({ id: startDate, startDate, endDate, type: 'Public', name: [{ language: 'DE', text: 'Feiertag' }], nationwide: true })
@@ -79,5 +79,17 @@ describe('Gleitzeit allowance', () => {
   it('converts Gleittage to hours with the configured working day', () => {
     expect(summarizeFlex(3, { flexUnit: 'hours', flexBudgetPerYear: { 2026: 80 } }, 2026)).toEqual({ unit: 'hours', used: 24, total: 80 })
     expect(summarizeFlex(2, { flexUnit: 'hours', flexHoursPerDay: 7.5 }, 2026).used).toBe(15)
+  })
+})
+
+describe('carryover vacation (Resturlaub) before March 31', () => {
+  it('absorbs Q1 vacation days into carryover and reports remaining expiring days', () => {
+    expect(carryoverBudget({ carryoverDaysPerYear: { 2026: 4 } }, 2026)).toBe(4)
+    const entries = [vacation('2026-02-16'), vacation('2026-02-17'), vacation('2026-05-04')]
+    expect(summarizeCarryover(entries, 4, 2026, options)).toEqual({
+      total: 4,
+      usedByMarch31: 2,
+      expiringAfterMarch31: 2,
+    })
   })
 })

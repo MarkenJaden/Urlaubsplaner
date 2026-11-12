@@ -122,6 +122,43 @@ export function vacationBudget(preferences: { vacationDaysPerYear?: Record<strin
   return preferences.vacationDaysPerYear?.[year] ?? preferences.vacationDays ?? 30
 }
 
+/** Optional carryover vacation days from the previous year (Resturlaub) for `year`. */
+export function carryoverBudget(preferences: { carryoverDaysPerYear?: Record<string | number, number> }, year: number): number {
+  return preferences.carryoverDaysPerYear?.[year] ?? 0
+}
+
+export interface CarryoverSummary {
+  total: number
+  usedByMarch31: number
+  expiringAfterMarch31: number
+}
+
+/**
+ * Evaluates how many carryover days from the previous year are covered by
+ * vacation planned in Q1 (up to March 31 of `year`) and how many are still open.
+ */
+export function summarizeCarryover(
+  entries: DatedEntry[],
+  carryoverDays: number,
+  year: number,
+  options: AccountingOptions,
+): CarryoverSummary {
+  if (carryoverDays <= 0) {
+    return { total: 0, usedByMarch31: 0, expiringAfterMarch31: 0 }
+  }
+  const cutoff = `${year}-03-31`
+  const q1Keys = [...new Set(entries.filter(e => e.type === 'vacation').map(e => dateKey(e.date)))]
+    .filter(k => k.startsWith(`${year}-`) && k <= cutoff)
+    .sort()
+  let q1Cost = 0
+  for (const k of q1Keys) {
+    q1Cost += vacationDayCost(k, options)
+  }
+  const usedByMarch31 = Math.min(carryoverDays, q1Cost)
+  const expiringAfterMarch31 = Math.max(0, carryoverDays - usedByMarch31)
+  return { total: carryoverDays, usedByMarch31, expiringAfterMarch31 }
+}
+
 export type FlexUnit = 'days' | 'hours'
 
 export interface FlexPreferences {

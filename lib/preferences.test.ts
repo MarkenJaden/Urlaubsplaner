@@ -59,4 +59,28 @@ describe('Gleitzeit preferences', () => {
   it('merges allowances per year', () => {
     expect(mergePreferences({ flexBudgetPerYear: { 2026: 10 } }, { flexBudgetPerYear: { 2027: 12 } })).toEqual({ flexBudgetPerYear: { 2026: 10, 2027: 12 } })
   })
+  it('validates and syncs sharedOverlays and carryoverDaysPerYear across devices', () => {
+    const overlay = {
+      id: 'token-abc1234567',
+      label: 'Partner Plan',
+      color: '#0d9488',
+      enabled: true,
+      permission: 'view' as const,
+      token: 'abc1234567',
+      country: 'DE',
+      subdivision: 'DE-NW',
+      workDays: [1, 2, 3, 4],
+      entries: [{ date: '2027-05-07', type: 'vacation' as const }],
+    }
+    expect(parsePreferences({ sharedOverlays: [overlay], carryoverDaysPerYear: { 2027: 4 }, carryoverExpiresMarch31: true })).toEqual({
+      sharedOverlays: [overlay],
+      carryoverDaysPerYear: { 2027: 4 },
+      carryoverExpiresMarch31: true,
+    })
+    expect(parsePreferences({ sharedOverlays: [{ ...overlay, color: 'red' }] })).toBeNull()
+    expect(mergeImportedPreferences(
+      { sharedOverlays: [overlay] },
+      { sharedOverlays: [{ ...overlay, id: 'snapshot-2', token: undefined, label: 'Team' }] }
+    ).sharedOverlays).toHaveLength(2)
+  })
 })

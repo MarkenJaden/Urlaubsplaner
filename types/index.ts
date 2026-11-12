@@ -136,6 +136,12 @@ export interface LocalConfig {
   /** Active working weekdays (0=Sun, 1=Mon, ..., 6=Sat). Defaults to [1, 2, 3, 4, 5]. */
   workDays?: number[]
   vacationDaysPerYear: Record<number, number>
+  /** Optional carryover vacation days from the previous year (Resturlaub). */
+  carryoverDaysPerYear?: Record<number, number>
+  /** Whether carryover days must be used by March 31 of the year. Defaults to true. */
+  carryoverExpiresMarch31?: boolean
+  /** Embedded shared plans (partner/team overlays) synced across devices. */
+  sharedOverlays?: SharedPlanOverlay[]
   /** Unit of the Gleitzeit allowance; defaults to days. */
   flexUnit?: 'days' | 'hours'
   /** Hours one Gleittag consumes when the allowance is kept in hours. */

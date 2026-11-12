@@ -88,4 +88,31 @@ describe('preferences follow the visible controls', () => {
     renderCalendar(true)
     expect(screen.getByText(/Hier gelten mehrere Ferienregionen/)).toBeTruthy()
   })
+  it('syncs embedded sharedOverlays with the signed-in account across devices', () => {
+    mocks.vacationsError = false
+    mocks.profilePreferences = {
+      sharedOverlays: [
+        {
+          id: 'snapshot-partner',
+          label: 'Lisa Plan',
+          color: '#0d9488',
+          enabled: true,
+          permission: 'view',
+          entries: [{ date: '2027-05-07', type: 'vacation' }],
+        },
+      ],
+    }
+    renderCalendar(true)
+    const toggleBtn = screen.getByRole('button', { name: /Lisa Plan.*sichtbar/ })
+    fireEvent.click(toggleBtn)
+    expect(mocks.mutate).toHaveBeenCalledWith({
+      sharedOverlays: [
+        expect.objectContaining({
+          id: 'snapshot-partner',
+          label: 'Lisa Plan',
+          enabled: false,
+        }),
+      ],
+    })
+  })
 })

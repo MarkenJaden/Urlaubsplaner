@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from 'react'
-import { ChevronDown, ChevronUp, AlertTriangle, RefreshCw, Settings2, CalendarDays, Share2 } from 'lucide-react'
+import { AlertTriangle, RefreshCw, Settings2, CalendarDays, Share2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { MultiCombobox } from '@/components/ui/combobox'
 import { LocationFields } from './location-fields'
@@ -39,6 +39,9 @@ interface SettingsPanelProps {
   onCountriesChange: (codes: string[]) => void
   vacationDaysTotal: number
   onVacationDaysChange: (n: number) => void
+  carryoverDaysTotal?: number
+  onCarryoverDaysChange?: (n: number) => void
+  carryoverExpiringDays?: number
   workDays?: number[]
   onWorkDaysChange?: (days: number[]) => void
   countWeekendsAsVacation?: boolean
@@ -81,6 +84,7 @@ export function SettingsPanel({
   compareOptions, compareSubdivisions, onCompareChange, defaultCompareSelection,
   countries, selectedCountries, onCountriesChange,
   vacationDaysTotal, onVacationDaysChange,
+  carryoverDaysTotal = 0, onCarryoverDaysChange, carryoverExpiringDays = 0,
   workDays = DEFAULT_WORK_DAYS, onWorkDaysChange,
   halfDaysChristmas, onHalfDaysChange,
   showOtherMonthDays = false, onShowOtherMonthDaysChange,
@@ -90,9 +94,8 @@ export function SettingsPanel({
   onOpenSubscribe, onOpenShare,
   apiError, onRetryApi,
 }: SettingsPanelProps) {
-  const [open, setOpen] = useState(true)
-  // Lets the field be emptied while typing without saving 0 as the budget.
   const [budgetDraft, setBudgetDraft] = useState<string | null>(null)
+  const [carryoverDraft, setCarryoverDraft] = useState<string | null>(null)
   const [flexDraft, setFlexDraft] = useState<string | null>(null)
   // Short "Respekt" animation when someone enters a really big allowance.
   const [respect, setRespect] = useState(0)
@@ -109,6 +112,14 @@ export function SettingsPanel({
   [countries, country])
 
   const allRegionsLabel = country === 'DE' && defaultCompareSelection.length === 16 ? 'Alle 16 Bundesländer' : 'Alle Regionen'
+  const activeRegionLabel = useMemo(() => {
+    if (subdivision) {
+      const match = subdivisions.find(s => s.code === subdivision)
+      if (match) return localizedName(match.name, match.code)
+    }
+    const c = countries.find(item => item.isoCode === country)
+    return c ? getCountryName(c) : country
+  }, [subdivision, subdivisions, countries, country])
 
   const toggleWorkDay = (day: number) => {
     if (!onWorkDaysChange) return
@@ -121,23 +132,34 @@ export function SettingsPanel({
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card shadow-2xs">
+    <>
       {respect > 0 && (
         <div key={respect} role="status" className="respect-pop pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
           <span className="rounded-2xl bg-card/95 px-6 py-4 text-3xl font-bold shadow-xl">Respekt 👊</span>
         </div>
       )}
-      <button
-        className="w-full flex items-center justify-between p-3 text-sm font-medium hover:bg-muted/50 transition-colors rounded-xl"
-        onClick={() => setOpen(!open)}
-        aria-expanded={open}
-      >
-        <span className="flex items-center gap-2"><Settings2 className="h-4 w-4 text-primary" /> Einstellungen, Arbeitszeit, Standort & Statistik</span>
-        {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-      </button>
+      <details className="group rounded-xl border border-border bg-card shadow-2xs print:hidden">
+        <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 p-3 text-sm font-medium hover:bg-muted/50 transition-colors rounded-xl after:content-['▾'] after:text-xs after:text-muted-foreground after:transition-transform group-open:after:rotate-180">
+          <span className="flex items-center gap-2">
+            <Settings2 className="h-4 w-4 text-primary" aria-hidden="true" />
+            <span>Einstellungen, Arbeitszeit, Standort &amp; Statistik</span>
+          </span>
+          <span className="ml-auto mr-2 flex flex-wrap items-center gap-1.5 text-xs font-normal text-muted-foreground">
+            <span className="rounded-md border bg-muted/40 px-2 py-0.5 text-foreground font-medium">{activeRegionLabel}</span>
+            <span className="rounded-md border bg-muted/40 px-2 py-0.5">
+              {formatDays(vacationDaysTotal + carryoverDaysTotal)} UT Anspruch
+              {carryoverDaysTotal > 0 ? ` (inkl. ${formatDays(carryoverDaysTotal)} Rest)` : ''}
+            </span>
+            {carryoverExpiringDays > 0 && (
+              <span className="rounded-md border border-amber-500/50 bg-amber-500/15 px-2 py-0.5 text-amber-800 dark:text-amber-200 font-medium">
+                ⚠️ {formatDays(carryoverExpiringDays)} Resturlaub bis 31.03.
+              </span>
+            )}
+            <span className="hidden sm:inline rounded-md border bg-muted/40 px-2 py-0.5">{workDays.length}-Tage-Woche</span>
+          </span>
+        </summary>
 
-      {open && (
-        <div className="space-y-4 p-3 pt-0 text-sm">
+        <div className="space-y-4 border-t border-border/50 p-3 text-sm">
           {apiError && (
             <div className="flex flex-col gap-2 rounded-md border border-yellow-300 bg-yellow-50 p-2 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-200 sm:flex-row sm:items-center">
               <AlertTriangle className="h-4 w-4 flex-shrink-0" />
@@ -235,6 +257,38 @@ export function SettingsPanel({
                     onChange={e => { const hours = e.target.valueAsNumber; if (Number.isFinite(hours) && hours > 0 && hours <= 24) onFlexHoursPerDayChange(hours) }}
                     className="min-h-9 w-20 rounded-md border border-input bg-background px-2 py-1 text-right text-sm text-foreground" />
                 </label>
+              )}
+
+              {onCarryoverDaysChange && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <label htmlFor="carryover-days-total" className="text-xs text-muted-foreground">
+                      Resturlaub aus Vorjahr (gültig bis 31.03.)
+                    </label>
+                    <input
+                      id="carryover-days-total"
+                      type="number"
+                      min={0}
+                      max={366}
+                      step={0.5}
+                      value={carryoverDraft ?? String(carryoverDaysTotal)}
+                      onChange={e => {
+                        setCarryoverDraft(e.target.value)
+                        const days = e.target.valueAsNumber
+                        if (Number.isFinite(days) && days >= 0 && days <= 366) {
+                          onCarryoverDaysChange(days)
+                        }
+                      }}
+                      onBlur={() => setCarryoverDraft(null)}
+                      className="min-h-8 w-20 rounded-md border border-input bg-background px-2 py-1 text-right text-sm"
+                    />
+                  </div>
+                  {carryoverExpiringDays > 0 && (
+                    <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-800 dark:text-amber-200">
+                      ⚠️ Noch {formatDays(carryoverExpiringDays)} Tage Resturlaub sollten bis zum 31.03. verplant werden.
+                    </p>
+                  )}
+                </div>
               )}
 
               {/* Arbeitszeitmodell / Arbeitstage (z.B. 4-Tage-Woche) */}
@@ -377,7 +431,7 @@ export function SettingsPanel({
             </div>
           </div>
         </div>
-      )}
-    </div>
+      </details>
+    </>
   )
 }

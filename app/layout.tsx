@@ -118,7 +118,7 @@ export default function RootLayout({
         <Providers>
           <AnalyticsHeartbeat />
           {children}
-          <footer className="border-t bg-muted/20 mt-8">
+          <footer className="border-t bg-muted/20 mt-8 print:hidden">
             <div className="container flex flex-col gap-4 py-6 text-xs text-muted-foreground">
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
@@ -138,6 +138,12 @@ export default function RootLayout({
                       Brückentage {y}
                     </Link>
                   ))}
+                  <Link href="/schulferien" className="hover:text-foreground underline transition-colors">
+                    Schulferien-Kalender
+                  </Link>
+                  <Link href="/widget" className="hover:text-foreground underline transition-colors">
+                    Widget einbetten
+                  </Link>
                 </nav>
                 <nav aria-label="Rechtliches und Kontakt" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
                   <Link href="/impressum" className="underline hover:text-foreground transition-colors">

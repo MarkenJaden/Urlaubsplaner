@@ -22,6 +22,23 @@ export default function sitemap(): MetadataRoute.Sitemap {
     }))
   )
 
+  const deRegions = SEO_REGIONS.filter(r => r.country === 'DE')
+  const schoolYearEntries: MetadataRoute.Sitemap = years.map((year, idx) => ({
+    url: `${baseUrl}/schulferien/${year}`,
+    lastModified,
+    changeFrequency: 'weekly' as const,
+    priority: idx <= 1 ? 0.88 : 0.78,
+  }))
+
+  const schoolRegionEntries: MetadataRoute.Sitemap = years.flatMap((year, idx) =>
+    deRegions.map(region => ({
+      url: `${baseUrl}/schulferien/${year}/${region.slug}`,
+      lastModified,
+      changeFrequency: 'weekly' as const,
+      priority: idx <= 1 ? 0.82 : 0.72,
+    }))
+  )
+
   return [
     {
       url: baseUrl,
@@ -35,8 +52,22 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'weekly',
       priority: 0.95,
     },
+    {
+      url: `${baseUrl}/schulferien`,
+      lastModified,
+      changeFrequency: 'weekly',
+      priority: 0.92,
+    },
+    {
+      url: `${baseUrl}/widget`,
+      lastModified,
+      changeFrequency: 'monthly',
+      priority: 0.7,
+    },
     ...yearEntries,
     ...regionEntries,
+    ...schoolYearEntries,
+    ...schoolRegionEntries,
     {
       url: `${baseUrl}/kontakt`,
       lastModified,
