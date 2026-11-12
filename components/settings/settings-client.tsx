@@ -15,7 +15,7 @@ import { useProfile, useUpdatePreferences } from '@/hooks/use-profile'
 import { countryChangePatch } from '@/lib/preferences'
 import { DEFAULT_WORK_DAYS } from '@/lib/vacation-accounting'
 import { CalendarDays, Copy, Check, RefreshCw, MapPin, ExternalLink, ShieldCheck, Briefcase } from 'lucide-react'
-import type { CalendarFeedSubscription, UserPreferences, UserProfile } from '@/types'
+import type { CalendarFeedSubscription, PasskeyInfo, UserPreferences, UserProfile } from '@/types'
 
 const WEEKDAYS_CONFIG = [
   { day: 1, short: 'Mo', full: 'Montag' },
@@ -41,6 +41,8 @@ interface SettingsClientProps {
   username?: string | null
   email?: string | null
   hasLocalAccount: boolean
+  totpEnabled?: boolean
+  initialPasskeys?: PasskeyInfo[]
   googleLinked?: boolean
   githubLinked?: boolean
   googleOAuthEnabled?: boolean
@@ -54,6 +56,8 @@ export function SettingsClient({
   username,
   email,
   hasLocalAccount,
+  totpEnabled = false,
+  initialPasskeys = [],
   googleLinked = false,
   githubLinked = false,
   googleOAuthEnabled = false,
@@ -239,6 +243,8 @@ export function SettingsClient({
         username={profile.data?.username ?? username}
         email={profile.data?.email ?? email}
         hasLocalAccount={profile.data?.hasLocalAccount ?? hasLocalAccount}
+        totpEnabled={profile.data?.totpEnabled ?? totpEnabled}
+        passkeys={profile.data?.passkeys ?? initialPasskeys}
         googleLinked={profile.data?.googleLinked ?? googleLinked}
         githubLinked={profile.data?.githubLinked ?? githubLinked}
         googleOAuthEnabled={profile.data?.googleOAuthEnabled ?? googleOAuthEnabled}

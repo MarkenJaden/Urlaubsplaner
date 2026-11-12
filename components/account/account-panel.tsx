@@ -3,13 +3,33 @@
 import { useEffect, useState } from 'react'
 import { signIn, signOut } from 'next-auth/react'
 import { useQueryClient } from '@tanstack/react-query'
-import { KeyRound, LogOut, Trash2, Eye, EyeOff, Link2, Unlink, CheckCircle2 } from 'lucide-react'
+import { KeyRound, LogOut, Trash2, Eye, EyeOff, Link2, Unlink, CheckCircle2, Fingerprint, ShieldCheck, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import type { PasskeyInfo } from '@/types'
+
+function base64UrlToUint8Array(base64Url: string): Uint8Array<ArrayBuffer> {
+  const padding = '='.repeat((4 - (base64Url.length % 4)) % 4)
+  const base64 = (base64Url + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const raw = atob(base64)
+  const buffer = new ArrayBuffer(raw.length)
+  const bytes = new Uint8Array(buffer)
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i)
+  return bytes
+}
+
+function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
 
 export function AccountPanel({
   username,
   email: initialEmail,
   hasLocalAccount,
+  totpEnabled: initialTotpEnabled = false,
+  passkeys: initialPasskeys = [],
   googleLinked = false,
   githubLinked = false,
   googleOAuthEnabled = false,
@@ -18,6 +38,8 @@ export function AccountPanel({
   username?: string | null
   email?: string | null
   hasLocalAccount: boolean
+  totpEnabled?: boolean
+  passkeys?: PasskeyInfo[]
   googleLinked?: boolean
   githubLinked?: boolean
   googleOAuthEnabled?: boolean
@@ -34,6 +56,13 @@ export function AccountPanel({
   const [message, setMessage] = useState('')
   const [successMsg, setSuccessMsg] = useState('')
   const [busy, setBusy] = useState(false)
+
+  // Passkeys & 2FA state
+  const [passkeyName, setPasskeyName] = useState('')
+  const [totpSetupSecret, setTotpSetupSecret] = useState('')
+  const [totpOtpauthUri, setTotpOtpauthUri] = useState('')
+  const [totpCodeInput, setTotpCodeInput] = useState('')
+  const [totpDisableCode, setTotpDisableCode] = useState('')
 
   useEffect(() => {
     if (username !== undefined) setLogin(username ?? '')
@@ -152,6 +181,185 @@ export function AccountPanel({
       await signOut({ callbackUrl: '/' })
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Löschung fehlgeschlagen.')
+      setBusy(false)
+    }
+  }
+
+  async function registerNewPasskey() {
+    if (typeof window === 'undefined' || !window.PublicKeyCredential) {
+      setMessage('Dein Browser unterstützt keine Passkeys (WebAuthn).')
+      return
+    }
+    setBusy(true)
+    setMessage('')
+    setSuccessMsg('')
+    try {
+      const optRes = await fetch('/api/account/passkeys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'register_options' }),
+      })
+      const optData = await optRes.json()
+      if (!optRes.ok) throw new Error(optData.error || 'Passkey-Optionen konnten nicht geladen werden.')
+
+      const createOptions: PublicKeyCredentialCreationOptions = {
+        challenge: base64UrlToUint8Array(optData.challenge),
+        rp: { id: optData.rpId, name: optData.rpName || 'Urlaubsplaner' },
+        user: {
+          id: base64UrlToUint8Array(optData.user.id),
+          name: optData.user.name,
+          displayName: optData.user.displayName,
+        },
+        pubKeyCredParams: [
+          { type: 'public-key', alg: -7 }, // ES256
+          { type: 'public-key', alg: -257 }, // RS256
+        ],
+        authenticatorSelection: {
+          residentKey: 'preferred',
+          userVerification: 'preferred',
+        },
+        timeout: 60000,
+        excludeCredentials: (optData.excludeCredentials ?? []).map((c: { id: string }) => ({
+          type: 'public-key' as const,
+          id: base64UrlToUint8Array(c.id),
+        })),
+      }
+
+      const cred = (await navigator.credentials.create({
+        publicKey: createOptions,
+      })) as PublicKeyCredential | null
+      if (!cred) throw new Error('Kein Passkey erstellt.')
+
+      const attResp = cred.response as AuthenticatorAttestationResponse
+      const spkiBuffer = typeof attResp.getPublicKey === 'function' ? attResp.getPublicKey() : null
+      if (!spkiBuffer) {
+        throw new Error('Dein Browser unterstützt getPublicKey() für WebAuthn nicht. Bitte nutze einen aktuellen Browser.')
+      }
+      const alg = typeof attResp.getPublicKeyAlgorithm === 'function' ? attResp.getPublicKeyAlgorithm() : -7
+      const transports = typeof attResp.getTransports === 'function' ? attResp.getTransports() : []
+
+      const verifyRes = await fetch('/api/account/passkeys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'register_verify',
+          token: optData.token,
+          credentialId: arrayBufferToBase64Url(cred.rawId),
+          publicKeySpki: arrayBufferToBase64Url(spkiBuffer),
+          clientDataJSON: arrayBufferToBase64Url(attResp.clientDataJSON),
+          authenticatorData: arrayBufferToBase64Url(attResp.getAuthenticatorData()),
+          algorithm: alg,
+          transports,
+          name: passkeyName.trim() || undefined,
+        }),
+      })
+      const verifyData = await verifyRes.json()
+      if (!verifyRes.ok) throw new Error(verifyData.error || 'Passkey konnte nicht gespeichert werden.')
+
+      setPasskeyName('')
+      setSuccessMsg('Passkey erfolgreich hinterlegt! Du kannst dich ab sofort per FaceID / TouchID / Gerät anmelden.')
+      await queryClient.invalidateQueries({ queryKey: ['profile'] })
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'NotAllowedError') {
+        setMessage('Passkey-Erstellung wurde abgebrochen.')
+      } else {
+        setMessage(error instanceof Error ? error.message : 'Passkey-Erstellung fehlgeschlagen.')
+      }
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removePasskey(id: string, name: string) {
+    if (!confirm(`Passkey „${name}“ wirklich entfernen?`)) return
+    setBusy(true)
+    setMessage('')
+    setSuccessMsg('')
+    try {
+      const res = await fetch('/api/account/passkeys', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Löschen fehlgeschlagen.')
+      setSuccessMsg(`Passkey „${name}“ wurde entfernt.`)
+      await queryClient.invalidateQueries({ queryKey: ['profile'] })
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Löschen fehlgeschlagen.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function startTotpSetup() {
+    setBusy(true)
+    setMessage('')
+    setSuccessMsg('')
+    try {
+      const res = await fetch('/api/account/totp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'setup' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || '2FA-Einrichtung fehlgeschlagen.')
+      setTotpSetupSecret(data.secret)
+      setTotpOtpauthUri(data.otpauthUri)
+      setTotpCodeInput('')
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '2FA-Einrichtung fehlgeschlagen.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function confirmTotpEnable() {
+    setBusy(true)
+    setMessage('')
+    setSuccessMsg('')
+    try {
+      const res = await fetch('/api/account/totp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'enable', code: totpCodeInput.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Code ungültig.')
+      setTotpSetupSecret('')
+      setTotpOtpauthUri('')
+      setTotpCodeInput('')
+      setSuccessMsg('Zwei-Faktor-Authentifizierung (2FA) ist jetzt aktiv.')
+      await queryClient.invalidateQueries({ queryKey: ['profile'] })
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '2FA konnte nicht aktiviert werden.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function disableTotp() {
+    setBusy(true)
+    setMessage('')
+    setSuccessMsg('')
+    try {
+      const res = await fetch('/api/account/totp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'disable',
+          code: totpDisableCode.trim(),
+          password: currentPassword,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || '2FA konnte nicht deaktiviert werden.')
+      setTotpDisableCode('')
+      setSuccessMsg('Zwei-Faktor-Authentifizierung (2FA) wurde deaktiviert.')
+      await queryClient.invalidateQueries({ queryKey: ['profile'] })
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Deaktivieren fehlgeschlagen.')
+    } finally {
       setBusy(false)
     }
   }
@@ -275,6 +483,187 @@ export function AccountPanel({
               </Button>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* Passkeys & Optional 2FA Security Section */}
+      <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
+        <div className="space-y-1">
+          <h3 className="flex items-center gap-2 text-sm font-semibold">
+            <Fingerprint className="h-4 w-4 text-primary" />
+            Passkeys &amp; Zwei-Faktor-Authentifizierung (2FA)
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Melde dich per Fingerabdruck, Gesichtserkennung (FaceID / TouchID / Windows Hello) oder Sicherheitsschlüssel ohne Passwort an – oder schütze deinen Passwort-Login zusätzlich mit einer Authenticator-App.
+          </p>
+        </div>
+
+        {/* Passkey List & Add */}
+        <div className="space-y-2.5 rounded-lg border bg-background p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-xs font-semibold">Passkeys (Passwortloser Login)</div>
+              <div className="text-[11px] text-muted-foreground">
+                {initialPasskeys.length === 0
+                  ? 'Noch kein Passkey hinterlegt'
+                  : `${initialPasskeys.length} Passkey(s) aktiv`}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <input
+                type="text"
+                maxLength={60}
+                value={passkeyName}
+                onChange={e => setPasskeyName(e.target.value)}
+                placeholder="Gerätename (z.B. iPhone, MacBook)"
+                className="h-8 rounded-md border bg-background px-2.5 text-xs"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => void registerNewPasskey()}
+                className="h-8 text-xs gap-1"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Passkey hinzufügen
+              </Button>
+            </div>
+          </div>
+
+          {initialPasskeys.length > 0 && (
+            <div className="divide-y border-t pt-2 text-xs">
+              {initialPasskeys.map(pk => (
+                <div key={pk.id} className="flex items-center justify-between gap-2 py-1.5">
+                  <div>
+                    <span className="font-medium text-foreground">{pk.name}</span>
+                    <span className="ml-2 text-[11px] text-muted-foreground">
+                      Hinzugefügt am {new Date(pk.createdAt).toLocaleDateString('de-DE')}
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void removePasskey(pk.id, pk.name)}
+                    className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 mr-1" />
+                    Entfernen
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Optional TOTP 2FA */}
+        <div className="space-y-2.5 rounded-lg border bg-background p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-xs font-semibold flex items-center gap-1.5">
+                <ShieldCheck className="h-3.5 w-3.5 text-primary" />
+                Authenticator-App (TOTP 2FA)
+              </div>
+              <div className={`text-[11px] ${initialTotpEnabled ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'text-muted-foreground'}`}>
+                {initialTotpEnabled
+                  ? 'Aktiviert (6-stelliger Code beim Passwort-Login erforderlich)'
+                  : 'Optional – schützt die Anmeldung mit Benutzername & Passwort'}
+              </div>
+            </div>
+            {!initialTotpEnabled && !totpSetupSecret && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => void startTotpSetup()}
+                className="h-8 text-xs"
+              >
+                2FA einrichten
+              </Button>
+            )}
+          </div>
+
+          {totpSetupSecret && !initialTotpEnabled && (
+            <div className="space-y-2.5 border-t pt-2.5 text-xs">
+              <p className="text-muted-foreground">
+                1. Öffne deine Authenticator-App (z.B. Google Authenticator, Apple Passwörter, Bitwarden, Ente Auth, Aegis) und füge diesen Setup-Schlüssel hinzu:
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="rounded border bg-muted px-2.5 py-1.5 font-mono text-xs select-all">
+                  {totpSetupSecret}
+                </code>
+                {totpOtpauthUri && (
+                  <a
+                    href={totpOtpauthUri}
+                    className="text-primary underline font-medium text-xs"
+                  >
+                    In Authenticator-App öffnen
+                  </a>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="6-stelliger Code"
+                  value={totpCodeInput}
+                  onChange={e => setTotpCodeInput(e.target.value)}
+                  className="h-8 w-40 rounded-md border bg-background px-2.5 font-mono text-xs"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={busy || totpCodeInput.trim().length < 6}
+                  onClick={() => void confirmTotpEnable()}
+                  className="h-8 text-xs"
+                >
+                  Code prüfen &amp; 2FA aktivieren
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => {
+                    setTotpSetupSecret('')
+                    setTotpOtpauthUri('')
+                  }}
+                  className="h-8 text-xs"
+                >
+                  Abbrechen
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {initialTotpEnabled && (
+            <div className="flex flex-wrap items-center gap-2 border-t pt-2.5 text-xs">
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="Aktueller 6-stelliger 2FA-Code"
+                value={totpDisableCode}
+                onChange={e => setTotpDisableCode(e.target.value)}
+                className="h-8 w-48 rounded-md border bg-background px-2.5 font-mono text-xs"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy || (!totpDisableCode.trim() && !currentPassword)}
+                onClick={() => void disableTotp()}
+                className="h-8 text-xs text-destructive hover:text-destructive"
+              >
+                2FA deaktivieren
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 

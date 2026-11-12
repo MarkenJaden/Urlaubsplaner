@@ -3,8 +3,25 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { signIn } from 'next-auth/react'
-import { KeyRound, ArrowRight, ShieldCheck, Eye, EyeOff, Mail, AlertTriangle, CheckCircle2 } from 'lucide-react'
+import { KeyRound, ArrowRight, ShieldCheck, Eye, EyeOff, Mail, AlertTriangle, CheckCircle2, Fingerprint } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+
+function base64UrlToUint8Array(base64Url: string): Uint8Array<ArrayBuffer> {
+  const padding = '='.repeat((4 - (base64Url.length % 4)) % 4)
+  const base64 = (base64Url + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const raw = atob(base64)
+  const buffer = new ArrayBuffer(raw.length)
+  const bytes = new Uint8Array(buffer)
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i)
+  return bytes
+}
+
+function arrayBufferToBase64Url(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
 
 export function CredentialsForm({
   mode,
@@ -24,6 +41,8 @@ export function CredentialsForm({
   const [registerWithoutEmail, setRegisterWithoutEmail] = useState(false)
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [totpStepRequired, setTotpStepRequired] = useState(false)
+  const [totpCode, setTotpCode] = useState('')
   const [recoveryInput, setRecoveryInput] = useState('')
   const [recoveryKey, setRecoveryKey] = useState('')
   const [recoverTab, setRecoverTab] = useState<'email' | 'key'>(smtpEnabled ? 'email' : 'key')
@@ -55,9 +74,106 @@ export function CredentialsForm({
 
   async function login(customIdentifier?: string) {
     const loginId = customIdentifier || username || email
-    const result = await signIn('credentials', { username: loginId, password, redirect: false })
-    if (result?.error) throw new Error('Anmeldung fehlgeschlagen. Prüfe deine Angaben oder versuche es später erneut.')
+    if (!totpStepRequired && !totpCode.trim()) {
+      const preRes = await fetch('/api/account/totp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'precheck', username: loginId, password }),
+      }).catch(() => null)
+      if (preRes?.ok) {
+        const preData = (await preRes.json()) as { requiresTotp?: boolean }
+        if (preData.requiresTotp) {
+          setTotpStepRequired(true)
+          return
+        }
+      }
+    }
+    const result = await signIn('credentials', {
+      username: loginId,
+      password,
+      totpCode: totpCode.trim(),
+      redirect: false,
+    })
+    if (result?.error) {
+      throw new Error(
+        totpStepRequired
+          ? 'Ungültiger 2FA-Code oder Wiederherstellungsschlüssel.'
+          : 'Anmeldung fehlgeschlagen. Prüfe deine Angaben oder versuche es später erneut.',
+      )
+    }
     window.location.assign('/')
+  }
+
+  async function loginWithPasskey() {
+    if (typeof window === 'undefined' || !window.PublicKeyCredential) {
+      setError('Dein Browser oder Gerät unterstützt leider keine Passkeys (WebAuthn).')
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      const optRes = await fetch('/api/account/passkeys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'auth_options', username: username.trim() }),
+      })
+      const optData = await optRes.json()
+      if (!optRes.ok) throw new Error(optData.error || 'Passkey-Anmeldung konnte nicht gestartet werden.')
+
+      const publicKeyOptions: PublicKeyCredentialRequestOptions = {
+        challenge: base64UrlToUint8Array(optData.challenge),
+        rpId: optData.rpId,
+        userVerification: 'preferred',
+        timeout: 60000,
+        ...(Array.isArray(optData.allowCredentials) && optData.allowCredentials.length > 0
+          ? {
+              allowCredentials: optData.allowCredentials.map((c: { id: string; transports?: AuthenticatorTransport[] }) => ({
+                type: 'public-key' as const,
+                id: base64UrlToUint8Array(c.id),
+                ...(c.transports ? { transports: c.transports } : {}),
+              })),
+            }
+          : {}),
+      }
+
+      const credential = (await navigator.credentials.get({
+        publicKey: publicKeyOptions,
+      })) as PublicKeyCredential | null
+      if (!credential) throw new Error('Kein Passkey ausgewählt.')
+
+      const assertion = credential.response as AuthenticatorAssertionResponse
+      const verifyRes = await fetch('/api/account/passkeys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'auth_verify',
+          token: optData.token,
+          credentialId: arrayBufferToBase64Url(credential.rawId),
+          clientDataJSON: arrayBufferToBase64Url(assertion.clientDataJSON),
+          authenticatorData: arrayBufferToBase64Url(assertion.authenticatorData),
+          signature: arrayBufferToBase64Url(assertion.signature),
+        }),
+      })
+      const verifyData = await verifyRes.json()
+      if (!verifyRes.ok || !verifyData.passkeyLoginToken) {
+        throw new Error(verifyData.error || 'Passkey konnte nicht verifiziert werden.')
+      }
+
+      const result = await signIn('credentials', {
+        passkeyLoginToken: verifyData.passkeyLoginToken,
+        redirect: false,
+      })
+      if (result?.error) throw new Error('Passkey-Sitzung konnte nicht erstellt werden.')
+      window.location.assign('/')
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'NotAllowedError') {
+        setError('Passkey-Vorgang wurde abgebrochen.')
+      } else {
+        setError(err instanceof Error ? err.message : 'Passkey-Anmeldung fehlgeschlagen.')
+      }
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function submit(event: React.FormEvent) {
@@ -208,8 +324,45 @@ export function CredentialsForm({
           </div>
         ) : (
           <>
+            {mode === 'login' && !showSocial && (
+              <div className="space-y-2.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  className="w-full justify-center gap-2 border-primary/30 hover:border-primary"
+                  onClick={() => void loginWithPasskey()}
+                >
+                  <Fingerprint className="h-4 w-4 text-primary" />
+                  Mit Passkey anmelden (FaceID / TouchID / Gerät)
+                </Button>
+                <div className="relative py-1">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">
+                      oder mit Benutzername &amp; Passwort
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {showSocial && (
               <div className="space-y-2.5">
+                {mode === 'login' && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={busy}
+                    className="w-full justify-center gap-2 border-primary/30 hover:border-primary"
+                    onClick={() => void loginWithPasskey()}
+                  >
+                    <Fingerprint className="h-4 w-4 text-primary" />
+                    Mit Passkey anmelden (FaceID / TouchID / Gerät)
+                  </Button>
+                )}
                 {googleEnabled && (
                   <Button
                     type="button"
@@ -392,6 +545,30 @@ export function CredentialsForm({
                     </div>
                   </label>
                   {mode !== 'login' && <p className="mt-1 text-xs text-muted-foreground">Mindestens 6 Zeichen.</p>}
+                </div>
+              )}
+
+              {mode === 'login' && totpStepRequired && (
+                <div className="rounded-xl border border-primary/40 bg-primary/5 p-3.5 space-y-2">
+                  <label className="block space-y-1 text-sm font-medium">
+                    <span className="flex items-center gap-1.5 text-primary">
+                      <ShieldCheck className="h-4 w-4" />
+                      Zwei-Faktor-Code (Authenticator-App)
+                    </span>
+                    <input
+                      required
+                      autoFocus
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="6-stelliger Code (oder Notfall-Schlüssel)"
+                      value={totpCode}
+                      onChange={e => setTotpCode(e.target.value)}
+                      className="min-h-11 w-full rounded-lg border bg-background px-3 font-mono text-sm tracking-widest"
+                    />
+                  </label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Gib den 6-stelligen Code aus deiner Authenticator-App (oder deinen Wiederherstellungsschlüssel) ein.
+                  </p>
                 </div>
               )}
 
