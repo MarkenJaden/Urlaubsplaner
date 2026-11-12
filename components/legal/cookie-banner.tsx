@@ -156,7 +156,7 @@ export function CookieBanner() {
             </div>
 
             <p className="mt-3 text-xs sm:text-sm text-muted-foreground leading-relaxed">
-              Wir nutzen technisch notwendige Speicherfunktionen (LocalStorage &amp; Sitzungs-Cookies), damit deine Urlaubsplanung auf deinem Gerät und in deinem Konto zuverlässig funktioniert. Mit deiner freiwilligen Einwilligung helfen uns datenschutzfreundliche, selbst gehostete Statistiken (ohne Werbe-Tracking oder Weigergabe an Dritte), den Urlaubsplaner weiter zu verbessern. Du kannst deine Auswahl jederzeit im Footer unter „Cookie-Einstellungen“ ändern.
+              Wir nutzen technisch notwendige Speicherfunktionen (LocalStorage &amp; Sitzungs-Cookies), damit deine Urlaubsplanung auf deinem Gerät und in deinem Konto zuverlässig funktioniert. Mit deiner freiwilligen Einwilligung helfen uns datenschutzfreundliche, selbst gehostete Statistiken (ohne Werbe-Tracking oder Weitergabe an Dritte), den Urlaubsplaner weiter zu verbessern. Du kannst deine Auswahl jederzeit im Footer unter „Cookie-Einstellungen“ ändern.
             </p>
 
             {detailsOpen && (
@@ -208,7 +208,7 @@ export function CookieBanner() {
                     onCheckedChange={setAnalyticsChecked}
                     aria-label="Anonyme Nutzungsstatistik"
                   />
-                </div>
+                                </div>
               </div>
             )}
 
