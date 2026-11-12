@@ -19,11 +19,25 @@ describe('school holiday intervals', () => {
     const h2: Holiday = { id: '2', startDate: '2026-07-05', endDate: '2026-07-15', type: 'School', name: [{ language: 'DE', text: 'Sommer Inseln' }], nationwide: false }
     expect(countUniqueHolidayDays([h1, h2], 2026)).toBe(15)
   })
-  it('detects island and localized special exceptions', () => {
+  it('detects island and localized special exceptions via comments or Exception tags', () => {
     const regular: Holiday = { id: 'reg', startDate: '2026-07-01', endDate: '2026-08-10', type: 'School', name: [{ language: 'DE', text: 'Sommer' }], nationwide: false }
     const island: Holiday = { ...regular, id: 'isl', comment: [{ language: 'DE', text: 'Inseln Sylt, Föhr, Amrum, Helgoland und die Halligen' }] }
+    const taggedException: Holiday = { ...regular, id: 'tag', tags: ['Exception'] }
     expect(isSpecialLocalHoliday(regular)).toBe(false)
     expect(isSpecialLocalHoliday(island)).toBe(true)
+    expect(isSpecialLocalHoliday(taggedException)).toBe(true)
+  })
+  it('preserves tags, temporalScope and regionalScope from upstream response', () => {
+    const raw = {
+      ...holiday,
+      tags: ['OneTime', 'Recommended'],
+      temporalScope: 'HalfDay',
+      regionalScope: 'Local',
+    }
+    const [normalized] = normalizeHolidays([raw], 2026)
+    expect(normalized.tags).toEqual(['OneTime', 'Recommended'])
+    expect(normalized.temporalScope).toBe('HalfDay')
+    expect(normalized.regionalScope).toBe('Local')
   })
   it('rejects malformed upstream data instead of claiming no holidays exist', () => {
     expect(() => normalizeHolidays([{ ...holiday, startDate: 'invalid' }], 2026)).toThrow()

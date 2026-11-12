@@ -22,17 +22,21 @@ export function normalizeHolidays(input: unknown, year: number): Holiday[] {
       id: item.id, type: item.type, name: item.name, nationwide: Boolean(item.nationwide),
       ...(Array.isArray(item.groups) ? { groups: item.groups.filter(isReference).map(({ code, shortName }: RegionReference) => ({ code, shortName })) } : {}),
       ...(Array.isArray(item.comment) ? { comment: item.comment.filter((c: unknown) => c && typeof (c as { language?: unknown; text?: unknown }).language === 'string' && typeof (c as { language?: unknown; text?: unknown }).text === 'string') } : {}),
+      ...(Array.isArray(item.tags) ? { tags: item.tags.filter((t: unknown): t is string => typeof t === 'string') } : {}),
+      ...(item.temporalScope === 'FullDay' || item.temporalScope === 'HalfDay' ? { temporalScope: item.temporalScope } : {}),
+      ...(item.regionalScope === 'National' || item.regionalScope === 'Regional' || item.regionalScope === 'Local' ? { regionalScope: item.regionalScope } : {}),
       startDate: item.startDate < from ? from : item.startDate, endDate: item.endDate > to ? to : item.endDate,
     })
   }
   return [...result.values()]
 }
 
-/** Check if holiday is a localized special exception (e.g. North Sea islands). */
+/** Check if holiday is a localized special exception (e.g. North Sea islands or local school exceptions). */
 export function isSpecialLocalHoliday(holiday: Holiday): boolean {
+  if (holiday.tags?.includes('Exception')) return true
   return Boolean(
     holiday.comment?.some(
-      c => c.text && (c.text.includes('Inseln') || c.text.includes('Halligen')),
+      c => c.text && (c.text.includes('Inseln') || c.text.includes('Halligen') || c.text.includes('Ausnahmeregelung')),
     ),
   )
 }

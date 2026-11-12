@@ -134,6 +134,9 @@ export interface Holiday {
   subdivisions?: RegionReference[]
   groups?: RegionReference[]
   comment?: LocalizedText[]
+  tags?: string[]
+  temporalScope?: 'FullDay' | 'HalfDay'
+  regionalScope?: 'National' | 'Regional' | 'Local'
 }
 
 export interface Subdivision {
