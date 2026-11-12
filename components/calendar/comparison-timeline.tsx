@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   eachDayOfInterval,
   endOfMonth,
@@ -10,7 +10,7 @@ import {
   differenceInCalendarDays,
 } from 'date-fns'
 import { de } from 'date-fns/locale'
-import { Users, Sun, GraduationCap, Sparkles, CheckCircle2 } from 'lucide-react'
+import { Users, Sun, GraduationCap, Sparkles, CheckCircle2, ChevronDown, ChevronUp, Layers } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -43,6 +43,8 @@ interface DateWindow {
   days: number
   label?: string
 }
+
+type SchoolRowFilterMode = 'active_in_month' | 'own_vacation_overlap' | 'all' | 'density_only'
 
 function buildHolidayMap(holidays: Holiday[]): Map<string, string> {
   const map = new Map<string, string>()
@@ -103,6 +105,10 @@ export function ComparisonTimeline({
   onToggle,
   onOpenSuggestions,
 }: ComparisonTimelineProps) {
+  const [showAllCardBadges, setShowAllCardBadges] = useState(false)
+  const [schoolRowMode, setSchoolRowMode] = useState<SchoolRowFilterMode>('active_in_month')
+  const [expandedMonths, setExpandedMonths] = useState<Record<number, boolean>>({})
+
   const activeOverlays = useMemo(() => overlays.filter(o => o.enabled), [overlays])
 
   const yearDays = useMemo(
@@ -176,7 +182,6 @@ export function ComparisonTimeline({
   const jointFreeWindows = useMemo(() => {
     if (overlayMaps.length === 0) return []
     const raw = findContiguousWindows(yearDays, k => jointFreeDateSet.has(k), 3)
-    // Filter to windows where at least the viewer or a partner has at least 1 planned entry
     return raw.filter(win => {
       const span = eachDayOfInterval({ start: parseISO(win.startDate), end: parseISO(win.endDate) }).map(d =>
         format(d, 'yyyy-MM-dd'),
@@ -194,7 +199,13 @@ export function ComparisonTimeline({
 
   // School holiday density & off-peak windows (May 1 – Oct 31)
   const allSchoolRegionRows = useMemo(() => {
-    const rows: Array<{ label: string; map: Map<string, string>; totalWeekdays: number; totalDays: number }> = []
+    const rows: Array<{
+      label: string
+      isHome: boolean
+      map: Map<string, string>
+      totalWeekdays: number
+      totalDays: number
+    }> = []
     const countStats = (m: Map<string, string>) => {
       let totalDays = 0
       let totalWeekdays = 0
@@ -210,14 +221,14 @@ export function ComparisonTimeline({
 
     if (homeSchoolMap.size > 0) {
       const stats = countStats(homeSchoolMap)
-      rows.push({ label: `${homeRegionLabel} (Eigene)`, map: homeSchoolMap, ...stats })
+      rows.push({ label: `${homeRegionLabel} (Eigene)`, isHome: true, map: homeSchoolMap, ...stats })
     }
     for (let i = 0; i < compareSchoolMaps.length; i++) {
       const m = compareSchoolMaps[i]
       const label = compareLabels[i] ?? `Region ${i + 1}`
       if (label === homeRegionLabel) continue
       const stats = countStats(m)
-      rows.push({ label, map: m, ...stats })
+      rows.push({ label, isHome: false, map: m, ...stats })
     }
     return rows
   }, [homeSchoolMap, homeRegionLabel, compareSchoolMaps, compareLabels, yearDays])
@@ -244,6 +255,10 @@ export function ComparisonTimeline({
   }, [allSchoolRegionRows, yearDays])
 
   const months = useMemo(() => Array.from({ length: 12 }, (_, i) => new Date(year, i, 1)), [year])
+
+  const visibleCardRows = showAllCardBadges
+    ? allSchoolRegionRows
+    : allSchoolRegionRows.slice(0, 6)
 
   return (
     <div className="space-y-4">
@@ -332,12 +347,29 @@ export function ComparisonTimeline({
           ) : (
             <div className="space-y-2 text-xs">
               <div className="flex flex-wrap gap-1.5">
-                {allSchoolRegionRows.slice(0, 6).map(r => (
+                {visibleCardRows.map(r => (
                   <span key={r.label} className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-0.5 text-[11px]">
                     <strong className="text-foreground">{r.label}:</strong>
-                    <span className="text-muted-foreground">{r.totalDays} Ferientage ({r.totalWeekdays} WT)</span>
+                    <span className="text-muted-foreground">{r.totalDays}T ({r.totalWeekdays} WT)</span>
                   </span>
                 ))}
+                {allSchoolRegionRows.length > 6 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllCardBadges(v => !v)}
+                    className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/15"
+                  >
+                    {showAllCardBadges ? (
+                      <>
+                        <ChevronUp className="h-3 w-3" /> Weniger anzeigen
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-3 w-3" /> +{allSchoolRegionRows.length - 6} weitere Regionen
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
               {schoolOverlapWindows.length > 0 && (
                 <p className="text-[11px] text-sky-700 dark:text-sky-300">
@@ -354,7 +386,7 @@ export function ComparisonTimeline({
 
       {/* 12-Month Horizontal Bar Timeline */}
       <div className="rounded-xl border bg-card p-3.5 shadow-2xs space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-2.5">
           <div>
             <h3 className="text-sm font-semibold text-foreground">
               Jahres-Timeline {year}: Wer hat wann Urlaub &amp; Schulferien?
@@ -363,29 +395,102 @@ export function ComparisonTimeline({
               Klicke in der Zeile „Mein Plan“ auf einen Tag, um {selectedType === 'vacation' ? 'Urlaub' : selectedType === 'gleittag' ? 'Gleittage' : selectedType === 'special' ? 'Sonderurlaub' : 'Notizen'} direkt ein- oder auszutragen.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+
+          {allSchoolRegionRows.length > 1 && (
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground flex items-center gap-1">
+                <Layers className="h-3.5 w-3.5" />
+                Bundesländer-Zeilen ({allSchoolRegionRows.length}):
+              </span>
+              <div className="inline-flex flex-wrap rounded-lg border bg-muted/40 p-0.5 gap-0.5">
+                {([
+                  { id: 'active_in_month', label: 'Nur mit Ferien im Monat' },
+                  { id: 'own_vacation_overlap', label: 'Nur bei meinem Urlaub' },
+                  { id: 'density_only', label: 'Kompakt (Dichte-Balken)' },
+                  { id: 'all', label: `Alle ${allSchoolRegionRows.length} einzeln` },
+                ] as const).map(opt => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setSchoolRowMode(opt.id)}
+                    className={`rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                      schoolRowMode === opt.id
+                        ? 'bg-primary text-primary-foreground shadow-2xs'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-3">
             <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-xs bg-blue-600" /> Mein Urlaub</span>
             <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-xs bg-purple-600" /> Gleittag</span>
             <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-xs bg-emerald-500/60" /> Feiertag</span>
             {activeOverlays.length > 0 && (
               <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-xs bg-emerald-500" /> 🤝 Gemeinsam frei</span>
             )}
-            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-xs bg-amber-400/70" /> Schulferien</span>
+            <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-xs bg-amber-400/75" /> Einzelne Schulferien</span>
           </div>
+          {allSchoolRegionRows.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium text-foreground">🌡️ Ferien-Dichte:</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-xs bg-lime-400/80" /> 1–25%</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-xs bg-amber-400/85" /> 26–50%</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-xs bg-orange-500/85" /> 51–75%</span>
+              <span className="flex items-center gap-1"><span className="h-2.5 w-2.5 rounded-xs bg-rose-500/90" /> &gt;75%</span>
+            </div>
+          )}
         </div>
 
         <div className="space-y-3 overflow-x-auto">
-          {months.map(monthDate => {
+          {months.map((monthDate, monthIdx) => {
             const daysInMonth = eachDayOfInterval({
               start: startOfMonth(monthDate),
               end: endOfMonth(monthDate),
             })
+            const monthDayKeys = daysInMonth.map(d => format(d, 'yyyy-MM-dd'))
             const monthLabel = format(monthDate, 'MMMM', { locale: de })
+
+            // Filter which individual school holiday rows to show in this month
+            const activeInMonthRows = allSchoolRegionRows.filter(
+              r => r.isHome || monthDayKeys.some(k => r.map.has(k)),
+            )
+            const overlapWithOwnVacationRows = allSchoolRegionRows.filter(
+              r =>
+                r.isHome ||
+                monthDayKeys.some(k => {
+                  const own = ownEntryByDate.get(k)
+                  const hasOwnLeave = own && own.type !== 'note'
+                  return hasOwnLeave && r.map.has(k)
+                }),
+            )
+
+            const candidateRows =
+              schoolRowMode === 'density_only'
+                ? allSchoolRegionRows.filter(r => r.isHome)
+                : schoolRowMode === 'all'
+                  ? allSchoolRegionRows
+                  : schoolRowMode === 'own_vacation_overlap'
+                    ? overlapWithOwnVacationRows
+                    : activeInMonthRows
+
+            const isMonthExpanded = Boolean(expandedMonths[monthIdx]) || schoolRowMode === 'all'
+            const maxDefaultRows = 5
+            const visibleSchoolRows = isMonthExpanded
+              ? candidateRows
+              : candidateRows.slice(0, maxDefaultRows)
+            const hiddenSchoolRowCount = Math.max(0, candidateRows.length - visibleSchoolRows.length)
 
             return (
               <div key={monthDate.toISOString()} className="min-w-[640px] rounded-lg border border-border/60 bg-muted/10 p-2 space-y-1">
                 {/* Month Header & Day Numbers */}
-                <div className="grid grid-cols-[9.5rem_1fr] items-center gap-2">
+                <div className="grid grid-cols-[11rem_1fr] items-center gap-2">
                   <span className="text-xs font-bold capitalize text-foreground truncate">{monthLabel}</span>
                   <div
                     className="grid gap-0.5"
@@ -414,7 +519,7 @@ export function ComparisonTimeline({
                 </div>
 
                 {/* Row 1: Own Plan */}
-                <div className="grid grid-cols-[9.5rem_1fr] items-center gap-2">
+                <div className="grid grid-cols-[11rem_1fr] items-center gap-2">
                   <span className="text-[11px] font-medium text-foreground truncate">Mein Plan</span>
                   <div
                     className="grid gap-0.5"
@@ -454,7 +559,7 @@ export function ComparisonTimeline({
 
                 {/* Partner Rows */}
                 {overlayMaps.map(({ overlay, byDate, workDays: ovWorkDays }) => (
-                  <div key={overlay.id} className="grid grid-cols-[9.5rem_1fr] items-center gap-2">
+                  <div key={overlay.id} className="grid grid-cols-[11rem_1fr] items-center gap-2">
                     <span className="text-[11px] font-medium truncate flex items-center gap-1.5">
                       <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: overlay.color }} />
                       <span className="truncate">{overlay.label}</span>
@@ -491,7 +596,7 @@ export function ComparisonTimeline({
 
                 {/* Joint Free Overlap Row */}
                 {overlayMaps.length > 0 && (
-                  <div className="grid grid-cols-[9.5rem_1fr] items-center gap-2">
+                  <div className="grid grid-cols-[11rem_1fr] items-center gap-2">
                     <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 truncate">
                       🤝 Gemeinsam frei
                     </span>
@@ -516,10 +621,56 @@ export function ComparisonTimeline({
                   </div>
                 )}
 
-                {/* School Holiday Rows (Home + up to 5 compared states) */}
-                {allSchoolRegionRows.slice(0, 6).map(regionRow => (
-                  <div key={regionRow.label} className="grid grid-cols-[9.5rem_1fr] items-center gap-2">
-                    <span className="text-[10px] text-muted-foreground truncate" title={`Schulferien ${regionRow.label}`}>
+                {/* Aggregated School Holiday Density Row covering ALL selected regions */}
+                {allSchoolRegionRows.length > 1 && (
+                  <div className="grid grid-cols-[11rem_1fr] items-center gap-2">
+                    <span
+                      className="text-[10px] font-semibold text-amber-800 dark:text-amber-300 truncate"
+                      title={`Aggregierte Ferien-Auslastung über alle ${allSchoolRegionRows.length} ausgewählten Regionen`}
+                    >
+                      🌡️ Ferien-Dichte ({allSchoolRegionRows.length} Reg.)
+                    </span>
+                    <div
+                      className="grid gap-0.5"
+                      style={{ gridTemplateColumns: `repeat(${daysInMonth.length}, minmax(0, 1fr))` }}
+                    >
+                      {daysInMonth.map(d => {
+                        const k = format(d, 'yyyy-MM-dd')
+                        const activeRegions = allSchoolRegionRows.filter(r => r.map.has(k))
+                        const count = activeRegions.length
+                        const ratio = count / allSchoolRegionRows.length
+                        let heatClass = 'bg-background/35'
+                        if (count > 0) {
+                          if (ratio <= 0.25) heatClass = 'bg-lime-400/80 dark:bg-lime-500/60'
+                          else if (ratio <= 0.5) heatClass = 'bg-amber-400/85 dark:bg-amber-500/70'
+                          else if (ratio <= 0.75) heatClass = 'bg-orange-500/85 dark:bg-orange-500/75'
+                          else heatClass = 'bg-rose-500/90 dark:bg-rose-500/85'
+                        }
+                        const tooltip =
+                          count > 0
+                            ? `${format(d, 'dd.MM.yyyy')}: ${count}/${allSchoolRegionRows.length} Regionen in Ferien (${activeRegions.map(r => r.label.replace(' (Eigene)', '')).join(', ')})`
+                            : `${format(d, 'dd.MM.yyyy')}: 0/${allSchoolRegionRows.length} Regionen in Ferien`
+                        return (
+                          <div
+                            key={k}
+                            title={tooltip}
+                            className={`h-3 rounded-xs ${heatClass}`}
+                          />
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Individual School Holiday Rows */}
+                {visibleSchoolRows.map(regionRow => (
+                  <div key={regionRow.label} className="grid grid-cols-[11rem_1fr] items-center gap-2">
+                    <span
+                      className={`text-[10px] truncate ${
+                        regionRow.isHome ? 'font-semibold text-foreground' : 'text-muted-foreground'
+                      }`}
+                      title={`Schulferien ${regionRow.label}`}
+                    >
                       🏫 {regionRow.label}
                     </span>
                     <div
@@ -535,7 +686,9 @@ export function ComparisonTimeline({
                             title={holidayName ? `${regionRow.label}: ${holidayName} (${format(d, 'dd.MM.')})` : undefined}
                             className={`h-2.5 rounded-xs ${
                               holidayName
-                                ? 'bg-amber-400/75 dark:bg-amber-400/55'
+                                ? regionRow.isHome
+                                  ? 'bg-sky-500/80 dark:bg-sky-400/70'
+                                  : 'bg-amber-400/75 dark:bg-amber-400/55'
                                 : 'bg-background/40'
                             }`}
                           />
@@ -544,6 +697,29 @@ export function ComparisonTimeline({
                     </div>
                   </div>
                 ))}
+
+                {/* Expand/Collapse button when more regions have school holidays in this month */}
+                {(hiddenSchoolRowCount > 0 || Boolean(expandedMonths[monthIdx])) && schoolRowMode !== 'all' && (
+                  <div className="pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedMonths(prev => ({ ...prev, [monthIdx]: !prev[monthIdx] }))
+                      }
+                      className="inline-flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+                    >
+                      {expandedMonths[monthIdx] ? (
+                        <>
+                          <ChevronUp className="h-3 w-3" /> Weniger Bundesländer in {monthLabel} zeigen
+                        </>
+                      ) : (
+                        <>
+                          <ChevronDown className="h-3 w-3" /> +{hiddenSchoolRowCount} weitere Regionen mit Ferien im {monthLabel} aufklappen
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
               </div>
             )
           })}

@@ -11,6 +11,7 @@ import { ClipboardExportDialog } from '@/components/calendar/clipboard-export-di
 import { ShareDialog, GUEST_OWNED_SHARES_STORAGE_KEY, type StoredShareLink } from '@/components/calendar/share-dialog'
 import { SubscribeDialog } from '@/components/calendar/subscribe-dialog'
 import { ScorecardDialog } from '@/components/calendar/scorecard-dialog'
+import { ApprovalSheetDialog } from '@/components/calendar/approval-sheet-dialog'
 import { PrintSummaryHeader, PrintSummaryFooter } from '@/components/calendar/print-summary'
 import { ComparisonTimeline } from '@/components/calendar/comparison-timeline'
 import { computePlanScorecard } from '@/lib/vacation-scorecard'
@@ -303,6 +304,7 @@ export function CalendarClient({
   const [showShareDialog, setShowShareDialog] = useState(false)
   const [showSubscribeDialog, setShowSubscribeDialog] = useState(false)
   const [showScorecardDialog, setShowScorecardDialog] = useState(false)
+  const [showApprovalSheetDialog, setShowApprovalSheetDialog] = useState(false)
   const [printMode, setPrintMode] = useState<'calendar' | 'request'>('calendar')
   const [viewMode, setViewMode] = useState<'grid' | 'timeline'>('grid')
   const [arrivedViaShareLabel, setArrivedViaShareLabel] = useState<string | null>(null)
@@ -1103,9 +1105,9 @@ export function CalendarClient({
   }, [activeCollab, collabMode, isLoggedIn, entries, localConfig, addMutation, removeMutation, updateLocalEntries, defaultNoteText, halfDaysChristmas, recordUndo])
 
   // Multi-day Drag-to-Select & Shift+Click range handler for vacation, gleittag, and multi-day notes/events
-  const handleSelectRange = useCallback((startDateKey: string, endDateKey: string, type: EntryType) => {
-    const firstKey = startDateKey < endDateKey ? startDateKey : endDateKey
-    const lastKey = startDateKey < endDateKey ? endDateKey : startDateKey
+  const handleSelectRange = useCallback((startDateDateKey: string, endDateDateKey: string, type: EntryType) => {
+    const firstKey = startDateDateKey < endDateDateKey ? startDateDateKey : endDateDateKey
+    const lastKey = startDateDateKey < endDateDateKey ? endDateDateKey : startDateDateKey
     const allRangeKeys = eachDayOfInterval({
       start: parseISO(firstKey),
       end: parseISO(lastKey),
@@ -1479,6 +1481,21 @@ export function CalendarClient({
         workDaysLabel={formatWorkDaysLabel(workDays)}
         scorecard={scorecard}
         onOpenSuggestions={() => setShowSuggestions(true)}
+      />
+
+      <ApprovalSheetDialog
+        open={showApprovalSheetDialog}
+        onOpenChange={setShowApprovalSheetDialog}
+        year={year}
+        regionLabel={activeRegionLabel}
+        workDaysLabel={formatWorkDaysLabel(workDays)}
+        scorecard={scorecard}
+        carryoverDays={carryoverDaysTotal}
+        entries={entries}
+        config={config?.approvalSheetConfig}
+        isLoggedIn={isLoggedIn}
+        onSaveConfig={next => updateConfig({ approvalSheetConfig: next })}
+        onTriggerPrint={() => triggerPrint('request')}
       />
 
       <ClipboardExportDialog
@@ -1876,6 +1893,16 @@ export function CalendarClient({
               size="sm"
               variant="outline"
               className="h-7 px-2.5 text-xs gap-1"
+              onClick={() => setShowApprovalSheetDialog(true)}
+            >
+              <StickyNote className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+              Urlaubsantrag (Vorschau &amp; PDF)
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 px-2.5 text-xs gap-1"
               onClick={() => setShowScorecardDialog(true)}
             >
               <Trophy className="h-3.5 w-3.5 text-amber-500" aria-hidden="true" />
@@ -1967,7 +1994,7 @@ export function CalendarClient({
           onOpenSubscribe={() => setShowSubscribeDialog(true)}
           onOpenScorecard={() => setShowScorecardDialog(true)}
           onPrintCalendar={() => triggerPrint('calendar')}
-          onPrintRequestSheet={() => triggerPrint('request')}
+          onPrintRequestSheet={() => setShowApprovalSheetDialog(true)}
           onImport={handleImport}
           onImportConfig={handleImportConfig}
           onReset={handleReset}
@@ -2119,6 +2146,9 @@ export function CalendarClient({
           regionLabel={activeRegionLabel}
           workDaysLabel={formatWorkDaysLabel(workDays)}
           scorecard={scorecard}
+          carryoverDays={carryoverDaysTotal}
+          entries={entries}
+          approvalConfig={config?.approvalSheetConfig}
           mode={printMode}
         />
 

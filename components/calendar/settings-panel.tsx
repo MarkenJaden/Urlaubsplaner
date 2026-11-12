@@ -104,8 +104,9 @@ export function SettingsPanel({
     const timer = setTimeout(() => setRespect(0), 1800)
     return () => clearTimeout(timer)
   }, [respect])
-  const remaining = vacationDaysTotal - vacationDaysUsed
-  const progressPercent = vacationDaysTotal > 0 ? Math.min(100, Math.round((vacationDaysUsed / vacationDaysTotal) * 100)) : 0
+  const effectiveTotal = vacationDaysTotal + carryoverDaysTotal
+  const remaining = effectiveTotal - vacationDaysUsed
+  const progressPercent = effectiveTotal > 0 ? Math.min(100, Math.round((vacationDaysUsed / effectiveTotal) * 100)) : 0
 
   const countryOptions: ComboboxOption[] = useMemo(() =>
     countries.filter(c => c.isoCode !== country).map(c => ({ value: c.isoCode, label: getCountryName(c), aliases: [c.isoCode] })),
@@ -146,9 +147,19 @@ export function SettingsPanel({
           </span>
           <span className="ml-auto mr-2 flex flex-wrap items-center gap-1.5 text-xs font-normal text-muted-foreground">
             <span className="rounded-md border bg-muted/40 px-2 py-0.5 text-foreground font-medium">{activeRegionLabel}</span>
-            <span className="rounded-md border bg-muted/40 px-2 py-0.5">
-              {formatDays(vacationDaysTotal + carryoverDaysTotal)} UT Anspruch
-              {carryoverDaysTotal > 0 ? ` (inkl. ${formatDays(carryoverDaysTotal)} Rest)` : ''}
+            <span className="inline-flex items-center gap-2 rounded-md border bg-muted/40 px-2 py-0.5 text-foreground">
+              <span className="h-1.5 w-14 overflow-hidden rounded-full bg-muted">
+                <span
+                  className={`block h-full ${remaining < 0 ? 'bg-red-500' : 'bg-blue-600'}`}
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </span>
+              <span>
+                <strong>{formatDays(vacationDaysUsed)}</strong>/{formatDays(effectiveTotal)} verplant ·{' '}
+                <strong className={remaining < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}>
+                  {formatDays(remaining)} frei
+                </strong>
+              </span>
             </span>
             {carryoverExpiringDays > 0 && (
               <span className="rounded-md border border-amber-500/50 bg-amber-500/15 px-2 py-0.5 text-amber-800 dark:text-amber-200 font-medium">
@@ -381,7 +392,7 @@ export function SettingsPanel({
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Urlaubsbudget verplant</span>
-                    <span className="font-medium">{progressPercent}% ({formatDays(vacationDaysUsed)} / {formatDays(vacationDaysTotal)})</span>
+                    <span className="font-medium">{progressPercent}% ({formatDays(vacationDaysUsed)} / {formatDays(effectiveTotal)})</span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                     <div

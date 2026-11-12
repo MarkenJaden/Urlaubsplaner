@@ -238,13 +238,13 @@ export function Toolbar({
                 <span className="hidden lg:inline">Kalender-Abo</span>
               </Button>
             )}
-            <DropdownMenu>
+            <DropdownMenu modal={false}>
               <DropdownMenuTrigger asChild>
                 <Button size="icon" variant="outline" className="h-8 w-8" aria-label="Weitere Aktionen">
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuContent align="end" className="w-72">
                 <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
                   Weitergeben & Kopieren
                 </div>
@@ -366,14 +366,53 @@ export function Toolbar({
         </div>
       </div>
 
-      {/* Compact Stats Bar */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border/60 pt-1.5 text-xs">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="text-muted-foreground">Urlaub:</span>
-          <Badge variant={remaining < 0 ? 'destructive' : remaining < 5 ? 'secondary' : 'default'} className="px-1.5 py-0 text-[11px]">
-            {formatDays(vacationDaysUsed)}/{formatDays(vacationDaysTotal)}
-          </Badge>
-          <span className="text-muted-foreground">({formatDays(remaining)} übrig)</span>
+      {/* Prominent Stats & Vacation Budget Progress Bar */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/60 pt-2 text-xs">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="font-medium text-foreground">Urlaubsbudget:</span>
+          <div className="flex items-center gap-2">
+            <div
+              className="h-2.5 w-24 sm:w-36 overflow-hidden rounded-full bg-muted border border-border/60"
+              role="progressbar"
+              aria-valuenow={Math.round(vacationDaysUsed)}
+              aria-valuemin={0}
+              aria-valuemax={Math.max(1, Math.round(vacationDaysTotal))}
+              aria-label="Verplantes Urlaubsbudget"
+            >
+              <div
+                className={`h-full transition-all ${
+                  remaining < 0
+                    ? 'bg-red-500'
+                    : remaining <= 3
+                      ? 'bg-emerald-500'
+                      : 'bg-blue-600'
+                }`}
+                style={{
+                  width: `${
+                    vacationDaysTotal > 0
+                      ? Math.min(100, Math.max(0, Math.round((vacationDaysUsed / vacationDaysTotal) * 100)))
+                      : 0
+                  }%`,
+                }}
+              />
+            </div>
+            <Badge
+              variant={remaining < 0 ? 'destructive' : 'default'}
+              className="px-1.5 py-0 text-[11px] bg-blue-600 hover:bg-blue-600 text-white"
+            >
+              {formatDays(vacationDaysUsed)} / {formatDays(vacationDaysTotal)} verplant
+            </Badge>
+            <Badge
+              variant={remaining < 0 ? 'destructive' : 'secondary'}
+              className={`px-1.5 py-0 text-[11px] font-semibold ${
+                remaining >= 0
+                  ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200'
+                  : ''
+              }`}
+            >
+              {remaining >= 0 ? `${formatDays(remaining)} noch frei` : `${formatDays(Math.abs(remaining))} über Budget`}
+            </Badge>
+          </div>
           {workDaysLabel && (
             <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-normal">
               {workDaysLabel}
