@@ -21,7 +21,7 @@ const openHolidays: Route = url => {
   const group = url.searchParams.get('groupCode')
   switch (url.pathname) {
     case '/Countries': return [{ isoCode: 'DE', name: [], officialLanguages: ['DE'] }, { isoCode: 'NL', name: [], officialLanguages: ['NL'] }]
-    case '/Subdivisions': return country === 'NL' ? nlSubdivisions : [{ code: 'DE-BY', shortName: 'BY', name: [] }]
+    case '/Subdivisions': return country === 'NL' ? nlSubdivisions : [{ code: 'DE-BY', shortName: 'BY', name: [] }, { code: 'DE-MV', shortName: 'MV', name: [] }]
     case '/Groups': return country === 'NL' ? nlGroups : deGroups
     case '/SchoolHolidays': return country === 'NL' ? nlSchoolHolidays2026.filter(h => !group || h.groups?.some(g => g.code === group)) : []
     case '/PublicHolidays': return country === 'NL' ? nlPublicHolidays2026 : []
@@ -62,6 +62,7 @@ describe('OpenHolidays school holidays by group', () => {
     expect(await resolveSchoolGroup('NL', 'NL-UT')).toBeUndefined()
     expect(await resolveSchoolGroup('NL', 'NL-UT', 'NL-MI')).toBe('NL-MI')
     expect(await resolveSchoolGroup('DE', 'DE-BY')).toBeUndefined()
+    expect(await resolveSchoolGroup('DE', 'DE-MV')).toBe('DE-MV-ABS')
   })
 })
 

@@ -1,12 +1,13 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { differenceInCalendarDays, format, parseISO } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
 import { fetchHolidays, resolveSchoolGroup } from '@/lib/holiday-api'
 import { localizedName } from '@/lib/holiday-regions'
+import { countUniqueHolidayDays, isSpecialLocalHoliday } from '@/lib/holidays'
 import {
   SEO_REGIONS,
   buildPlannerHref,
@@ -78,21 +79,21 @@ export default async function SchulferienYearPage({ params }: PageProps) {
         const list = region.subdivision
           ? await fetchHolidays(region.country, region.subdivision, year, 'school', group).catch(() => [] as Holiday[])
           : []
-        const totalCalendarDays = list.reduce(
-          (sum, h) => sum + Math.max(1, differenceInCalendarDays(parseISO(h.endDate), parseISO(h.startDate)) + 1),
-          0,
-        )
-        const summer = list.find(h => localizedName(h.name).toLowerCase().includes('sommer'))
-        const easter = list.find(h => localizedName(h.name).toLowerCase().includes('oster') || localizedName(h.name).toLowerCase().includes('frühjahrs'))
-        const autumn = list.find(h => localizedName(h.name).toLowerCase().includes('herbst'))
+        // State-wide regular school schedule: filter island/local special exceptions
+        const mainlandList = list.filter(h => !isSpecialLocalHoliday(h))
+        const effectiveList = mainlandList.length ? mainlandList : list
+        const totalCalendarDays = countUniqueHolidayDays(effectiveList, year)
+        const summer = effectiveList.find(h => localizedName(h.name).toLowerCase().includes('sommer'))
+        const easter = effectiveList.find(h => localizedName(h.name).toLowerCase().includes('oster') || localizedName(h.name).toLowerCase().includes('frühjahrs'))
+        const autumn = effectiveList.find(h => localizedName(h.name).toLowerCase().includes('herbst'))
         return {
           region,
-          periodsCount: list.length,
+          periodsCount: effectiveList.length,
           totalCalendarDays,
           summer,
           easter,
           autumn,
-          holidays: list,
+          holidays: effectiveList,
         }
       } catch {
         return {

@@ -34,7 +34,11 @@ export const fetchGroups = (country: string) => requestList<HolidayGroup>('Group
  */
 export async function fetchHolidays(country: string, subdivision: string | null | undefined, year: number, type: 'public' | 'school', group?: string | null) {
   const params: Record<string, string> = { countryIsoCode: country, validFrom: `${year}-01-01`, validTo: `${year}-12-31`, languageIsoCode: 'DE' }
-  if (type === 'school' && group) params.groupCode = group
+  let effectiveGroup = group
+  if (type === 'school' && !effectiveGroup && subdivision === 'DE-MV') {
+    effectiveGroup = 'DE-MV-ABS'
+  }
+  if (type === 'school' && effectiveGroup) params.groupCode = effectiveGroup
   else if (subdivision) params.subdivisionCode = subdivision
   try { return normalizeHolidays(await request(type === 'school' ? 'SchoolHolidays' : 'PublicHolidays', params), year) }
   catch (error) { throw error instanceof HolidayProviderError ? error : new HolidayProviderError('Invalid holiday provider response') }
@@ -63,5 +67,12 @@ export async function resolveSchoolGroup(country: string, subdivision?: string |
   const groups = await fetchGroups(country)
   if (!groups.length) return undefined
   const subdivisions = subdivision ? await fetchSubdivisions(country) : []
-  return resolveHolidayGroup(groups, subdivisions, subdivision ?? undefined, preferred ?? undefined).group
+  const resolved = resolveHolidayGroup(groups, subdivisions, subdivision ?? undefined, preferred ?? undefined)
+  if (resolved.group) return resolved.group
+  // For German subdivisions with multiple school types (e.g. DE-MV), default to Allgemeinbildende Schulen (*-ABS)
+  if (country === 'DE' && resolved.candidates.length) {
+    const abs = resolved.candidates.find(c => c.code.endsWith('-ABS'))
+    if (abs) return abs.code
+  }
+  return undefined
 }

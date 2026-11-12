@@ -133,6 +133,7 @@ export interface Holiday {
   nationwide: boolean
   subdivisions?: RegionReference[]
   groups?: RegionReference[]
+  comment?: LocalizedText[]
 }
 
 export interface Subdivision {

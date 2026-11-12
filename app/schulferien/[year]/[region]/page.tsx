@@ -10,6 +10,7 @@ import { fetchHolidays, resolveSchoolGroup } from '@/lib/holiday-api'
 import { detectBridgeDays } from '@/lib/bridge-days'
 import { suggestVacation, DEFAULT_PREFERENCES } from '@/lib/vacation-suggester'
 import { localizedName } from '@/lib/holiday-regions'
+import { countUniqueHolidayDays, isSpecialLocalHoliday } from '@/lib/holidays'
 import { formatDays } from '@/lib/vacation-accounting'
 import {
   SEO_REGIONS,
@@ -77,12 +78,16 @@ export default async function SchulferienRegionPage({ params }: PageProps) {
   }
 
   const bridgeDays = detectBridgeDays(year, publicHolidays)
+  const mainlandSchoolHolidays = schoolHolidays.filter(h => !isSpecialLocalHoliday(h))
+  const displaySchoolHolidays = mainlandSchoolHolidays.length ? mainlandSchoolHolidays : schoolHolidays
+  const islandHolidays = schoolHolidays.filter(isSpecialLocalHoliday)
+  const hasIslandExceptions = islandHolidays.length > 0
   const familyBlocks =
     publicHolidays.length > 0
       ? suggestVacation(
           year,
           publicHolidays,
-          schoolHolidays,
+          displaySchoolHolidays,
           new Set(),
           30,
           new Set(),
@@ -97,10 +102,7 @@ export default async function SchulferienRegionPage({ params }: PageProps) {
         )
       : []
 
-  const totalSchoolDays = schoolHolidays.reduce(
-    (sum, h) => sum + Math.max(1, differenceInCalendarDays(parseISO(h.endDate), parseISO(h.startDate)) + 1),
-    0,
-  )
+  const totalSchoolDays = countUniqueHolidayDays(displaySchoolHolidays, year)
   const plannerHref = buildPlannerHref({
     year,
     country: region.country,
@@ -173,7 +175,7 @@ export default async function SchulferienRegionPage({ params }: PageProps) {
           regionSlug={region.slug}
           mode="schulferien"
           publicHolidays={publicHolidays}
-          schoolHolidays={schoolHolidays}
+          schoolHolidays={displaySchoolHolidays}
           bridgeDays={bridgeDays}
           optimalBlocks={familyBlocks.slice(0, 6)}
           plannerHref={plannerHref}
@@ -184,7 +186,7 @@ export default async function SchulferienRegionPage({ params }: PageProps) {
           <h2 id="ferien-table-heading" className="text-lg font-bold">
             Alle Schulferien-Zeiträume {year} {region.preposition}
           </h2>
-          {schoolHolidays.length === 0 ? (
+          {displaySchoolHolidays.length === 0 ? (
             <p className="rounded-xl border bg-card p-4 text-muted-foreground">
               Für {region.name} ({year}) liegen aktuell noch keine offiziellen Schulferien-Daten vor.
             </p>
@@ -200,7 +202,7 @@ export default async function SchulferienRegionPage({ params }: PageProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {schoolHolidays.map(h => {
+                  {displaySchoolHolidays.map(h => {
                     const days = Math.max(1, differenceInCalendarDays(parseISO(h.endDate), parseISO(h.startDate)) + 1)
                     return (
                       <tr key={h.id} className="hover:bg-muted/20">
@@ -213,6 +215,24 @@ export default async function SchulferienRegionPage({ params }: PageProps) {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+          {hasIslandExceptions && (
+            <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-4 text-xs text-muted-foreground space-y-1">
+              <p className="font-semibold text-foreground">
+                Sonderregelungen für Nordseeinseln ({region.name}):
+              </p>
+              <p>
+                Auf den Inseln Sylt, Föhr, Amrum, Helgoland sowie auf den Halligen gelten teilweise abweichende Sommer- und Herbstferientermine:
+              </p>
+              <ul className="list-disc list-inside space-y-0.5 pt-1">
+                {islandHolidays.map(h => (
+                  <li key={h.id}>
+                    <span className="font-medium text-foreground">{localizedName(h.name)}:</span>{' '}
+                    {format(parseISO(h.startDate), 'dd.MM.yyyy')} – {format(parseISO(h.endDate), 'dd.MM.yyyy')}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </section>

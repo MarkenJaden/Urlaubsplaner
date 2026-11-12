@@ -21,10 +21,37 @@ export function normalizeHolidays(input: unknown, year: number): Holiday[] {
     result.set(item.id, {
       id: item.id, type: item.type, name: item.name, nationwide: Boolean(item.nationwide),
       ...(Array.isArray(item.groups) ? { groups: item.groups.filter(isReference).map(({ code, shortName }: RegionReference) => ({ code, shortName })) } : {}),
+      ...(Array.isArray(item.comment) ? { comment: item.comment.filter((c: unknown) => c && typeof (c as { language?: unknown; text?: unknown }).language === 'string' && typeof (c as { language?: unknown; text?: unknown }).text === 'string') } : {}),
       startDate: item.startDate < from ? from : item.startDate, endDate: item.endDate > to ? to : item.endDate,
     })
   }
   return [...result.values()]
+}
+
+/** Check if holiday is a localized special exception (e.g. North Sea islands). */
+export function isSpecialLocalHoliday(holiday: Holiday): boolean {
+  return Boolean(
+    holiday.comment?.some(
+      c => c.text && (c.text.includes('Inseln') || c.text.includes('Halligen')),
+    ),
+  )
+}
+
+/** Calculates total unique calendar days across holiday periods for a specific year. */
+export function countUniqueHolidayDays(holidays: Holiday[], year: number): number {
+  const dates = new Set<string>()
+  for (const holiday of holidays) {
+    const current = new Date(`${holiday.startDate}T00:00:00Z`)
+    const end = new Date(`${holiday.endDate}T00:00:00Z`)
+    if (!Number.isFinite(current.getTime()) || !Number.isFinite(end.getTime())) continue
+    while (current <= end) {
+      if (current.getUTCFullYear() === year) {
+        dates.add(current.toISOString().slice(0, 10))
+      }
+      current.setUTCDate(current.getUTCDate() + 1)
+    }
+  }
+  return dates.size
 }
 
 export function countHolidayStates(regions: Holiday[][]): Map<string, number> {
