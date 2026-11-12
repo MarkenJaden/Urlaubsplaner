@@ -15,6 +15,8 @@ model User {
   username            String?         @unique
   passwordHash        String?
   recoveryHash        String?
+  totpSecretEncrypted String?
+  totpEnabled         Boolean         @default(false)
   resetTokenHash      String?
   resetTokenExpiresAt DateTime?
   sessionVersion      Int             @default(0)
@@ -29,9 +31,26 @@ model User {
   vacations           VacationEntry[]
   shares              PlanShare[]
   calendarFeeds       CalendarFeed[]
+  passkeys            PasskeyCredential[]
 
   @@index([email])
   @@index([lastActiveAt])
+}
+
+model PasskeyCredential {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId String    @unique
+  publicKey    String
+  algorithm    Int       @default(-7)
+  counter      Int       @default(0)
+  transports   String?
+  name         String    @default("Passkey")
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+
+  @@index([userId])
 }
 
 model CalendarFeed {

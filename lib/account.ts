@@ -2,8 +2,9 @@ import { randomUUID, randomBytes } from 'node:crypto'
 import { prisma } from './prisma'
 import { createRecoveryKey, hashPassword, hashRecoveryKey, normalizeOptionalEmail, normalizeUsername, validPassword, verifyPassword } from './password'
 import { allowAttempt } from './rate-limit'
+import { decryptTotpSecret, verifyTotpCode } from './totp-webauthn'
 
-export async function authenticate(identifierInput: unknown, passwordInput: unknown) {
+export async function authenticate(identifierInput: unknown, passwordInput: unknown, totpCodeInput?: unknown) {
   if (typeof identifierInput !== 'string' || typeof passwordInput !== 'string' || passwordInput.length > 128) return null
   const trimmed = identifierInput.trim()
   const isEmail = trimmed.includes('@')
@@ -23,6 +24,15 @@ export async function authenticate(identifierInput: unknown, passwordInput: unkn
   const fallback = `scrypt:${'0'.repeat(32)}:${'0'.repeat(128)}`
   const valid = await verifyPassword(passwordInput, user?.passwordHash ?? fallback)
   if (!user || !valid) return null
+
+  if (user.totpEnabled && user.totpSecretEncrypted) {
+    if (typeof totpCodeInput !== 'string' || !totpCodeInput.trim()) return null
+    const code = totpCodeInput.trim()
+    const plainSecret = decryptTotpSecret(user.totpSecretEncrypted)
+    const totpValid = plainSecret ? verifyTotpCode(plainSecret, code) : false
+    const recoveryValid = Boolean(user.recoveryHash && hashRecoveryKey(code) === user.recoveryHash)
+    if (!totpValid && !recoveryValid) return null
+  }
 
   const now = new Date()
   await prisma.user.update({

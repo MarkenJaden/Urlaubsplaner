@@ -26,9 +26,72 @@ export interface CalendarFeedSubscription {
   updatedAt: string
 }
 
+export interface PasskeyInfo {
+  id: string
+  name: string
+  createdAt: string
+  lastUsedAt?: string | null
+}
+
+export interface ApprovalSheetConfig {
+  title?: string
+  subtitle?: string
+  employeeName?: string
+  employeeId?: string
+  department?: string
+  supervisorName?: string
+  substituteName?: string
+  locationDate?: string
+  customNote?: string
+  headerLayout?: 'classic' | 'modern' | 'minimal'
+  showRegionAndWorkDays?: boolean
+  showSummaryBox?: boolean
+  showCarryoverInSummary?: boolean
+  showGleittage?: boolean
+  showEfficiency?: boolean
+  showCalendarWeek?: boolean
+  showCalendarDays?: boolean
+  showSubstituteColumn?: boolean
+  showMiniCalendar?: boolean
+  showSupervisorSignature?: boolean
+  showHrSignature?: boolean
+  signatureMode?: 'none' | 'draw' | 'type'
+  signatureDataUrl?: string
+  signatureTypedText?: string
+}
+
+export const DEFAULT_APPROVAL_SHEET_CONFIG: Required<ApprovalSheetConfig> = {
+  title: 'Urlaubsantrag / Jahresurlaubsplanung',
+  subtitle: '',
+  employeeName: '',
+  employeeId: '',
+  department: '',
+  supervisorName: '',
+  substituteName: '',
+  locationDate: '',
+  customNote: '',
+  headerLayout: 'classic',
+  showRegionAndWorkDays: true,
+  showSummaryBox: true,
+  showCarryoverInSummary: true,
+  showGleittage: true,
+  showEfficiency: false,
+  showCalendarWeek: true,
+  showCalendarDays: false,
+  showSubstituteColumn: true,
+  showMiniCalendar: false,
+  showSupervisorSignature: true,
+  showHrSignature: false,
+  signatureMode: 'none',
+  signatureDataUrl: '',
+  signatureTypedText: '',
+}
+
 export interface UserProfile {
   username?: string | null
   hasLocalAccount: boolean
+  totpEnabled?: boolean
+  passkeys?: PasskeyInfo[]
   googleLinked?: boolean
   githubLinked?: boolean
   googleOAuthEnabled?: boolean
@@ -142,6 +205,8 @@ export interface LocalConfig {
   carryoverExpiresMarch31?: boolean
   /** Embedded shared plans (partner/team overlays) synced across devices. */
   sharedOverlays?: SharedPlanOverlay[]
+  /** Customizable supervisor approval sheet settings and digital signature synced across devices. */
+  approvalSheetConfig?: ApprovalSheetConfig
   /** Unit of the Gleitzeit allowance; defaults to days. */
   flexUnit?: 'days' | 'hours'
   /** Hours one Gleittag consumes when the allowance is kept in hours. */

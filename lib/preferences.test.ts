@@ -83,4 +83,27 @@ describe('Gleitzeit preferences', () => {
       { sharedOverlays: [{ ...overlay, id: 'snapshot-2', token: undefined, label: 'Team' }] }
     ).sharedOverlays).toHaveLength(2)
   })
+  it('validates and merges approvalSheetConfig and digital signature across devices', () => {
+    const cfg = {
+      title: 'Urlaubsantrag 2027',
+      employeeName: 'Max Mustermann',
+      department: 'Engineering',
+      showEfficiency: false,
+      showMiniCalendar: true,
+      signatureMode: 'type' as const,
+      signatureTypedText: 'Max Mustermann',
+    }
+    expect(parsePreferences({ approvalSheetConfig: cfg })).toEqual({ approvalSheetConfig: cfg })
+    expect(parsePreferences({ approvalSheetConfig: { signatureDataUrl: 'javascript:alert(1)' } })).toBeNull()
+    expect(
+      mergePreferences(
+        { approvalSheetConfig: { employeeName: 'Max', department: 'IT' } },
+        { approvalSheetConfig: { department: 'Product', showEfficiency: false } }
+      ).approvalSheetConfig
+    ).toEqual({
+      employeeName: 'Max',
+      department: 'Product',
+      showEfficiency: false,
+    })
+  })
 })

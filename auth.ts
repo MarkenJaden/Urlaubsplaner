@@ -11,6 +11,7 @@ import { getOrCreateUser, linkOrCreateOAuthUser } from '@/lib/user'
 import { getOAuthSettings } from '@/lib/admin'
 import { prisma } from '@/lib/prisma'
 import { allowAttempt, requestBucket } from '@/lib/rate-limit'
+import { verifyPasskeyLoginToken } from '@/lib/totp-webauthn'
 
 declare module 'next-auth' {
   interface Session {
@@ -76,10 +77,29 @@ export async function buildAuthConfig(): Promise<NextAuthConfig> {
     session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 },
     providers: [
       Credentials({
-        credentials: { username: { type: 'text' }, password: { type: 'password' } },
+        credentials: {
+          username: { type: 'text' },
+          password: { type: 'password' },
+          totpCode: { type: 'text' },
+          passkeyLoginToken: { type: 'text' },
+        },
         async authorize(credentials, request) {
           if (!await allowAttempt(`login-global`, 300, 900) || !await allowAttempt(`login-ip:${requestBucket(request)}`, 30)) return null
-          const user = await authenticate(credentials.username, credentials.password)
+          if (credentials?.passkeyLoginToken) {
+            const passkeyUserId = verifyPasskeyLoginToken(credentials.passkeyLoginToken)
+            if (!passkeyUserId) return null
+            const pkUser = await prisma.user.findUnique({ where: { id: passkeyUserId } })
+            if (!pkUser) return null
+            await prisma.user.update({ where: { id: pkUser.id }, data: { lastActiveAt: new Date() } }).catch(() => undefined)
+            return {
+              id: pkUser.id,
+              name: pkUser.name,
+              email: pkUser.email,
+              username: pkUser.username,
+              sessionVersion: pkUser.sessionVersion,
+            }
+          }
+          const user = await authenticate(credentials?.username, credentials?.password, credentials?.totpCode)
           return user ? { id: user.id, name: user.name, email: user.email, username: user.username, sessionVersion: user.sessionVersion } : null
         },
       }),

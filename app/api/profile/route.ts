@@ -17,6 +17,15 @@ export async function GET() {
         calendarFeeds: {
           orderBy: { createdAt: 'asc' },
         },
+        passkeys: {
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            name: true,
+            createdAt: true,
+            lastUsedAt: true,
+          },
+        },
       },
     }),
     getPublicOAuthStatus(),
@@ -28,6 +37,8 @@ export async function GET() {
       email: user.email,
       username: user.username,
       hasLocalAccount: Boolean(user.passwordHash),
+      totpEnabled: Boolean(user.totpEnabled),
+      passkeys: user.passkeys,
       googleLinked: Boolean(user.googleId || user.keycloakId.startsWith('google:')),
       githubLinked: Boolean(user.githubId || user.keycloakId.startsWith('github:')),
       googleOAuthEnabled: oauthStatus.googleEnabled,

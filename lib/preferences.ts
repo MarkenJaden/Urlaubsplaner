@@ -1,4 +1,4 @@
-import type { EntryType, PreferencesPatch, SharedPlanOverlay, UserPreferences } from '@/types'
+import type { ApprovalSheetConfig, EntryType, PreferencesPatch, SharedPlanOverlay, UserPreferences } from '@/types'
 import { DEFAULT_COUNTRY, isCountryCode, isRegionCode } from './holiday-regions'
 
 const booleanKeys = new Set([
@@ -106,6 +106,61 @@ export function mergeSharedOverlays(
   return result
 }
 
+const approvalSheetStringFields: Record<string, number> = {
+  title: 160,
+  subtitle: 240,
+  employeeName: 120,
+  employeeId: 80,
+  department: 120,
+  supervisorName: 120,
+  substituteName: 160,
+  locationDate: 120,
+  customNote: 800,
+  signatureTypedText: 120,
+}
+
+const approvalSheetBooleanFields = new Set([
+  'showRegionAndWorkDays',
+  'showSummaryBox',
+  'showCarryoverInSummary',
+  'showGleittage',
+  'showEfficiency',
+  'showCalendarWeek',
+  'showCalendarDays',
+  'showSubstituteColumn',
+  'showMiniCalendar',
+  'showSupervisorSignature',
+  'showHrSignature',
+])
+
+function parseApprovalSheetConfig(raw: unknown): ApprovalSheetConfig | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const result: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(raw)) {
+    if (v === undefined) continue
+    if (k in approvalSheetStringFields) {
+      if (typeof v !== 'string' || v.length > approvalSheetStringFields[k]) return null
+      result[k] = v
+    } else if (approvalSheetBooleanFields.has(k)) {
+      if (typeof v !== 'boolean') return null
+      result[k] = v
+    } else if (k === 'headerLayout') {
+      if (v !== 'classic' && v !== 'modern' && v !== 'minimal') return null
+      result[k] = v
+    } else if (k === 'signatureMode') {
+      if (v !== 'none' && v !== 'draw' && v !== 'type') return null
+      result[k] = v
+    } else if (k === 'signatureDataUrl') {
+      if (typeof v !== 'string' || v.length > 65000) return null
+      if (v !== '' && !/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(v)) return null
+      result[k] = v
+    } else {
+      return null
+    }
+  }
+  return result as ApprovalSheetConfig
+}
+
 /**
  * Validates a preference patch. Codes are format-checked here; whether a code
  * exists is checked by the holiday API, and normalizePreferences() drops codes
@@ -142,6 +197,12 @@ export function parsePreferences(input: unknown): PreferencesPatch | null {
       result[key] = overlays
       continue
     }
+    else if (key === 'approvalSheetConfig') {
+      const parsedConfig = parseApprovalSheetConfig(value)
+      if (!parsedConfig) return null
+      result[key] = parsedConfig
+      continue
+    }
     else if (key === 'compareSubdivisions') {
       if (!Array.isArray(value) || value.length > 100 || value.some(code => !isRegionCode(code))) return null
     } else if (key === 'selectedCountries') {
@@ -169,6 +230,7 @@ export function mergePreferences(current: UserPreferences, patch: PreferencesPat
   if (patch.vacationDaysPerYear) merged.vacationDaysPerYear = { ...current.vacationDaysPerYear, ...patch.vacationDaysPerYear }
   if (patch.carryoverDaysPerYear) merged.carryoverDaysPerYear = { ...current.carryoverDaysPerYear, ...patch.carryoverDaysPerYear }
   if (patch.flexBudgetPerYear) merged.flexBudgetPerYear = { ...current.flexBudgetPerYear, ...patch.flexBudgetPerYear }
+  if (patch.approvalSheetConfig) merged.approvalSheetConfig = { ...current.approvalSheetConfig, ...patch.approvalSheetConfig }
   for (const [key, value] of Object.entries(patch)) if (value === null) delete merged[key]
   return normalizePreferences(merged as UserPreferences)
 }
