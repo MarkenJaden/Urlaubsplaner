@@ -2,9 +2,11 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { format, parseISO } from 'date-fns'
 import { de } from 'date-fns/locale'
-import { fetchHolidays } from '@/lib/holiday-api'
+import { fetchHolidays, resolveSchoolGroup } from '@/lib/holiday-api'
+import { detectBridgeDays } from '@/lib/bridge-days'
 import { suggestVacation, DEFAULT_PREFERENCES } from '@/lib/vacation-suggester'
 import { formatDays } from '@/lib/vacation-accounting'
+import { PublicYearCalendar } from '@/components/calendar/public-year-calendar'
 import {
   SEO_REGIONS,
   buildPlannerHref,
@@ -34,21 +36,31 @@ export default async function EmbedBrueckentagePage({ searchParams }: EmbedPageP
   const rawYear = Number(firstParam(params.year))
   const year = isValidSeoYear(rawYear) ? rawYear : (years[1] ?? years[0])
   const regionSlug = firstParam(params.region) ?? 'nordrhein-westfalen'
+  const view = firstParam(params.view) === 'calendar' ? 'calendar' : 'list'
   const region = getSeoRegionBySlug(regionSlug) ?? SEO_REGIONS[0]
 
   let publicHolidays: Holiday[] = []
+  let schoolHolidays: Holiday[] = []
   try {
-    publicHolidays = await fetchHolidays(region.country, region.subdivision, year, 'public')
+    const schoolGroup = await resolveSchoolGroup(region.country, region.subdivision).catch(() => undefined)
+    ;[publicHolidays, schoolHolidays] = await Promise.all([
+      fetchHolidays(region.country, region.subdivision, year, 'public'),
+      region.subdivision
+        ? fetchHolidays(region.country, region.subdivision, year, 'school', schoolGroup).catch(() => [] as Holiday[])
+        : Promise.resolve([] as Holiday[]),
+    ])
   } catch {
     publicHolidays = []
+    schoolHolidays = []
   }
 
+  const bridgeDays = detectBridgeDays(year, publicHolidays)
   const topBlocks =
     publicHolidays.length > 0
       ? suggestVacation(
           year,
           publicHolidays,
-          [],
+          schoolHolidays,
           new Set(),
           28,
           new Set(),
@@ -70,6 +82,25 @@ export default async function EmbedBrueckentagePage({ searchParams }: EmbedPageP
     country: region.country,
     subdivision: region.subdivision,
   })
+
+  if (view === 'calendar') {
+    return (
+      <div className="min-h-screen bg-card p-3 text-card-foreground text-xs">
+        <PublicYearCalendar
+          year={year}
+          regionName={region.name}
+          regionSlug={region.slug}
+          mode="brueckentage"
+          publicHolidays={publicHolidays}
+          schoolHolidays={schoolHolidays}
+          bridgeDays={bridgeDays}
+          optimalBlocks={topBlocks}
+          plannerHref={plannerHref}
+          isEmbed
+        />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-card p-4 text-card-foreground flex flex-col justify-between gap-3 text-xs">

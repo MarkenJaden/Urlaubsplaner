@@ -5,7 +5,9 @@ import { differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
+import { PublicYearCalendar } from '@/components/calendar/public-year-calendar'
 import { fetchHolidays, resolveSchoolGroup } from '@/lib/holiday-api'
+import { detectBridgeDays } from '@/lib/bridge-days'
 import { suggestVacation, DEFAULT_PREFERENCES } from '@/lib/vacation-suggester'
 import { localizedName } from '@/lib/holiday-regions'
 import { formatDays } from '@/lib/vacation-accounting'
@@ -74,6 +76,7 @@ export default async function SchulferienRegionPage({ params }: PageProps) {
     schoolHolidays = []
   }
 
+  const bridgeDays = detectBridgeDays(year, publicHolidays)
   const familyBlocks =
     publicHolidays.length > 0
       ? suggestVacation(
@@ -163,8 +166,21 @@ export default async function SchulferienRegionPage({ params }: PageProps) {
           </div>
         </section>
 
+        {/* Graphical 12-Month Calendar (Printable & Embeddable) */}
+        <PublicYearCalendar
+          year={year}
+          regionName={region.name}
+          regionSlug={region.slug}
+          mode="schulferien"
+          publicHolidays={publicHolidays}
+          schoolHolidays={schoolHolidays}
+          bridgeDays={bridgeDays}
+          optimalBlocks={familyBlocks.slice(0, 6)}
+          plannerHref={plannerHref}
+        />
+
         {/* School Holiday Table */}
-        <section aria-labelledby="ferien-table-heading" className="space-y-3">
+        <section aria-labelledby="ferien-table-heading" className="space-y-3 print:hidden">
           <h2 id="ferien-table-heading" className="text-lg font-bold">
             Alle Schulferien-Zeiträume {year} {region.preposition}
           </h2>

@@ -5,6 +5,7 @@ import { differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
+import { PublicYearCalendar } from '@/components/calendar/public-year-calendar'
 import { fetchHolidays, resolveSchoolGroup } from '@/lib/holiday-api'
 import { detectBridgeDays } from '@/lib/bridge-days'
 import { suggestVacation, DEFAULT_PREFERENCES } from '@/lib/vacation-suggester'
@@ -271,9 +272,22 @@ export default async function BrueckentageRegionPage({ params }: PageProps) {
           </div>
         </div>
 
+        {/* Graphical 12-Month Calendar (Printable & Embeddable) */}
+        <PublicYearCalendar
+          year={year}
+          regionName={region.name}
+          regionSlug={region.slug}
+          mode="brueckentage"
+          publicHolidays={publicHolidays}
+          schoolHolidays={schoolHolidays}
+          bridgeDays={bridgeDays}
+          optimalBlocks={optimalBlocks}
+          plannerHref={plannerHref}
+        />
+
         {/* Optimal Multi-Day Vacation Blocks */}
         {optimalBlocks.length > 0 && (
-          <section aria-labelledby="region-blocks-heading" className="rounded-xl border bg-card p-5 space-y-4">
+          <section aria-labelledby="region-blocks-heading" className="rounded-xl border bg-card p-5 space-y-4 print:hidden">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 id="region-blocks-heading" className="text-lg font-bold">

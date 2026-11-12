@@ -9,13 +9,21 @@ import { Check, Copy, Code2, ExternalLink } from 'lucide-react'
 
 export default function WidgetGeneratorPage() {
   const years = getSeoPlanningYears()
+  const [mode, setMode] = useState<'brueckentage' | 'schulferien'>('brueckentage')
+  const [view, setView] = useState<'calendar' | 'list'>('calendar')
   const [year, setYear] = useState<number>(years[1] ?? years[0])
   const [regionSlug, setRegionSlug] = useState<string>('nordrhein-westfalen')
   const [copied, setCopied] = useState(false)
 
   const origin = typeof window !== 'undefined' ? window.location.origin : 'https://urlaubsplaner.me'
-  const embedUrl = `${origin}/embed/brueckentage?year=${year}&region=${encodeURIComponent(regionSlug)}`
-  const iframeCode = `<iframe src="${embedUrl}" width="100%" height="420" style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden" loading="lazy" title="Brückentage-Rechner ${year} – urlaubsplaner.me"></iframe>`
+  const embedPath = `/embed/${mode}?year=${year}&region=${encodeURIComponent(regionSlug)}&view=${view}`
+  const embedUrl = `${origin}${embedPath}`
+  const iframeHeight = view === 'calendar' ? 760 : 420
+  const titleLabel =
+    mode === 'schulferien'
+      ? `Schulferien-Kalender ${year} – urlaubsplaner.me`
+      : `Brückentage-Kalender ${year} – urlaubsplaner.me`
+  const iframeCode = `<iframe src="${embedUrl}" width="100%" height="${iframeHeight}" style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden" loading="lazy" title="${titleLabel}"></iframe>`
 
   const handleCopy = async () => {
     try {
@@ -30,24 +38,54 @@ export default function WidgetGeneratorPage() {
   return (
     <div className="min-h-screen bg-background">
       <Header />
-      <main className="container max-w-4xl space-y-6 py-8 text-sm">
+      <main className="container max-w-5xl space-y-6 py-8 text-sm">
         <div className="space-y-2">
           <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-3 py-1 text-xs font-semibold text-primary">
             <Code2 className="h-3.5 w-3.5" aria-hidden="true" />
-            Kostenloses Brückentage-Widget für Blogs, Intranets &amp; HR
+            Kostenloses Kalender- &amp; Brückentage-Widget für Webseiten, Schulen, Blogs &amp; Intranets
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
-            Brückentage-Rechner auf deiner Webseite einbetten
+            Schulferien- &amp; Brückentage-Kalender einbetten
           </h1>
           <p className="text-muted-foreground leading-relaxed">
-            Binde den werbefreien Brückentage- &amp; Feiertags-Überblick kostenlos per <code>&lt;iframe&gt;</code> in Reiseblogs, Betriebsrats-Seiten, HR-Intranets oder Lokalmedien ein.
+            Binde unseren grafischen 12-Monats-Jahreskalender oder die kompakte Übersicht für Schulferien, Feiertage und Brückentage kostenlos per <code>&lt;iframe&gt;</code> in Webseiten, Elternportale, Reiseblogs oder HR-Intranets ein.
           </p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 rounded-xl border bg-card p-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 rounded-xl border bg-card p-4">
+          <div className="space-y-1">
+            <label htmlFor="widget-mode" className="text-xs font-medium text-muted-foreground">
+              Inhalt / Thema
+            </label>
+            <select
+              id="widget-mode"
+              value={mode}
+              onChange={e => setMode(e.target.value as 'brueckentage' | 'schulferien')}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="brueckentage">Brückentage &amp; Feiertage</option>
+              <option value="schulferien">Schulferien &amp; Feiertage</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label htmlFor="widget-view" className="text-xs font-medium text-muted-foreground">
+              Darstellungsform
+            </label>
+            <select
+              id="widget-view"
+              value={view}
+              onChange={e => setView(e.target.value as 'calendar' | 'list')}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="calendar">Grafischer 12-Monats-Kalender</option>
+              <option value="list">Kompakte Termin-Liste</option>
+            </select>
+          </div>
+
           <div className="space-y-1">
             <label htmlFor="widget-year" className="text-xs font-medium text-muted-foreground">
-              Standard-Jahr
+              Jahr
             </label>
             <select
               id="widget-year"
@@ -62,9 +100,10 @@ export default function WidgetGeneratorPage() {
               ))}
             </select>
           </div>
+
           <div className="space-y-1">
             <label htmlFor="widget-region" className="text-xs font-medium text-muted-foreground">
-              Standard-Bundesland / Region
+              Bundesland / Region
             </label>
             <select
               id="widget-region"
@@ -82,13 +121,13 @@ export default function WidgetGeneratorPage() {
         </div>
 
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               HTML-Einbettungscode
             </span>
             <div className="flex items-center gap-2">
               <Button size="sm" variant="outline" asChild>
-                <Link href={`/embed/brueckentage?year=${year}&region=${regionSlug}`} target="_blank">
+                <Link href={embedPath} target="_blank">
                   <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
                   Vorschau in neuem Tab
                 </Link>
@@ -107,11 +146,11 @@ export default function WidgetGeneratorPage() {
         <div className="space-y-2">
           <h2 className="text-sm font-semibold">Live-Vorschau des Widgets</h2>
           <iframe
-            src={`/embed/brueckentage?year=${year}&region=${encodeURIComponent(regionSlug)}`}
+            src={embedPath}
             width="100%"
-            height={420}
+            height={iframeHeight}
             className="rounded-xl border border-border bg-card shadow-xs"
-            title={`Brückentage-Rechner ${year}`}
+            title={titleLabel}
           />
         </div>
       </main>
