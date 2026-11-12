@@ -228,8 +228,8 @@ export default function ContactPage() {
               </div>
               <div className="flex items-center gap-2.5">
                 <Mail className="h-4 w-4 text-primary shrink-0" />
-                <a href="mailto:jjsch1410@gmail.com" className="text-primary underline break-all">
-                  jjsch1410@gmail.com
+                <a href="mailto:info@urlaubsplaner.me" className="text-primary underline break-all">
+                  info@urlaubsplaner.me
                 </a>
               </div>
               <div className="flex items-center gap-2.5">

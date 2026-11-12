@@ -49,8 +49,8 @@ export default function ImpressumPage() {
         </p>
         <p>
           <strong>E-Mail:</strong>{' '}
-          <a href="mailto:jjsch1410@gmail.com" className="text-primary underline">
-            jjsch1410@gmail.com
+          <a href="mailto:info@urlaubsplaner.me" className="text-primary underline">
+            info@urlaubsplaner.me
           </a>
         </p>
         <p>
