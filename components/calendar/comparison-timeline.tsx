@@ -448,7 +448,8 @@ export function ComparisonTimeline({
           )}
         </div>
 
-        <div className="space-y-3 overflow-x-auto">
+        <p className="text-[11px] text-muted-foreground sm:hidden">← Monatszeilen horizontal wischen →</p>
+        <div className="mobile-scroller space-y-3 overflow-x-auto pb-1">
           {months.map((monthDate, monthIdx) => {
             const daysInMonth = eachDayOfInterval({
               start: startOfMonth(monthDate),
@@ -490,8 +491,8 @@ export function ComparisonTimeline({
             return (
               <div key={monthDate.toISOString()} className="min-w-[640px] rounded-lg border border-border/60 bg-muted/10 p-2 space-y-1">
                 {/* Month Header & Day Numbers */}
-                <div className="grid grid-cols-[11rem_1fr] items-center gap-2">
-                  <span className="text-xs font-bold capitalize text-foreground truncate">{monthLabel}</span>
+                <div className="grid grid-cols-[7.25rem_1fr] sm:grid-cols-[11rem_1fr] items-center gap-1.5 sm:gap-2">
+                  <span className="sticky left-0 z-10 bg-card/95 pr-1 text-xs font-bold capitalize text-foreground truncate">{monthLabel}</span>
                   <div
                     className="grid gap-0.5"
                     style={{ gridTemplateColumns: `repeat(${daysInMonth.length}, minmax(0, 1fr))` }}
@@ -519,8 +520,8 @@ export function ComparisonTimeline({
                 </div>
 
                 {/* Row 1: Own Plan */}
-                <div className="grid grid-cols-[11rem_1fr] items-center gap-2">
-                  <span className="text-[11px] font-medium text-foreground truncate">Mein Plan</span>
+                <div className="grid grid-cols-[7.25rem_1fr] sm:grid-cols-[11rem_1fr] items-center gap-1.5 sm:gap-2">
+                  <span className="sticky left-0 z-10 bg-card/95 pr-1 text-[11px] font-medium text-foreground truncate">Mein Plan</span>
                   <div
                     className="grid gap-0.5"
                     style={{ gridTemplateColumns: `repeat(${daysInMonth.length}, minmax(0, 1fr))` }}
@@ -559,8 +560,8 @@ export function ComparisonTimeline({
 
                 {/* Partner Rows */}
                 {overlayMaps.map(({ overlay, byDate, workDays: ovWorkDays }) => (
-                  <div key={overlay.id} className="grid grid-cols-[11rem_1fr] items-center gap-2">
-                    <span className="text-[11px] font-medium truncate flex items-center gap-1.5">
+                  <div key={overlay.id} className="grid grid-cols-[7.25rem_1fr] sm:grid-cols-[11rem_1fr] items-center gap-1.5 sm:gap-2">
+                    <span className="sticky left-0 z-10 bg-card/95 pr-1 text-[11px] font-medium truncate flex items-center gap-1.5">
                       <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: overlay.color }} />
                       <span className="truncate">{overlay.label}</span>
                     </span>
@@ -596,8 +597,8 @@ export function ComparisonTimeline({
 
                 {/* Joint Free Overlap Row */}
                 {overlayMaps.length > 0 && (
-                  <div className="grid grid-cols-[11rem_1fr] items-center gap-2">
-                    <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 truncate">
+                  <div className="grid grid-cols-[7.25rem_1fr] sm:grid-cols-[11rem_1fr] items-center gap-1.5 sm:gap-2">
+                    <span className="sticky left-0 z-10 bg-card/95 pr-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 truncate">
                       🤝 Gemeinsam frei
                     </span>
                     <div
@@ -623,9 +624,9 @@ export function ComparisonTimeline({
 
                 {/* Aggregated School Holiday Density Row covering ALL selected regions */}
                 {allSchoolRegionRows.length > 1 && (
-                  <div className="grid grid-cols-[11rem_1fr] items-center gap-2">
+                  <div className="grid grid-cols-[7.25rem_1fr] sm:grid-cols-[11rem_1fr] items-center gap-1.5 sm:gap-2">
                     <span
-                      className="text-[10px] font-semibold text-amber-800 dark:text-amber-300 truncate"
+                      className="sticky left-0 z-10 bg-card/95 pr-1 text-[10px] font-semibold text-amber-800 dark:text-amber-300 truncate"
                       title={`Aggregierte Ferien-Auslastung über alle ${allSchoolRegionRows.length} ausgewählten Regionen`}
                     >
                       🌡️ Ferien-Dichte ({allSchoolRegionRows.length} Reg.)
@@ -664,9 +665,9 @@ export function ComparisonTimeline({
 
                 {/* Individual School Holiday Rows */}
                 {visibleSchoolRows.map(regionRow => (
-                  <div key={regionRow.label} className="grid grid-cols-[11rem_1fr] items-center gap-2">
+                  <div key={regionRow.label} className="grid grid-cols-[7.25rem_1fr] sm:grid-cols-[11rem_1fr] items-center gap-1.5 sm:gap-2">
                     <span
-                      className={`text-[10px] truncate ${
+                      className={`sticky left-0 z-10 bg-card/95 pr-1 text-[10px] truncate ${
                         regionRow.isHome ? 'font-semibold text-foreground' : 'text-muted-foreground'
                       }`}
                       title={`Schulferien ${regionRow.label}`}

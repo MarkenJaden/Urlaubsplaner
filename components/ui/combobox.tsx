@@ -63,18 +63,20 @@ export function Combobox({
   }, [options, value])
 
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
+    function handleClickOutside(e: PointerEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false)
         setSearch('')
       }
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('pointerdown', handleClickOutside)
+    return () => document.removeEventListener('pointerdown', handleClickOutside)
   }, [])
 
   useEffect(() => {
-    if (open && inputRef.current) inputRef.current.focus()
+    if (open && inputRef.current && typeof window !== 'undefined' && window.matchMedia?.('(pointer: fine)').matches) {
+      inputRef.current.focus()
+    }
   }, [open])
 
   useEffect(() => { setHighlightIndex(-1) }, [search])
@@ -200,18 +202,20 @@ export function MultiCombobox({
   }, [options, value])
 
   useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
+    function handleClickOutside(e: PointerEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false)
         setSearch('')
       }
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('pointerdown', handleClickOutside)
+    return () => document.removeEventListener('pointerdown', handleClickOutside)
   }, [])
 
   useEffect(() => {
-    if (open && inputRef.current) inputRef.current.focus()
+    if (open && inputRef.current && typeof window !== 'undefined' && window.matchMedia?.('(pointer: fine)').matches) {
+      inputRef.current.focus()
+    }
   }, [open])
 
   const toggle = (optionValue: string) => {

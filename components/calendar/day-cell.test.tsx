@@ -275,4 +275,103 @@ describe('DayCell visual indicators and Bundesland frame', () => {
     expect(cell.className).toContain('bg-cyan-600')
     expect(cell.getAttribute('title')).toContain('Sonderurlaub / Frei: Bildungsurlaub')
   })
+
+  it('keeps regional holiday bottom border and renders inner amber school bar when school holiday, regional holiday, and vacation overlap', () => {
+    const regionalHoliday: Holiday = {
+      ...nationwideHoliday,
+      id: 'reg-1',
+      nationwide: false,
+      name: [{ language: 'DE', text: 'Fronleichnam' }],
+    }
+    const vacationEntry: VacationEntry = {
+      id: 'v-overlap',
+      userId: 'u1',
+      date: '2026-05-01',
+      type: 'vacation',
+      year: 2026,
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    }
+    const schoolHoliday: Holiday = {
+      id: 'sh-overlap',
+      startDate: '2026-04-28',
+      endDate: '2026-05-05',
+      type: 'School',
+      name: [{ language: 'DE', text: 'Pfingstferien' }],
+      nationwide: false,
+    }
+
+    render(
+      <DayCell
+        date={dummyDate}
+        entries={[vacationEntry]}
+        publicHolidays={[regionalHoliday]}
+        schoolHolidays={[schoolHoliday]}
+        isWeekend={false}
+        isToday={false}
+        isOtherMonth={false}
+        isPast={false}
+        isOverBudget={false}
+        showHeatmap={false}
+        isBridgeDay={false}
+        showBridgeDays={false}
+        showOtherMonthDays={true}
+        onToggle={vi.fn()}
+        selectedType="vacation"
+      />
+    )
+
+    const cell = screen.getByRole('button', { name: /01\.05\.2026/ })
+    expect(cell.className).toContain('border-b-emerald-300')
+    expect(cell.className).not.toContain('border-b-[3px] border-b-amber-300')
+    expect(cell.querySelector('span.bg-amber-300')).toBeTruthy()
+  })
+
+  it('highlights selected day and range anchor distinctly', () => {
+    render(
+      <DayCell
+        date={dummyDate}
+        entries={[]}
+        publicHolidays={[]}
+        schoolHolidays={[]}
+        isWeekend={false}
+        isToday={false}
+        isOtherMonth={false}
+        isPast={false}
+        isOverBudget={false}
+        showHeatmap={false}
+        isBridgeDay={false}
+        showBridgeDays={false}
+        showOtherMonthDays={true}
+        isSelectedDay={true}
+        onToggle={vi.fn()}
+        selectedType="vacation"
+      />
+    )
+    const selectedCell = screen.getByRole('button', { name: /01\.05\.2026/ })
+    expect(selectedCell.className).toContain('ring-primary')
+
+    render(
+      <DayCell
+        date={new Date(2026, 4, 2)}
+        entries={[]}
+        publicHolidays={[]}
+        schoolHolidays={[]}
+        isWeekend={false}
+        isToday={false}
+        isOtherMonth={false}
+        isPast={false}
+        isOverBudget={false}
+        showHeatmap={false}
+        isBridgeDay={false}
+        showBridgeDays={false}
+        showOtherMonthDays={true}
+        isRangeAnchor={true}
+        onToggle={vi.fn()}
+        selectedType="vacation"
+      />
+    )
+    const anchorCell = screen.getByRole('button', { name: /02\.05\.2026/ })
+    expect(anchorCell.className).toContain('ring-blue-500')
+  })
 })

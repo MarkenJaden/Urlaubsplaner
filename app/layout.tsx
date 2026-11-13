@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import Link from 'next/link'
 import './globals.css'
@@ -11,6 +11,12 @@ import { getSeoPlanningYears } from '@/lib/seo-regions'
 const inter = Inter({ subsets: ['latin', 'latin-ext'] })
 
 const siteUrl = process.env.NEXTAUTH_URL || 'https://urlaubsplaner.me'
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+}
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),

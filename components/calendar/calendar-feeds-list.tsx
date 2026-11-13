@@ -224,7 +224,7 @@ export function CalendarFeedsList({
           ))}
         </div>
 
-        <div className="flex items-center gap-2 pt-1">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
           <input
             type="text"
             maxLength={60}
@@ -238,7 +238,7 @@ export function CalendarFeedsList({
             size="sm"
             disabled={creating}
             onClick={() => void createFeed()}
-            className="h-9"
+            className="h-9 w-full sm:w-auto shrink-0"
           >
             <Plus className="h-3.5 w-3.5 mr-1" />
             Kalender-Abo anlegen

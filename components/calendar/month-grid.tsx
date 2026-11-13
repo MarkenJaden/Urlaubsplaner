@@ -24,6 +24,8 @@ const WEEKDAY_HEADER = [
 interface MonthGridProps {
   date: Date
   todayKey?: string
+  selectedDayKey?: string | null
+  rangeAnchorKey?: string | null
   entries: VacationEntry[]
   publicHolidays: Holiday[]
   schoolHolidays: Holiday[]
@@ -47,7 +49,7 @@ interface MonthGridProps {
 }
 
 export function MonthGrid({
-  date, todayKey, entries, publicHolidays, schoolHolidays,
+  date, todayKey, selectedDayKey, rangeAnchorKey, entries, publicHolidays, schoolHolidays,
   workDays = DEFAULT_WORK_DAYS,
   heatmapData, comparisonByDate, sharedByDate,
   suggestionPreviewByDate, dragSelectedDates,
@@ -62,10 +64,14 @@ export function MonthGrid({
   const calEnd = endOfWeek(monthEnd, { weekStartsOn: 1 })
   const days = eachDayOfInterval({ start: calStart, end: calEnd })
   const monthName = format(date, 'MMMM yyyy', { locale: de })
+  const monthAnchorId = `month-${format(date, 'yyyy-MM')}`
   const activeWorkDays = workDays.length > 0 ? workDays : DEFAULT_WORK_DAYS
 
   return (
-    <div className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-border/70 bg-card/60 p-2.5 shadow-2xs print:break-inside-avoid print:gap-1 print:p-1.5 print:shadow-none">
+    <div
+      id={monthAnchorId}
+      className="flex min-w-0 scroll-mt-28 sm:scroll-mt-20 flex-col gap-1.5 rounded-xl border border-border/70 bg-card/60 p-2.5 shadow-2xs print:break-inside-avoid print:gap-1 print:p-1.5 print:shadow-none"
+    >
       <h3 className="text-center text-base font-semibold text-foreground capitalize sm:text-sm">
         {monthName}
       </h3>
@@ -96,6 +102,8 @@ export function MonthGrid({
               schoolHolidays={schoolHolidays}
               isWeekend={isOffWeekday}
               isToday={key === activeTodayKey}
+              isSelectedDay={Boolean(selectedDayKey && key === selectedDayKey)}
+              isRangeAnchor={Boolean(rangeAnchorKey && key === rangeAnchorKey)}
               isOtherMonth={!isSameMonth(day, date)}
               isDragSelected={Boolean(dragSelectedDates?.has(key))}
               suggestionPreview={suggestionPreviewByDate?.get(key)}

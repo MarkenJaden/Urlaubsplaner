@@ -579,9 +579,9 @@ export function SuggestionsPanel({
                   placeholder="Bezeichnung (z.B. Sommerurlaub)"
                   value={ruleLabel}
                   onChange={e => setRuleLabel(e.target.value)}
-                  className="min-w-[140px] flex-1 rounded border bg-background px-2 py-1.5 text-xs"
+                  className="min-w-0 w-full sm:w-auto sm:min-w-[140px] sm:flex-1 rounded border bg-background px-2.5 py-2 sm:px-2 sm:py-1.5 text-xs"
                 />
-                <Button type="button" size="sm" variant="secondary" onClick={handleAddRule}>
+                <Button type="button" size="sm" variant="secondary" onClick={handleAddRule} className="w-full sm:w-auto min-h-9 sm:min-h-0">
                   <Plus className="h-3.5 w-3.5" /> Einschließen
                 </Button>
               </div>
@@ -630,9 +630,9 @@ export function SuggestionsPanel({
                 placeholder="Name (z.B. Betriebsferien)"
                 value={ruleLabel}
                 onChange={e => setRuleLabel(e.target.value)}
-                className="min-w-[130px] flex-1 rounded border bg-background px-2 py-1.5 text-xs"
+                className="min-w-0 w-full sm:w-auto sm:min-w-[130px] sm:flex-1 rounded border bg-background px-2.5 py-2 sm:px-2 sm:py-1.5 text-xs"
               />
-              <Button type="button" size="sm" variant="secondary" onClick={handleAddRule}>
+              <Button type="button" size="sm" variant="secondary" onClick={handleAddRule} className="w-full sm:w-auto min-h-9 sm:min-h-0">
                 <Plus className="h-3.5 w-3.5" /> Einschließen
               </Button>
             </div>
@@ -802,9 +802,9 @@ export function SuggestionsPanel({
                   placeholder="Grund (z.B. Projekt-Phase, Messe)"
                   value={excludeLabel}
                   onChange={e => setExcludeLabel(e.target.value)}
-                  className="min-w-[140px] flex-1 rounded border bg-background px-2 py-1"
+                  className="min-w-0 w-full sm:w-auto sm:min-w-[140px] sm:flex-1 rounded border bg-background px-2.5 py-2 sm:px-2 sm:py-1 text-xs"
                 />
-                <Button type="button" size="sm" variant="outline" onClick={handleAddExcludeRange} className="h-7 text-xs">
+                <Button type="button" size="sm" variant="outline" onClick={handleAddExcludeRange} className="h-9 sm:h-7 w-full sm:w-auto text-xs">
                   <Plus className="h-3.5 w-3.5" /> Zeitraum sperren
                 </Button>
               </div>
@@ -1017,18 +1017,18 @@ export function SuggestionsPanel({
                       <div className="flex flex-wrap items-center gap-1.5 text-[11px] pt-0.5">
                         <div className="inline-flex items-center rounded border bg-muted/40 px-1 py-0.5 gap-0.5" title="Starttag verschieben">
                           <span className="text-muted-foreground px-1">Start:</span>
-                          <button type="button" onClick={() => handleAdjustBlock(i, 'start', -1)} className="hover:bg-background rounded px-1 font-bold" title="1 Tag früher starten">−1T</button>
-                          <button type="button" onClick={() => handleAdjustBlock(i, 'start', 1)} className="hover:bg-background rounded px-1 font-bold" title="1 Tag später starten">+1T</button>
+                          <button type="button" onClick={() => handleAdjustBlock(i, 'start', -1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 font-bold" title="1 Tag früher starten">−1T</button>
+                          <button type="button" onClick={() => handleAdjustBlock(i, 'start', 1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 font-bold" title="1 Tag später starten">+1T</button>
                         </div>
                         <div className="inline-flex items-center rounded border bg-muted/40 px-1 py-0.5 gap-0.5" title="Gesamten Block verschieben">
-                          <button type="button" onClick={() => handleAdjustBlock(i, 'move', -1)} className="hover:bg-background rounded px-1 flex items-center" title="Block 1 Tag nach vorne schieben"><ChevronLeft className="h-3 w-3" /></button>
+                          <button type="button" onClick={() => handleAdjustBlock(i, 'move', -1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 flex items-center justify-center" title="Block 1 Tag nach vorne schieben"><ChevronLeft className="h-3 w-3" /></button>
                           <span className="text-muted-foreground px-1">Schieben</span>
-                          <button type="button" onClick={() => handleAdjustBlock(i, 'move', 1)} className="hover:bg-background rounded px-1 flex items-center" title="Block 1 Tag nach hinten schieben"><ChevronRight className="h-3 w-3" /></button>
+                          <button type="button" onClick={() => handleAdjustBlock(i, 'move', 1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 flex items-center justify-center" title="Block 1 Tag nach hinten schieben"><ChevronRight className="h-3 w-3" /></button>
                         </div>
                         <div className="inline-flex items-center rounded border bg-muted/40 px-1 py-0.5 gap-0.5" title="Endtag verschieben">
                           <span className="text-muted-foreground px-1">Ende:</span>
-                          <button type="button" onClick={() => handleAdjustBlock(i, 'end', -1)} className="hover:bg-background rounded px-1 font-bold" title="1 Tag kürzer">−1T</button>
-                          <button type="button" onClick={() => handleAdjustBlock(i, 'end', 1)} className="hover:bg-background rounded px-1 font-bold" title="1 Tag länger">+1T</button>
+                          <button type="button" onClick={() => handleAdjustBlock(i, 'end', -1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 font-bold" title="1 Tag kürzer">−1T</button>
+                          <button type="button" onClick={() => handleAdjustBlock(i, 'end', 1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 font-bold" title="1 Tag länger">+1T</button>
                         </div>
                         <button
                           type="button"

@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   subdivisions: [] as unknown[],
   groups: [] as unknown[],
   useHolidays: vi.fn((_options: Record<string, unknown>) => ({ data: [], isError: false, isLoading: false, refetch: vi.fn() })),
+  yearViewProps: null as Record<string, unknown> | null,
 }))
 
 vi.mock('@/hooks/use-profile', () => ({
@@ -32,7 +33,12 @@ vi.mock('@/hooks/use-holidays', () => ({
   useCountries: () => ({ data: [] }),
 }))
 vi.mock('./suggestions-panel', () => ({ SuggestionsPanel: () => null }))
-vi.mock('./year-view', () => ({ YearView: () => null }))
+vi.mock('./year-view', () => ({
+  YearView: (props: Record<string, unknown>) => {
+    mocks.yearViewProps = props
+    return null
+  },
+}))
 
 function renderCalendar(isLoggedIn: boolean) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -114,5 +120,29 @@ describe('preferences follow the visible controls', () => {
         }),
       ],
     })
+  })
+
+  it('defaults compact viewports to inspect mode and switches via the mobile dock', () => {
+    const origMatchMedia = window.matchMedia
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: query === '(max-width: 767px)',
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }))
+    try {
+      renderCalendar(false)
+      expect(mocks.yearViewProps?.interactionMode).toBe('inspect')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Tippen' }))
+      expect(mocks.yearViewProps?.interactionMode).toBe('edit')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Zeitraum' }))
+      expect(mocks.yearViewProps?.interactionMode).toBe('range')
+
+      expect(screen.getByRole('navigation', { name: 'Monatsschnellnavigation' })).toBeTruthy()
+    } finally {
+      window.matchMedia = origMatchMedia
+    }
   })
 })

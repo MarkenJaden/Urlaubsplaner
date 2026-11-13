@@ -10,9 +10,14 @@ import type { VacationSuggestionBlock } from '@/lib/vacation-suggester'
 import { countHolidayStates } from '@/lib/holidays'
 import { DEFAULT_WORK_DAYS, formatWorkDaysLabel, isOffDayKey } from '@/lib/vacation-accounting'
 
+export type CalendarInteractionMode = 'auto' | 'inspect' | 'edit' | 'range'
+
 interface YearViewProps {
   year: number
   todayKey?: string
+  selectedDayKey?: string | null
+  rangeAnchorKey?: string | null
+  interactionMode?: CalendarInteractionMode
   entries: VacationEntry[]
   publicHolidays: Holiday[]
   schoolHolidays: Holiday[]
@@ -39,6 +44,7 @@ interface YearViewProps {
   overBudgetDates: Set<string>
   onToggle: (date: Date, type: EntryType) => void
   onSelectRange?: (startDateKey: string, endDateKey: string, type: EntryType) => void
+  onRangeStep?: (dateKey: string) => void
   selectedType: EntryType
   onHover?: (info: DayInfo | null) => void
   onSelectDate?: (date: Date) => void
@@ -53,7 +59,8 @@ function buildRangeSet(a: string | null, b: string | null): Set<string> {
 }
 
 export function YearView({
-  year, todayKey, entries, publicHolidays, schoolHolidays,
+  year, todayKey, selectedDayKey, rangeAnchorKey, interactionMode = 'auto',
+  entries, publicHolidays, schoolHolidays,
   workDays = DEFAULT_WORK_DAYS,
   compareHolidays = [], compareLabels = [], overlays = [],
   previewSuggestions = [], selectedPreviewIndex = 0,
@@ -61,7 +68,7 @@ export function YearView({
   showHeatmap, showPublicHolidays,
   showSchoolHolidays, bridgeDaySet, bridgeDayMap,
   showBridgeDays, showOtherMonthDays, overBudgetDates,
-  onToggle, onSelectRange, selectedType, onHover, onSelectDate,
+  onToggle, onSelectRange, onRangeStep, selectedType, onHover, onSelectDate,
 }: YearViewProps) {
   const [dragStartKey, setDragStartKey] = useState<string | null>(null)
   const [dragCurrentKey, setDragCurrentKey] = useState<string | null>(null)
@@ -69,6 +76,13 @@ export function YearView({
 
   const lastClickedKeyRef = useRef<string | null>(null)
   const suppressNextClickRef = useRef(false)
+  const movedBeyondTapRef = useRef(false)
+  const pointerStartRef = useRef<{
+    x: number
+    y: number
+    scrollY: number
+    pointerType: string
+  } | null>(null)
   const suggestionDragRef = useRef<{
     blockIndex: number
     mode: 'move' | 'resize-start' | 'resize-end'
@@ -188,6 +202,20 @@ export function YearView({
     (dateKey: string, event: React.PointerEvent<HTMLButtonElement>) => {
       if (event.button !== 0) return
 
+      movedBeyondTapRef.current = false
+      suppressNextClickRef.current = false
+      pointerStartRef.current = {
+        x: event.clientX,
+        y: event.clientY,
+        scrollY: typeof window !== 'undefined' ? window.scrollY : 0,
+        pointerType: event.pointerType || 'mouse',
+      }
+
+      // On touchscreens, dragging a finger must scroll the page cleanly instead of starting a range drag.
+      if (event.pointerType === 'touch') {
+        return
+      }
+
       const preview = suggestionPreviewByDate.get(dateKey)
       if (preview?.isVacationDay && onDragPreviewBlock) {
         const targetEl = event.target as HTMLElement | null
@@ -231,7 +259,24 @@ export function YearView({
   )
 
   useEffect(() => {
+    const clearDragState = () => {
+      suggestionDragRef.current = null
+      rangeDragRef.current = null
+      setIsDraggingRange(false)
+      setDragStartKey(null)
+      setDragCurrentKey(null)
+    }
+
     const onPointerMove = (event: PointerEvent) => {
+      if (pointerStartRef.current) {
+        const dx = Math.abs(event.clientX - pointerStartRef.current.x)
+        const dy = Math.abs(event.clientY - pointerStartRef.current.y)
+        const currentScrollY = typeof window !== 'undefined' ? window.scrollY : 0
+        if (dx > 8 || dy > 8 || Math.abs(currentScrollY - pointerStartRef.current.scrollY) > 4) {
+          movedBeyondTapRef.current = true
+        }
+      }
+
       if (!suggestionDragRef.current && !rangeDragRef.current) return
       const el = document.elementFromPoint(event.clientX, event.clientY)
       const cell = el?.closest('[data-date]') as HTMLElement | null
@@ -264,7 +309,15 @@ export function YearView({
       }
     }
 
-    const onPointerUpOrCancel = () => {
+    const onPointerUp = () => {
+      if (pointerStartRef.current) {
+        const currentScrollY = typeof window !== 'undefined' ? window.scrollY : 0
+        if (Math.abs(currentScrollY - pointerStartRef.current.scrollY) > 4) {
+          movedBeyondTapRef.current = true
+        }
+        pointerStartRef.current = null
+      }
+
       if (suggestionDragRef.current) {
         suppressNextClickRef.current = true
         suggestionDragRef.current = null
@@ -283,32 +336,59 @@ export function YearView({
       }
     }
 
+    // pointercancel fires when the browser hands off to native touch scrolling: abort, never commit a range!
+    const onPointerCancel = () => {
+      suppressNextClickRef.current = true
+      movedBeyondTapRef.current = true
+      pointerStartRef.current = null
+      clearDragState()
+    }
+
+    const onScroll = () => {
+      if (pointerStartRef.current) {
+        movedBeyondTapRef.current = true
+      }
+    }
+
     document.addEventListener('pointermove', onPointerMove)
-    document.addEventListener('pointerup', onPointerUpOrCancel)
-    document.addEventListener('pointercancel', onPointerUpOrCancel)
+    document.addEventListener('pointerup', onPointerUp)
+    document.addEventListener('pointercancel', onPointerCancel)
+    window.addEventListener('scroll', onScroll, { passive: true })
     return () => {
       document.removeEventListener('pointermove', onPointerMove)
-      document.removeEventListener('pointerup', onPointerUpOrCancel)
-      document.removeEventListener('pointercancel', onPointerUpOrCancel)
+      document.removeEventListener('pointerup', onPointerUp)
+      document.removeEventListener('pointercancel', onPointerCancel)
+      window.removeEventListener('scroll', onScroll)
     }
   }, [onDragPreviewBlock, onSelectRange, selectedType])
 
   const handleCellToggle = useCallback(
     (date: Date, type: EntryType) => {
-      if (suppressNextClickRef.current) {
+      if (suppressNextClickRef.current || movedBeyondTapRef.current) {
         suppressNextClickRef.current = false
+        movedBeyondTapRef.current = false
         return
       }
       const key = format(date, 'yyyy-MM-dd')
       const preview = suggestionPreviewByDate.get(key)
       if (preview?.isVacationDay && onSelectPreviewBlock) {
         onSelectPreviewBlock(preview.blockIndex)
+        onSelectDate?.(date)
+        return
+      }
+      if (interactionMode === 'inspect') {
+        onSelectDate?.(date)
+        return
+      }
+      if (interactionMode === 'range' && onRangeStep) {
+        onRangeStep(key)
         return
       }
       lastClickedKeyRef.current = key
       onToggle(date, type)
+      onSelectDate?.(date)
     },
-    [suggestionPreviewByDate, onSelectPreviewBlock, onToggle],
+    [suggestionPreviewByDate, onSelectPreviewBlock, onSelectDate, interactionMode, onRangeStep, onToggle],
   )
 
   const months = Array.from({ length: 12 }, (_, i) => new Date(year, i, 1))
@@ -329,6 +409,8 @@ export function YearView({
             key={monthDate.toISOString()}
             date={monthDate}
             todayKey={todayKey}
+            selectedDayKey={selectedDayKey}
+            rangeAnchorKey={rangeAnchorKey}
             entries={entries}
             publicHolidays={showPublicHolidays ? publicHolidays : []}
             schoolHolidays={showSchoolHolidays ? schoolHolidays : []}

@@ -53,6 +53,8 @@ interface DayCellProps {
   isPast: boolean
   isOverBudget: boolean
   isDragSelected?: boolean
+  isSelectedDay?: boolean
+  isRangeAnchor?: boolean
   suggestionPreview?: SuggestionPreviewDayInfo
   heatmapValue?: number
   comparisonStates?: string[]
@@ -92,10 +94,10 @@ function getHeatmapClass(value?: number): string {
 export function DayCell({
   date, entries, publicHolidays, schoolHolidays,
   isWeekend, isToday, isOtherMonth, isPast, isOverBudget,
-  isDragSelected = false, suggestionPreview,
+  isDragSelected = false, isSelectedDay = false, isRangeAnchor = false, suggestionPreview,
   heatmapValue, comparisonStates = [], showHeatmap, isBridgeDay, bridgeDayInfo,
   showBridgeDays, showOtherMonthDays, sharedItems = [],
-  onToggle, onCellPointerDown, selectedType, onHover, onSelectDate,
+  onToggle, onCellPointerDown, selectedType, onHover,
 }: DayCellProps) {
   if (isOtherMonth && !showOtherMonthDays) {
     return <div className="aspect-square" />
@@ -192,7 +194,6 @@ export function DayCell({
 
   const handleClick = () => {
     onToggle(date, selectedType)
-    if (window.matchMedia('(hover: none)').matches) onSelectDate?.(date)
   }
 
   const heatmapClass = !hasPlannedOff && !publicHoliday && !(showBridgeDays && isBridgeDay) && hasHeatmap && !suggestionPreview?.isVacationDay
@@ -201,6 +202,7 @@ export function DayCell({
 
   // Note-only without vacation/gleittag on a public holiday keeps the public holiday styling, decorated with a note marker
   const isPublicHolidayDominant = Boolean(publicHoliday && !hasPlannedOff && !suggestionPreview?.isVacationDay)
+  const hasRegionalHolidayBottomBorder = Boolean(publicHoliday && hasPlannedOff && isPublicHolidayRegional)
 
   return (
     <button
@@ -210,7 +212,6 @@ export function DayCell({
         'day-cell relative w-full aspect-square flex flex-col items-center justify-center [-webkit-user-select:none] select-none',
         'rounded-md text-sm font-medium transition-all duration-150 sm:text-xs',
         'min-h-11 sm:min-h-0',
-        'hover:ring-2 hover:ring-primary/60 hover:z-10 hover:scale-105',
         'active:scale-95',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
         isOtherMonth && 'opacity-25',
@@ -218,6 +219,8 @@ export function DayCell({
         !isPast && !isOtherMonth && !hasEntry && !publicHoliday && !schoolHoliday && !hasHeatmap && !isWeekend && !suggestionPreview && 'bg-background text-foreground shadow-[inset_0_0_0_1px_hsl(var(--border)/0.6)] dark:bg-card/95',
         isWeekend && !hasEntry && !publicHoliday && !hasHeatmap && !suggestionPreview?.isVacationDay && 'bg-muted/70 text-muted-foreground',
         isToday && 'ring-2 ring-primary ring-offset-1 ring-offset-background z-10',
+        isSelectedDay && 'ring-2 ring-amber-500 ring-offset-1 ring-offset-background z-20',
+        isRangeAnchor && 'ring-2 ring-blue-500 ring-offset-2 ring-offset-background z-20 animate-pulse',
         // Past days are distinctly dimmed across all states so past vs future is unmistakable:
         isPast && !hasEntry && !publicHoliday && !schoolHoliday && !isBridgeDay && !hasHeatmap && !suggestionPreview && 'opacity-35 bg-muted/40 text-muted-foreground saturate-50',
         isPast && (hasEntry || publicHoliday || schoolHoliday || isBridgeDay || hasHeatmap) && !suggestionPreview && 'opacity-50 saturate-[0.65]',
@@ -259,14 +262,11 @@ export function DayCell({
         ],
 
         // School holiday visual retention when vacation/gleittag or note is planned:
-        // A distinct amber bottom underline ensures the user still sees that this planned period is inside school holidays
-        schoolHoliday && hasEntry && 'border-b-[3px] border-b-amber-300 dark:border-b-amber-400 rounded-b-md',
+        // Avoid colliding with regional public-holiday bottom border by rendering an inner accent bar in that edge case.
+        schoolHoliday && hasEntry && !hasRegionalHolidayBottomBorder && 'border-b-[3px] border-b-amber-300 dark:border-b-amber-400 rounded-b-md',
 
-        // Bridge day with directional edge toward the referenced holiday:
+        // Bridge day highlight (directional edge stripes are rendered cleanly inside to avoid corner-radius clipping):
         isVisibleBridgeDay && !hasPlannedOff && 'ring-1 ring-inset ring-orange-400/90 bg-orange-50/95 text-orange-950 dark:bg-orange-500/20 dark:text-orange-100 dark:ring-orange-400/70',
-        bridgeHolidayBefore && !bridgeHolidayAfter && !hasPlannedOff && 'border-l-[3px] border-l-emerald-500 dark:border-l-emerald-400',
-        bridgeHolidayAfter && !bridgeHolidayBefore && !hasPlannedOff && 'border-r-[3px] border-r-emerald-500 dark:border-r-emerald-400',
-        bridgeHolidayBefore && bridgeHolidayAfter && !hasPlannedOff && 'border-x-[3px] border-x-emerald-500 dark:border-x-emerald-400',
 
         // Interactive Suggestion Preview Overlay on the Calendar:
         suggestionPreview && !suggestionPreview.isVacationDay && 'ring-1 ring-inset ring-teal-500/60 bg-teal-500/15 dark:bg-teal-400/20',
@@ -287,9 +287,31 @@ export function DayCell({
       aria-label={`${format(date, 'dd.MM.yyyy')}${buildTitle() ? ` · ${buildTitle()}` : ''}`}
       aria-pressed={Boolean(hasEntry)}
     >
-      {/* Shared plan overlay bar at top of cell */}
+      {/* Clean inner directional edge stripes for bridge days (prevents rounded-corner artifacts with ring-inset) */}
+      {isVisibleBridgeDay && !hasPlannedOff && bridgeHolidayBefore && (
+        <span
+          aria-hidden="true"
+          className="absolute left-0.5 inset-y-1 w-[3px] rounded-full bg-emerald-500 dark:bg-emerald-400 pointer-events-none"
+        />
+      )}
+      {isVisibleBridgeDay && !hasPlannedOff && bridgeHolidayAfter && (
+        <span
+          aria-hidden="true"
+          className="absolute right-0.5 inset-y-1 w-[3px] rounded-full bg-emerald-500 dark:bg-emerald-400 pointer-events-none"
+        />
+      )}
+
+      {/* Inner amber school-holiday bar when colliding with a regional holiday bottom border */}
+      {schoolHoliday && hasEntry && hasRegionalHolidayBottomBorder && (
+        <span
+          aria-hidden="true"
+          className="absolute bottom-0.5 inset-x-1.5 h-0.5 rounded-full bg-amber-300 dark:bg-amber-400 pointer-events-none"
+        />
+      )}
+
+      {/* Shared plan overlay bar at top-center (inset past left/right corner badges) */}
       {sharedItems.length > 0 && (
-        <div className="absolute top-0.5 inset-x-1 flex gap-0.5 justify-center pointer-events-none">
+        <div className="absolute top-0.5 inset-x-3.5 flex gap-0.5 justify-center pointer-events-none">
           {sharedItems.slice(0, 3).map((s, idx) =>
             s.type === 'off_day' ? (
               <span
@@ -311,11 +333,11 @@ export function DayCell({
       {/* Note indicator icon on top-left: visible even if placed on a Feiertag or Vacation day */}
       {note && (
         <span
-          className="absolute top-1 left-1 pointer-events-none select-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)]"
+          className="absolute top-0.5 left-0.5 pointer-events-none select-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.65)]"
           title={`Notiz: ${note.title ?? 'Notiz'}`}
           aria-hidden="true"
         >
-          <StickyNote className="h-3.5 w-3.5 text-amber-300 fill-amber-400/50 dark:text-amber-200 dark:fill-amber-300/50" />
+          <StickyNote className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-300 fill-amber-400/50 dark:text-amber-200 dark:fill-amber-300/50" />
         </span>
       )}
 
@@ -324,8 +346,8 @@ export function DayCell({
       {publicHoliday && hasPlannedOff && (
         <span
           className={cn(
-            'absolute top-1 right-1 flex items-center justify-center rounded-full bg-emerald-400 text-emerald-950 ring-1.5 ring-white dark:ring-slate-900 shadow-xs pointer-events-none',
-            isPublicHolidayRegional ? 'w-2.5 h-2.5 text-[7px] font-extrabold' : 'w-2 h-2'
+            'absolute top-0.5 right-0.5 flex items-center justify-center rounded-full bg-emerald-400 text-emerald-950 ring-1.5 ring-white dark:ring-slate-900 shadow-xs pointer-events-none',
+            isPublicHolidayRegional ? 'w-3 h-3 text-[8px] font-extrabold leading-none' : 'w-2 h-2'
           )}
           title={
             isPublicHolidayRegional
@@ -347,12 +369,12 @@ export function DayCell({
         />
       )}
 
-      {/* Draggable left/right handles for interactive suggestion blocks on the calendar */}
+      {/* Draggable left/right handles for interactive suggestion blocks on desktop */}
       {suggestionPreview?.isVacationDay && suggestionPreview.isFirstVacationDay && (
         <span
           data-suggestion-handle="resize-start"
           title="Anfang ziehen zum Verlängern/Verkürzen"
-          className="absolute left-0 inset-y-0 w-2.5 flex items-center justify-center bg-teal-900/45 hover:bg-teal-900/75 text-[7px] font-bold text-white cursor-ew-resize rounded-l-md"
+          className="hidden md:flex absolute left-0 inset-y-0 w-2.5 items-center justify-center bg-teal-900/45 hover:bg-teal-900/75 text-[7px] font-bold text-white cursor-ew-resize rounded-l-md"
         >
           ◀
         </span>
@@ -361,7 +383,7 @@ export function DayCell({
         <span
           data-suggestion-handle="resize-end"
           title="Ende ziehen zum Verlängern/Verkürzen"
-          className="absolute right-0 inset-y-0 w-2.5 flex items-center justify-center bg-teal-900/45 hover:bg-teal-900/75 text-[7px] font-bold text-white cursor-ew-resize rounded-r-md"
+          className="hidden md:flex absolute right-0 inset-y-0 w-2.5 items-center justify-center bg-teal-900/45 hover:bg-teal-900/75 text-[7px] font-bold text-white cursor-ew-resize rounded-r-md"
         >
           ▶
         </span>

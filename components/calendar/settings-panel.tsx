@@ -141,33 +141,35 @@ export function SettingsPanel({
         </div>
       )}
       <details className="group rounded-xl border border-border bg-card shadow-2xs print:hidden">
-        <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 p-3 text-sm font-medium hover:bg-muted/50 transition-colors rounded-xl after:content-['▾'] after:text-xs after:text-muted-foreground after:transition-transform group-open:after:rotate-180">
-          <span className="flex items-center gap-2">
-            <Settings2 className="h-4 w-4 text-primary" aria-hidden="true" />
-            <span>Einstellungen, Arbeitszeit, Standort &amp; Statistik</span>
-          </span>
-          <span className="ml-auto mr-2 flex flex-wrap items-center gap-1.5 text-xs font-normal text-muted-foreground">
-            <span className="rounded-md border bg-muted/40 px-2 py-0.5 text-foreground font-medium">{activeRegionLabel}</span>
-            <span className="inline-flex items-center gap-2 rounded-md border bg-muted/40 px-2 py-0.5 text-foreground">
-              <span className="h-1.5 w-14 overflow-hidden rounded-full bg-muted">
-                <span
-                  className={`block h-full ${remaining < 0 ? 'bg-red-500' : 'bg-blue-600'}`}
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </span>
-              <span>
-                <strong>{formatDays(vacationDaysUsed)}</strong>/{formatDays(effectiveTotal)} verplant ·{' '}
-                <strong className={remaining < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}>
-                  {formatDays(remaining)} frei
-                </strong>
-              </span>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 p-2.5 sm:p-3 text-sm font-medium hover:bg-muted/50 transition-colors rounded-xl after:shrink-0 after:content-['▾'] after:text-xs after:text-muted-foreground after:transition-transform group-open:after:rotate-180">
+          <span className="flex flex-1 min-w-0 flex-wrap items-center justify-between gap-1.5 sm:gap-2">
+            <span className="flex items-center gap-2">
+              <Settings2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+              <span>Einstellungen, Arbeitszeit, Standort &amp; Statistik</span>
             </span>
-            {carryoverExpiringDays > 0 && (
-              <span className="rounded-md border border-amber-500/50 bg-amber-500/15 px-2 py-0.5 text-amber-800 dark:text-amber-200 font-medium">
-                ⚠️ {formatDays(carryoverExpiringDays)} Resturlaub bis 31.03.
+            <span className="flex flex-wrap items-center gap-1.5 text-xs font-normal text-muted-foreground sm:ml-auto sm:mr-2">
+              <span className="rounded-md border bg-muted/40 px-2 py-0.5 text-foreground font-medium">{activeRegionLabel}</span>
+              <span className="inline-flex items-center gap-2 rounded-md border bg-muted/40 px-2 py-0.5 text-foreground">
+                <span className="h-1.5 w-14 overflow-hidden rounded-full bg-muted">
+                  <span
+                    className={`block h-full ${remaining < 0 ? 'bg-red-500' : 'bg-blue-600'}`}
+                    style={{ width: `${progressPercent}%` }}
+                  />
+                </span>
+                <span>
+                  <strong>{formatDays(vacationDaysUsed)}</strong>/{formatDays(effectiveTotal)} verplant ·{' '}
+                  <strong className={remaining < 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}>
+                    {formatDays(remaining)} frei
+                  </strong>
+                </span>
               </span>
-            )}
-            <span className="hidden sm:inline rounded-md border bg-muted/40 px-2 py-0.5">{workDays.length}-Tage-Woche</span>
+              {carryoverExpiringDays > 0 && (
+                <span className="rounded-md border border-amber-500/50 bg-amber-500/15 px-2 py-0.5 text-amber-800 dark:text-amber-200 font-medium">
+                  ⚠️ {formatDays(carryoverExpiringDays)} Resturlaub bis 31.03.
+                </span>
+              )}
+              <span className="hidden sm:inline rounded-md border bg-muted/40 px-2 py-0.5">{workDays.length}-Tage-Woche</span>
+            </span>
           </span>
         </summary>
 

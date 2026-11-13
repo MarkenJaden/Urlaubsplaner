@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { Header } from '@/components/layout/header'
 import { Toolbar, type SharedPlanStatSummary } from '@/components/calendar/toolbar'
-import { YearView } from '@/components/calendar/year-view'
+import { YearView, type CalendarInteractionMode } from '@/components/calendar/year-view'
 import { SettingsPanel } from '@/components/calendar/settings-panel'
 import { SuggestionsPanel } from '@/components/calendar/suggestions-panel'
 import { ClipboardExportDialog } from '@/components/calendar/clipboard-export-dialog'
@@ -61,6 +61,8 @@ import {
   MapPin,
   BarChart3,
   CalendarDays,
+  Undo2,
+  ArrowLeftRight,
 } from 'lucide-react'
 import { useProfile, useUpdatePreferences } from '@/hooks/use-profile'
 import { useQueryClient } from '@tanstack/react-query'
@@ -85,6 +87,7 @@ interface CalendarClientProps {
 const SHARED_OVERLAYS_STORAGE_KEY = 'urlaubsplaner_shared_overlays_v1'
 const GUEST_IMPORT_DISMISSED_KEY = 'urlaubsplaner_guest_import_dismissed_v1'
 const OVERLAY_COLORS = ['#0d9488', '#db2777', '#7c3aed', '#ea580c', '#0284c7']
+const SHORT_MONTH_LABELS = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 
 function getDateKey(date: Date): string {
   return format(date, 'yyyy-MM-dd')
@@ -120,7 +123,7 @@ const UNDO_LIMIT = 20
 
 const plannedEntry = ({ date, type, title }: PlannedEntry): PlannedEntry => ({ date: date.slice(0, 10), type, ...(title ? { title } : {}) })
 
-function hasVisibleDayInfo(day: DayInfo | null): day is DayInfo {
+function hasVisibleDayInfo(day: DayInfo | null): boolean {
   return Boolean(
     day?.publicHoliday ||
     day?.schoolHoliday ||
@@ -133,9 +136,9 @@ function hasVisibleDayInfo(day: DayInfo | null): day is DayInfo {
 }
 
 function DayInfoDetails({ day }: { day: DayInfo }) {
-  const viewerHasVacationOrFlex = day.entry?.type === 'vacation' || day.entry?.type === 'gleittag'
+  const viewerHasVacationOrFlex = day.entry?.type === 'vacation' || day.entry?.type === 'gleittag' || day.entry?.type === 'special'
   const partnerHasFree = Boolean(
-    day.sharedItems?.some(s => s.type === 'vacation' || s.type === 'gleittag' || s.type === 'off_day'),
+    day.sharedItems?.some(s => s.type === 'vacation' || s.type === 'gleittag' || s.type === 'special' || s.type === 'off_day'),
   )
 
   return (
@@ -186,8 +189,24 @@ function DayInfoDetails({ day }: { day: DayInfo }) {
         </p>
       )}
       {day.entry && (
-        <p className={day.entry.type === 'vacation' ? 'text-blue-500 font-medium' : day.entry.type === 'gleittag' ? 'text-purple-500 font-medium' : 'text-muted-foreground'}>
-          {day.entry.type === 'vacation' ? '🌴 Geplanter Urlaub' : day.entry.type === 'gleittag' ? '⏰ Geplanter Gleittag' : `📝 ${day.entry.title ?? 'Notiz'}`}
+        <p
+          className={
+            day.entry.type === 'vacation'
+              ? 'text-blue-500 font-medium'
+              : day.entry.type === 'gleittag'
+                ? 'text-purple-500 font-medium'
+                : day.entry.type === 'special'
+                  ? 'text-cyan-600 dark:text-cyan-400 font-medium'
+                  : 'text-muted-foreground'
+          }
+        >
+          {day.entry.type === 'vacation'
+            ? '🌴 Geplanter Urlaub'
+            : day.entry.type === 'gleittag'
+              ? '⏰ Geplanter Gleittag'
+              : day.entry.type === 'special'
+                ? `✨ Sonderurlaub / Frei${day.entry.title ? `: ${day.entry.title}` : ''}`
+                : `📝 ${day.entry.title ?? 'Notiz'}`}
         </p>
       )}
       {day.noteEntry && day.noteEntry !== day.entry && (
@@ -310,7 +329,30 @@ export function CalendarClient({
   const [arrivedViaShareLabel, setArrivedViaShareLabel] = useState<string | null>(null)
   const [hoveredDay, setHoveredDay] = useState<DayInfo | null>(null)
   const [activeDayKey, setActiveDayKey] = useState<string | null>(null)
+  const [isCompactViewport, setIsCompactViewport] = useState(false)
+  const [mobileMode, setMobileMode] = useState<'inspect' | 'edit' | 'range'>('inspect')
+  const [rangeAnchorKey, setRangeAnchorKey] = useState<string | null>(null)
+  const [mobileNoteDraft, setMobileNoteDraft] = useState('')
+  const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(false)
   const [defaultNoteText, setDefaultNoteText] = useState('')
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+    const mq = window.matchMedia('(max-width: 767px)')
+    const update = () => setIsCompactViewport(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
+
+  useEffect(() => {
+    setRangeAnchorKey(null)
+    setActiveDayKey(null)
+  }, [year])
+
+  useEffect(() => {
+    if (mobileMode !== 'range') setRangeAnchorKey(null)
+  }, [mobileMode])
   const [undoStack, setUndoStack] = useState<UndoSnapshot[]>([])
   const [undoBusy, setUndoBusy] = useState(false)
   const [sharedOverlays, setSharedOverlays] = useState<SharedPlanOverlay[]>(() => {
@@ -1056,14 +1098,17 @@ export function CalendarClient({
     finally { setImportBusy(false) }
   }, [queryClient])
 
-  const handleToggle = useCallback((date: Date, type: EntryType) => {
+  const handleToggle = useCallback((date: Date, type: EntryType, explicitTitle?: string) => {
     const dateKey = getDateKey(date)
 
     // Collaborative live-edit mode on a shared plan
     if (activeCollab && collabMode === 'edit') {
       const matching = (key: string) => (e: { date: string; type: string }) => e.type === type && e.date.slice(0, 10) === key
       const existing = activeCollab.entries.find(matching(dateKey))
-      const title = !existing && type === 'note' ? defaultNoteText || prompt('Notiz-Text (optional):') || undefined : undefined
+      const title =
+        !existing && type === 'note'
+          ? (explicitTitle ?? (defaultNoteText || prompt('Notiz-Text (optional):') || undefined))
+          : undefined
       void (async () => {
         try {
           const res = await fetch(`/api/shares/${encodeURIComponent(activeCollab.token)}`, {
@@ -1088,7 +1133,10 @@ export function CalendarClient({
     const matching = (key: string) => (e: { date: string; type: string }) => e.type === type && e.date.slice(0, 10) === key
     // Guests: search all years, days of the neighbouring year can be visible in the grid.
     const existing = isLoggedIn ? entries.find(matching(dateKey)) : localConfig?.entries.find(matching(dateKey))
-    const title = !existing && type === 'note' ? defaultNoteText || prompt('Notiz-Text (optional):') || undefined : undefined
+    const title =
+      !existing && type === 'note'
+        ? (explicitTitle ?? (defaultNoteText || prompt('Notiz-Text (optional):') || undefined))
+        : undefined
     // With half days, 24.12. and 31.12. are planned together.
     const partner = type === 'vacation' && halfDaysChristmas ? christmasPartner(dateKey) : null
     const keys = partner ? [dateKey, partner] : [dateKey]
@@ -1416,12 +1464,34 @@ export function CalendarClient({
     const date = parseISO(activeDayKey)
     const vacation = entries.find(e => e.type === 'vacation' && e.date.split('T')[0] === activeDayKey)
     const gleittag = entries.find(e => e.type === 'gleittag' && e.date.split('T')[0] === activeDayKey)
+    const special = entries.find(e => e.type === 'special' && e.date.split('T')[0] === activeDayKey)
     const note = entries.find(e => e.type === 'note' && e.date.split('T')[0] === activeDayKey)
-    const entry = vacation ?? gleittag ?? note
+    const entry = vacation ?? gleittag ?? special ?? note
     const publicHoliday = getHolidayForDate(combinedPublicHolidays, date)
     const schoolHoliday = getHolidayForDate(schoolHolidays, date)
     const bridgeDayInfo = bridgeDayMap.get(activeDayKey)
     const sharedItems = sharedOverlayMap.get(activeDayKey)
+
+    const previewIndex = previewSuggestions.findIndex(block =>
+      block.startDate && block.endDate && activeDayKey >= block.startDate && activeDayKey <= block.endDate,
+    )
+    const matchedPreview = previewIndex >= 0 ? previewSuggestions[previewIndex] : undefined
+    const firstVac = matchedPreview?.vacationDays[0]
+    const lastVac = matchedPreview?.vacationDays[matchedPreview.vacationDays.length - 1]
+    const suggestionPreview = matchedPreview
+      ? {
+          blockIndex: previewIndex,
+          label: matchedPreview.label,
+          isVacationDay: matchedPreview.vacationDays.includes(activeDayKey),
+          isFirstVacationDay: activeDayKey === firstVac,
+          isLastVacationDay: activeDayKey === lastVac,
+          isSelectedBlock: previewIndex === selectedPreviewIndex,
+          cost: matchedPreview.cost,
+          freeDaysGained: matchedPreview.freeDaysGained,
+          efficiency: matchedPreview.efficiency,
+        }
+      : undefined
+
     const day: DayInfo = {
       date,
       comparisonStates: showHeatmap ? comparison.holidays.flatMap((holidays, i) => getHolidayForDate(holidays, date) ? [regionName(compareSubdivisions[i])] : []) : [],
@@ -1433,10 +1503,54 @@ export function CalendarClient({
       entry,
       noteEntry: note,
       sharedItems,
+      suggestionPreview,
     }
 
-    return hasVisibleDayInfo(day) ? day : null
-  }, [activeDayKey, entries, combinedPublicHolidays, schoolHolidays, bridgeDayMap, bridgeDaySet, showBridgeDays, showHeatmap, comparison.holidays, compareSubdivisions, regionName, sharedOverlayMap])
+    return day
+  }, [activeDayKey, entries, combinedPublicHolidays, schoolHolidays, bridgeDayMap, bridgeDaySet, showBridgeDays, showHeatmap, comparison.holidays, compareSubdivisions, regionName, sharedOverlayMap, previewSuggestions, selectedPreviewIndex])
+
+  const plannedMonthsSet = useMemo(() => {
+    const set = new Set<string>()
+    for (const e of entries) {
+      if (e.date.startsWith(`${year}-`)) {
+        set.add(e.date.slice(0, 7))
+      }
+    }
+    return set
+  }, [entries, year])
+
+  const handleRangeStep = useCallback((dateKey: string) => {
+    if (!rangeAnchorKey) {
+      setRangeAnchorKey(dateKey)
+      setActiveDayKey(null)
+      return
+    }
+    if (rangeAnchorKey === dateKey) {
+      handleToggle(parseISO(dateKey), selectedType)
+      setRangeAnchorKey(null)
+      return
+    }
+    handleSelectRange(rangeAnchorKey, dateKey, selectedType)
+    setRangeAnchorKey(null)
+  }, [rangeAnchorKey, handleToggle, selectedType, handleSelectRange])
+
+  const scrollToMonth = useCallback((targetYear: number, monthIndex: number) => {
+    const mm = String(monthIndex + 1).padStart(2, '0')
+    if (targetYear !== year) {
+      setYear(targetYear)
+      window.setTimeout(() => {
+        document.getElementById(`month-${targetYear}-${mm}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 120)
+      return
+    }
+    document.getElementById(`month-${targetYear}-${mm}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [year])
+
+  const effectiveInteractionMode: CalendarInteractionMode = isCompactViewport ? mobileMode : 'auto'
+
+  useEffect(() => {
+    setMobileNoteDraft(activeDayInfo?.noteEntry?.title ?? '')
+  }, [activeDayKey, activeDayInfo?.noteEntry?.title])
 
   const hasSyncError = profile.isError || entriesError || updatePreferences.isError || addMutation.isError || removeMutation.isError
   const isSavingOrLoading = profile.isLoading || entriesLoading || updatePreferences.isPending || addMutation.isPending || removeMutation.isPending
@@ -1556,41 +1670,52 @@ export function CalendarClient({
         regionLabel={subdivision ? regionName(subdivision) : country}
       />
 
-      <main className="container space-y-4 py-3 sm:py-4">
+      <main className="container space-y-3 sm:space-y-4 py-2.5 sm:py-4 pb-24 md:pb-4">
         <h1 className="sr-only">
           Urlaubsplaner {year} – Brückentage, Schulferien &amp; Optimale Urlaubsplanung
         </h1>
         {/* Guest Welcome & Quick Actions Bar */}
         {!isLoggedIn && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-200/80 bg-blue-50/80 dark:border-blue-900/50 dark:bg-blue-950/30 px-3.5 py-2.5 text-sm text-blue-900 dark:text-blue-100 print:hidden">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 shrink-0 text-blue-600 dark:text-blue-400" />
-              <span>
-                Dein Plan wird automatisch <strong>auf diesem Gerät gespeichert</strong>.{' '}
-                <a href="/login" className="underline font-semibold hover:text-blue-700 dark:hover:text-blue-300">
-                  Kostenlos anmelden
-                </a>
-                , um ihn auch am Handy oder anderen PCs zu synchronisieren.
+          <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3 rounded-xl border border-blue-200/80 bg-blue-50/80 dark:border-blue-900/50 dark:bg-blue-950/30 px-3 py-2 sm:px-3.5 sm:py-2.5 text-xs sm:text-sm text-blue-900 dark:text-blue-100 print:hidden">
+            <div className="flex items-start sm:items-center gap-2 min-w-0">
+              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5 sm:mt-0 text-blue-600 dark:text-blue-400" />
+              <span className="leading-snug">
+                <span className="sm:hidden">
+                  Lokal gespeichert.{' '}
+                  <a href="/login" className="underline font-semibold hover:text-blue-700 dark:hover:text-blue-300">
+                    Anmelden
+                  </a>{' '}
+                  für Sync.
+                </span>
+                <span className="hidden sm:inline">
+                  Dein Plan wird automatisch <strong>auf diesem Gerät gespeichert</strong>.{' '}
+                  <a href="/login" className="underline font-semibold hover:text-blue-700 dark:hover:text-blue-300">
+                    Kostenlos anmelden
+                  </a>
+                  , um ihn auch am Handy oder anderen PCs zu synchronisieren.
+                </span>
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 text-xs bg-background/80"
+                className="h-8 sm:h-7 px-2.5 text-xs bg-background/80"
                 onClick={() => setShowShareDialog(true)}
               >
                 <Share2 className="mr-1.5 h-3.5 w-3.5" />
-                Plan teilen
+                <span className="sm:hidden">Teilen</span>
+                <span className="hidden sm:inline">Plan teilen</span>
               </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 text-xs bg-background/80"
+                className="h-8 sm:h-7 px-2.5 text-xs bg-background/80"
                 onClick={() => setShowSubscribeDialog(true)}
               >
                 <CalendarPlus className="mr-1.5 h-3.5 w-3.5" />
-                In Kalender einbinden
+                <span className="sm:hidden">Kalender-Abo</span>
+                <span className="hidden sm:inline">In Kalender einbinden</span>
               </Button>
             </div>
           </div>
@@ -1808,18 +1933,18 @@ export function CalendarClient({
         )}
 
         {/* Compact Quick-Start & Q4 Next-Year Planning Bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 via-card to-teal-500/5 px-3 py-2 text-xs print:hidden">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1 font-semibold text-foreground">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/20 bg-gradient-to-r from-primary/5 via-card to-teal-500/5 px-2.5 py-2 sm:px-3 text-xs print:hidden">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 min-w-0">
+            <span className="inline-flex items-center gap-1 font-semibold text-foreground shrink-0">
               <MapPin className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-              Region:
+              <span className="hidden sm:inline">Region:</span>
             </span>
             {subdivisionsData.length > 0 ? (
               <select
                 aria-label="Schnellauswahl Bundesland oder Region"
                 value={subdivision ?? ''}
                 onChange={e => updateConfig({ subdivision: e.target.value || undefined, holidayGroup: null })}
-                className="h-7 rounded-md border border-input bg-background px-2 text-xs font-medium text-foreground"
+                className="h-8 sm:h-7 max-w-[11.5rem] sm:max-w-none rounded-md border border-input bg-background px-2 text-xs font-medium text-foreground"
               >
                 <option value="">{country === 'DE' ? 'Bundesland wählen…' : 'Region wählen…'}</option>
                 {subdivisionsData.map(s => (
@@ -1858,7 +1983,8 @@ export function CalendarClient({
                 }`}
               >
                 <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
-                Jahresgitter
+                <span className="sm:hidden">Gitter</span>
+                <span className="hidden sm:inline">Jahresgitter</span>
               </button>
               <button
                 type="button"
@@ -1871,14 +1997,15 @@ export function CalendarClient({
                 }`}
               >
                 <BarChart3 className="h-3.5 w-3.5" aria-hidden="true" />
-                Vergleichs-Timeline &amp; Ferien-Check
+                <span className="sm:hidden">Timeline</span>
+                <span className="hidden sm:inline">Vergleichs-Timeline &amp; Ferien-Check</span>
               </button>
             </div>
             {isFourthQuarterCurrentYear && (
               <Button
                 type="button"
                 size="sm"
-                className="h-7 px-2.5 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="h-8 sm:h-7 px-2.5 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
                 onClick={() => {
                   setYear(year + 1)
                   setShowSuggestions(true)
@@ -1892,21 +2019,23 @@ export function CalendarClient({
               type="button"
               size="sm"
               variant="outline"
-              className="h-7 px-2.5 text-xs gap-1"
+              className="h-8 sm:h-7 px-2 sm:px-2.5 text-xs gap-1"
               onClick={() => setShowApprovalSheetDialog(true)}
             >
               <StickyNote className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-              Urlaubsantrag (Vorschau &amp; PDF)
+              <span className="sm:hidden">Antrag</span>
+              <span className="hidden sm:inline">Urlaubsantrag (Vorschau &amp; PDF)</span>
             </Button>
             <Button
               type="button"
               size="sm"
               variant="outline"
-              className="h-7 px-2.5 text-xs gap-1"
+              className="h-8 sm:h-7 px-2 sm:px-2.5 text-xs gap-1"
               onClick={() => setShowScorecardDialog(true)}
             >
               <Trophy className="h-3.5 w-3.5 text-amber-500" aria-hidden="true" />
-              Urlaubs-Score ({scorecard.totalFreeDaysInBlocks}T frei)
+              <span className="sm:hidden">Score ({scorecard.totalFreeDaysInBlocks}T)</span>
+              <span className="hidden sm:inline">Urlaubs-Score ({scorecard.totalFreeDaysInBlocks}T frei)</span>
             </Button>
           </div>
         </div>
@@ -2003,16 +2132,19 @@ export function CalendarClient({
 
         {/* Interactive Calendar Suggestion Preview & Live Drag Bar */}
         {previewSuggestions.length > 0 && (
-          <div className="sticky top-14 z-40 rounded-xl border-2 border-teal-500/70 bg-card/95 p-3 shadow-lg backdrop-blur space-y-2.5 text-xs">
+          <div className="sticky top-[3.25rem] sm:top-14 z-40 rounded-xl border-2 border-teal-500/70 bg-card/95 p-2.5 sm:p-3 shadow-lg backdrop-blur space-y-2 sm:space-y-2.5 text-xs">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <Badge className="bg-teal-600 text-white hover:bg-teal-600">
-                  <Sparkles className="mr-1 h-3 w-3" /> Interaktive Kalender-Vorschau
+                  <Sparkles className="mr-1 h-3 w-3" />
+                  <span className="sm:hidden">Vorschau</span>
+                  <span className="hidden sm:inline">Interaktive Kalender-Vorschau</span>
                 </Badge>
                 <span className="font-medium">
-                  Gesamt: <strong>{formatDays(previewTotalCost)} Urlaubstage</strong> →{' '}
+                  <span className="hidden sm:inline">Gesamt: </span>
+                  <strong>{formatDays(previewTotalCost)} UT</strong> →{' '}
                   <strong className="text-teal-600 dark:text-teal-400">{previewTotalFree} freie Tage</strong>{' '}
-                  (Ø {previewAvgEff.toFixed(1)}x Effizienz)
+                  <span className="hidden sm:inline">(Ø {previewAvgEff.toFixed(1)}x Effizienz)</span>
                 </span>
                 <span className="hidden lg:inline text-muted-foreground">
                   · Ziehe <strong>◀ / ▶</strong> an den Enden im Kalender zum Kürzen/Verlängern oder ziehe die Mitte zum Verschieben!
@@ -2023,7 +2155,16 @@ export function CalendarClient({
                   type="button"
                   size="sm"
                   variant="outline"
-                  className="h-7 text-xs"
+                  className="h-8 sm:h-7 px-2 text-xs md:hidden"
+                  onClick={() => setMobilePreviewExpanded(v => !v)}
+                >
+                  {mobilePreviewExpanded ? 'Weniger ▲' : 'Details ▼'}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-8 sm:h-7 px-2 text-xs"
                   onClick={() => setShowSuggestions(true)}
                 >
                   <SlidersHorizontal className="mr-1 h-3.5 w-3.5" />
@@ -2032,7 +2173,7 @@ export function CalendarClient({
                 <Button
                   type="button"
                   size="sm"
-                  className="h-7 text-xs bg-teal-600 hover:bg-teal-700 text-white"
+                  className="h-8 sm:h-7 px-2.5 text-xs bg-teal-600 hover:bg-teal-700 text-white"
                   onClick={() => {
                     const allDates = [...new Set(previewSuggestions.flatMap(s => s.vacationDays))]
                     handleApplySuggestions(allDates, 'vacation', previewOverwrite)
@@ -2046,17 +2187,17 @@ export function CalendarClient({
                   type="button"
                   size="sm"
                   variant="ghost"
-                  className="h-7 text-xs"
+                  className="h-8 sm:h-7 px-2 text-xs"
                   onClick={() => setPreviewSuggestions([])}
                 >
                   <X className="h-3.5 w-3.5" />
-                  Beenden
+                  <span className="hidden sm:inline">Beenden</span>
                 </Button>
               </div>
             </div>
 
             {/* Block Selector Pills */}
-            <div className="flex flex-wrap items-center gap-1.5 border-t pt-2">
+            <div className={`${mobilePreviewExpanded ? 'flex' : 'hidden'} md:flex mobile-scroller items-center gap-1.5 overflow-x-auto border-t pt-2 md:flex-wrap`}>
               {previewSuggestions.map((b, idx) => {
                 const active = idx === selectedPreviewIndex
                 return (
@@ -2064,7 +2205,7 @@ export function CalendarClient({
                     key={b.id ?? idx}
                     type="button"
                     onClick={() => setSelectedPreviewIndex(idx)}
-                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 transition-colors ${
+                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 sm:py-1 transition-colors ${
                       active
                         ? 'border-teal-600 bg-teal-600/15 font-semibold text-teal-800 dark:text-teal-200 ring-1 ring-teal-500'
                         : 'bg-background hover:bg-muted'
@@ -2081,7 +2222,7 @@ export function CalendarClient({
 
             {/* Active Block Live Inspector & Controls */}
             {activePreviewBlock && (
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 px-3 py-2">
+              <div className={`${mobilePreviewExpanded ? 'flex' : 'hidden'} md:flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/40 px-2.5 py-2 sm:px-3`}>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold text-teal-700 dark:text-teal-300">
                     {activePreviewBlock.label}:
@@ -2097,18 +2238,18 @@ export function CalendarClient({
                 <div className="flex flex-wrap items-center gap-1.5">
                   <div className="inline-flex items-center rounded border bg-background px-1 py-0.5 gap-0.5">
                     <span className="text-muted-foreground px-1">Start:</span>
-                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'start', -1)} className="hover:bg-muted rounded px-1.5 font-bold">−1T</button>
-                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'start', 1)} className="hover:bg-muted rounded px-1.5 font-bold">+1T</button>
+                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'start', -1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-muted rounded px-1.5 font-bold">−1T</button>
+                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'start', 1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-muted rounded px-1.5 font-bold">+1T</button>
                   </div>
                   <div className="inline-flex items-center rounded border bg-background px-1 py-0.5 gap-0.5">
-                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'move', -1)} className="hover:bg-muted rounded px-1 flex items-center"><ChevronLeft className="h-3.5 w-3.5" /></button>
+                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'move', -1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-muted rounded px-1.5 flex items-center justify-center" aria-label="Block 1 Tag vor"><ChevronLeft className="h-3.5 w-3.5" /></button>
                     <span className="text-muted-foreground px-1">Verschieben</span>
-                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'move', 1)} className="hover:bg-muted rounded px-1 flex items-center"><ChevronRight className="h-3.5 w-3.5" /></button>
+                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'move', 1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-muted rounded px-1.5 flex items-center justify-center" aria-label="Block 1 Tag zurück"><ChevronRight className="h-3.5 w-3.5" /></button>
                   </div>
                   <div className="inline-flex items-center rounded border bg-background px-1 py-0.5 gap-0.5">
                     <span className="text-muted-foreground px-1">Ende:</span>
-                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'end', -1)} className="hover:bg-muted rounded px-1.5 font-bold">−1T</button>
-                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'end', 1)} className="hover:bg-muted rounded px-1.5 font-bold">+1T</button>
+                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'end', -1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-muted rounded px-1.5 font-bold">−1T</button>
+                    <button type="button" onClick={() => handleNudgePreviewBlock(selectedPreviewIndex, 'end', 1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-muted rounded px-1.5 font-bold">+1T</button>
                   </div>
                   <Button
                     type="button"
@@ -2179,6 +2320,38 @@ export function CalendarClient({
           </div>
         ) : (
           <div className={printMode === 'request' ? 'print:hidden' : ''}>
+            {/* Mobile Month Jump Strip */}
+            <div className="md:hidden -mx-1 px-1 pb-2 print:hidden">
+              <div className="mobile-scroller flex items-center gap-1.5 overflow-x-auto pb-1" role="navigation" aria-label="Monatsschnellnavigation">
+                <button
+                  type="button"
+                  onClick={() => scrollToMonth(Number(todayKey.slice(0, 4)), Number(todayKey.slice(5, 7)) - 1)}
+                  className="inline-flex min-h-8 shrink-0 items-center gap-1 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+                >
+                  Heute
+                </button>
+                {SHORT_MONTH_LABELS.map((label, idx) => {
+                  const mm = `${year}-${String(idx + 1).padStart(2, '0')}`
+                  const hasPlanned = plannedMonthsSet.has(mm)
+                  return (
+                    <button
+                      key={mm}
+                      type="button"
+                      onClick={() => scrollToMonth(year, idx)}
+                      className={`inline-flex min-h-8 shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+                        hasPlanned
+                          ? 'border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300'
+                          : 'border-border bg-card text-foreground hover:bg-muted'
+                      }`}
+                    >
+                      <span>{label}</span>
+                      {hasPlanned && <span className="h-1.5 w-1.5 rounded-full bg-blue-600 dark:bg-blue-400" aria-hidden="true" />}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             <YearView
               year={year} todayKey={todayKey} entries={entries}
               publicHolidays={combinedPublicHolidays} schoolHolidays={schoolHolidays}
@@ -2199,6 +2372,10 @@ export function CalendarClient({
               selectedType={selectedType}
               onHover={setHoveredDay}
               onSelectDate={(date) => setActiveDayKey(getDateKey(date))}
+              selectedDayKey={activeDayKey}
+              rangeAnchorKey={rangeAnchorKey}
+              interactionMode={effectiveInteractionMode}
+              onRangeStep={handleRangeStep}
             />
           </div>
         )}
@@ -2210,16 +2387,200 @@ export function CalendarClient({
         )}
 
         {activeDayInfo && (
-          <div className="fixed inset-x-3 z-50 rounded-lg border border-border bg-card p-3 pr-12 text-sm text-card-foreground shadow-lg supports-[bottom:env(safe-area-inset-bottom)]:bottom-[calc(0.75rem+env(safe-area-inset-bottom))] bottom-3 md:hidden">
-            <DayInfoDetails day={activeDayInfo} />
+          <div
+            role="dialog"
+            aria-label="Tagesdetails und Schnellaktionen"
+            className="fixed inset-x-3 z-50 rounded-xl border border-border bg-card p-3 pr-11 text-sm text-card-foreground shadow-xl bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:hidden space-y-2.5 max-h-[65dvh] overflow-y-auto print:hidden"
+          >
+            <div>
+              <DayInfoDetails day={activeDayInfo} />
+              {!hasVisibleDayInfo(activeDayInfo) && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {isOffDayKey(getDateKey(activeDayInfo.date), workDays) ? 'Arbeitsfreier Tag' : 'Regulärer Arbeitstag'}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-border/70 pt-2">
+              {([
+                { type: 'vacation' as const, label: 'Urlaub', activeClass: 'bg-blue-600 text-white border-blue-600' },
+                { type: 'gleittag' as const, label: 'Gleittag', activeClass: 'bg-purple-600 text-white border-purple-600' },
+                { type: 'special' as const, label: 'Sonderurlaub', activeClass: 'bg-cyan-600 text-white border-cyan-600' },
+              ]).map(opt => {
+                const isActive = activeDayInfo.entry?.type === opt.type
+                return (
+                  <button
+                    key={opt.type}
+                    type="button"
+                    onClick={() => handleToggle(activeDayInfo.date, opt.type)}
+                    className={`inline-flex min-h-9 items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
+                      isActive ? opt.activeClass : 'border-border bg-background text-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {opt.label}
+                    {isActive && <span className="text-[10px] opacity-90">✕</span>}
+                  </button>
+                )
+              })}
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMode('range')
+                  setRangeAnchorKey(getDateKey(activeDayInfo.date))
+                  setActiveDayKey(null)
+                }}
+                className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted"
+              >
+                <ArrowLeftRight className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+                Zeitraum ab hier
+              </button>
+            </div>
+
+            <div className="flex items-center gap-1.5 border-t border-border/70 pt-2">
+              {activeDayInfo.noteEntry ? (
+                <>
+                  <span className="flex-1 truncate text-xs text-muted-foreground">
+                    📝 {activeDayInfo.noteEntry.title || 'Notiz'}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-9 px-2.5 text-xs text-destructive"
+                    onClick={() => handleToggle(activeDayInfo.date, 'note')}
+                  >
+                    Notiz entfernen
+                  </Button>
+                </>
+              ) : (
+                <form
+                  className="flex flex-1 items-center gap-1.5"
+                  onSubmit={e => {
+                    e.preventDefault()
+                    handleToggle(activeDayInfo.date, 'note', mobileNoteDraft.trim() || 'Notiz')
+                  }}
+                >
+                  <input
+                    type="text"
+                    value={mobileNoteDraft}
+                    onChange={e => setMobileNoteDraft(e.target.value)}
+                    placeholder="Notiz hinzufügen (z.B. Arzt, Reise)…"
+                    aria-label="Notiz für diesen Tag"
+                    className="min-h-9 flex-1 min-w-0 rounded-lg border border-input bg-background px-2.5 text-xs"
+                  />
+                  <Button type="submit" size="sm" variant="secondary" className="h-9 px-2.5 text-xs shrink-0">
+                    Notiz +
+                  </Button>
+                </form>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={() => setActiveDayKey(null)}
-              className="absolute right-2 top-2 inline-flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              className="absolute right-1.5 top-1.5 inline-flex h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               aria-label="Tagesinfo schließen"
             >
               <X className="h-4 w-4" />
             </button>
+          </div>
+        )}
+
+        {/* Single-Row Sticky Mobile Bottom Dock */}
+        {viewMode === 'grid' && (
+          <div
+            className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] md:hidden print:hidden shadow-[0_-4px_16px_rgba(0,0,0,0.08)]"
+            role="region"
+            aria-label="Mobile Kalendermodus-Leiste"
+          >
+            {mobileMode === 'range' && rangeAnchorKey ? (
+              <div className="flex items-center justify-between gap-2 min-h-10">
+                <span className="text-xs font-medium text-foreground truncate">
+                  <strong>Start {format(parseISO(rangeAnchorKey), 'dd.MM.')}</strong> → Endtag im Kalender tippen
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-9 px-2.5 text-xs shrink-0"
+                  onClick={() => setRangeAnchorKey(null)}
+                >
+                  Abbrechen
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-1">
+                <div className="inline-flex items-center rounded-lg border border-border bg-muted/40 p-0.5 shrink-0" role="group" aria-label="Touch-Modus">
+                  <button
+                    type="button"
+                    onClick={() => setMobileMode('inspect')}
+                    aria-pressed={mobileMode === 'inspect'}
+                    className={`inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors ${
+                      mobileMode === 'inspect' ? 'bg-primary text-primary-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span>Ansehen</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMobileMode('edit')}
+                    aria-pressed={mobileMode === 'edit'}
+                    className={`inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors ${
+                      mobileMode === 'edit' ? 'bg-primary text-primary-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <Edit3 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span>Tippen</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMobileMode('range')}
+                    aria-pressed={mobileMode === 'range'}
+                    className={`inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-[11px] font-medium transition-colors ${
+                      mobileMode === 'range' ? 'bg-primary text-primary-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <ArrowLeftRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    <span>Zeitraum</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1 min-w-0">
+                  <select
+                    aria-label="Aktiver Eintragstyp"
+                    value={selectedType}
+                    onChange={e => setSelectedType(e.target.value as EntryType)}
+                    className="h-9 max-w-[5.25rem] rounded-md border border-input bg-background px-1.5 text-[11px] font-medium text-foreground"
+                  >
+                    <option value="vacation">Urlaub</option>
+                    <option value="gleittag">Gleittag</option>
+                    <option value="special">Sonder</option>
+                    <option value="note">Notiz</option>
+                  </select>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="outline"
+                    disabled={!canUndo}
+                    onClick={() => void handleUndo()}
+                    className="h-9 w-9 shrink-0"
+                    aria-label="Rückgängig"
+                  >
+                    <Undo2 className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon"
+                    onClick={() => setShowSuggestions(true)}
+                    className="h-9 w-9 shrink-0 bg-teal-600 hover:bg-teal-700 text-white"
+                    aria-label="Urlaub planen"
+                  >
+                    <Sparkles className="h-4 w-4" aria-hidden="true" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

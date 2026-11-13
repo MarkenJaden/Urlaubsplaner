@@ -74,6 +74,7 @@
   body {
     @apply bg-background text-foreground;
     min-width: 0;
+    overflow-wrap: anywhere;
   }
 }
 
@@ -84,10 +85,27 @@
   user-select: none;
 }
 
-@media (hover: none) and (pointer: coarse) {
+@media (hover: hover) and (pointer: fine) {
+  .day-cell:hover {
+    transform: scale(1.05);
+    z-index: 10;
+    box-shadow: 0 0 0 2px hsl(var(--primary) / 0.6);
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
   .day-cell:hover {
     transform: none;
   }
+}
+
+/* Horizontal mobile scrollers (month jump strip, comparison timeline) */
+.mobile-scroller {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.mobile-scroller::-webkit-scrollbar {
+  display: none;
 }
 
 /* "Respekt" pop-up for very large vacation allowances. */

@@ -50,5 +50,8 @@ node_modules, .next, generated graphs, screenshots or test output directories.
 
 ## Releases
 
-The main branch is `master`. Pushes trigger Docker image publication; do not infer
-live deployment from build success. Verify actual public endpoints after rollout.
+The main branch is `master`. After all required checks pass (`npm test`, `npm run lint`,
+`npm run typecheck`, `npm run build`), always commit finished changes with a clear
+Conventional Commits message and push them to `master` unless the user specifies
+otherwise. Pushes trigger Docker image publication; do not infer live deployment from
+build success. Verify actual public endpoints after rollout.
