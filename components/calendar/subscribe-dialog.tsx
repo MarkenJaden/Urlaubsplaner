@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch'
 import { CalendarDays, Copy, Check, ExternalLink, RefreshCw, ShieldCheck, Download, LogIn } from 'lucide-react'
 import { useProfile, useUpdatePreferences } from '@/hooks/use-profile'
 import { CalendarFeedsList } from '@/components/calendar/calendar-feeds-list'
+import { CalendarFeedOptions } from '@/components/calendar/calendar-feed-options'
 import { createCalendar, sharedOverlayEvents } from '@/lib/calendar'
 import { downloadFile } from '@/lib/export'
 import type { SharedPlanOverlay, UserPreferences, UserProfile, VacationEntry } from '@/types'
@@ -57,16 +58,6 @@ export function SubscribeDialog({
   const token = profile.data?.calendarToken ?? ''
   const customFeeds = profile.data?.calendarFeeds ?? []
   const sharedOverlays = propOverlays ?? prefs.sharedOverlays ?? []
-
-  const includeVacations = prefs.feedIncludeVacations ?? true
-  const includeGleittage = prefs.feedIncludeGleittage ?? true
-  const includeNotes = Boolean(prefs.feedIncludeNotes)
-  const includeNoteTitles = prefs.feedIncludeNoteTitles ?? true
-  const includePublic = Boolean(prefs.feedIncludePublicHolidays)
-  const includeSchool = Boolean(prefs.feedIncludeSchoolHolidays)
-  const includeBridge = Boolean(prefs.feedIncludeBridgeDays)
-  const includeSharedOverlays = Boolean(prefs.feedIncludeSharedOverlays)
-  const selectedSharedIds = prefs.feedSharedOverlayIds ?? []
 
   const calendarUrl = token && origin ? `${origin}/api/calendar/${token}/feed.ics` : ''
   const webcalUrl = calendarUrl ? calendarUrl.replace(/^https?:/, 'webcal:') : ''
@@ -149,103 +140,14 @@ export function SubscribeDialog({
               <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">
                 1. Haupt-Kalender-Abo konfigurieren
               </span>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 text-xs">
-                <label className="flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-md border bg-background px-2.5 py-1.5">
-                  <span>🌴 Urlaubstage</span>
-                  <Switch
-                    checked={includeVacations}
-                    onCheckedChange={checked => updatePrefs.mutate({ feedIncludeVacations: checked })}
-                  />
-                </label>
-                <label className="flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-md border bg-background px-2.5 py-1.5">
-                  <span>⏰ Gleittage</span>
-                  <Switch
-                    checked={includeGleittage}
-                    onCheckedChange={checked => updatePrefs.mutate({ feedIncludeGleittage: checked })}
-                  />
-                </label>
-                <label className="flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-md border bg-background px-2.5 py-1.5">
-                  <span>📝 Meine Notizen</span>
-                  <Switch
-                    checked={includeNotes}
-                    onCheckedChange={checked => updatePrefs.mutate({ feedIncludeNotes: checked })}
-                  />
-                </label>
-                <label className="flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-md border bg-background px-2.5 py-1.5">
-                  <span>🔒 Notiz-Texte zeigen</span>
-                  <Switch
-                    checked={includeNoteTitles}
-                    disabled={!includeNotes}
-                    onCheckedChange={checked => updatePrefs.mutate({ feedIncludeNoteTitles: checked })}
-                  />
-                </label>
-                <label className="flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-md border bg-background px-2.5 py-1.5">
-                  <span>🎉 Feiertage ({regionLabel})</span>
-                  <Switch
-                    checked={includePublic}
-                    disabled={!locationReady}
-                    onCheckedChange={checked => updatePrefs.mutate({ feedIncludePublicHolidays: checked })}
-                  />
-                </label>
-                <label className="flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-md border bg-background px-2.5 py-1.5">
-                  <span>🏫 Schulferien ({regionLabel})</span>
-                  <Switch
-                    checked={includeSchool}
-                    disabled={!locationReady}
-                    onCheckedChange={checked => updatePrefs.mutate({ feedIncludeSchoolHolidays: checked })}
-                  />
-                </label>
-                <label className="flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-md border bg-background px-2.5 py-1.5 sm:col-span-2">
-                  <span>🌉 Brückentag-Empfehlungen im Kalender markieren</span>
-                  <Switch
-                    checked={includeBridge}
-                    disabled={!locationReady}
-                    onCheckedChange={checked => updatePrefs.mutate({ feedIncludeBridgeDays: checked })}
-                  />
-                </label>
-                <label className="flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-md border bg-background px-2.5 py-1.5 sm:col-span-2">
-                  <span>🤝 Geteilte Pläne einbeziehen ({sharedOverlays.length})</span>
-                  <Switch
-                    checked={includeSharedOverlays}
-                    disabled={sharedOverlays.length === 0}
-                    onCheckedChange={checked => updatePrefs.mutate({ feedIncludeSharedOverlays: checked })}
-                  />
-                </label>
-              </div>
-              {includeSharedOverlays && sharedOverlays.length > 0 && (
-                <div className="rounded-md border bg-background/70 p-2 space-y-1.5 text-[11px]">
-                  <span className="font-medium text-muted-foreground block">
-                    Ausgewählte geteilte Pläne (leer = alle aktivierten):
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {sharedOverlays.map(ov => {
-                      const active = selectedSharedIds.length === 0 ? ov.enabled !== false : selectedSharedIds.includes(ov.id)
-                      return (
-                        <button
-                          key={ov.id}
-                          type="button"
-                          onClick={() => {
-                            const base = selectedSharedIds.length === 0
-                              ? sharedOverlays.filter(o => o.enabled !== false).map(o => o.id)
-                              : selectedSharedIds
-                            const next = base.includes(ov.id) ? base.filter(id => id !== ov.id) : [...base, ov.id]
-                            updatePrefs.mutate({ feedSharedOverlayIds: next })
-                          }}
-                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 transition-colors ${
-                            active ? 'border-primary bg-primary/10 text-foreground font-medium' : 'border-border text-muted-foreground opacity-70'
-                          }`}
-                        >
-                          <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: ov.color }} />
-                          {ov.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">
-                    Tipp: Für eine eigene Kalenderfarbe in Google Kalender oder Outlook lege unten ein separates Abo nur für den geteilten Plan an.
-                  </p>
-                </div>
-              )}
+              <CalendarFeedOptions
+                prefs={prefs}
+                sharedOverlays={sharedOverlays}
+                locationReady={locationReady}
+                regionLabel={regionLabel}
+                onUpdate={patch => updatePrefs.mutate(patch)}
+                compact
+              />
               {!locationReady && (
                 <p className="text-[11px] text-muted-foreground">
                   Wähle zuerst dein Bundesland / deine Region, um Feiertage, Schulferien und Brückentage im Abo einzuschließen.

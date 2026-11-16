@@ -6,8 +6,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Header } from '@/components/layout/header'
 import { AccountPanel } from '@/components/account/account-panel'
 import { CalendarFeedsList } from '@/components/calendar/calendar-feeds-list'
+import { CalendarFeedOptions } from '@/components/calendar/calendar-feed-options'
 import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
 import { LocationFields } from '@/components/calendar/location-fields'
 import { useCountries } from '@/hooks/use-holidays'
 import { useHomeRegion } from '@/hooks/use-home-region'
@@ -183,36 +183,13 @@ export function SettingsClient({
       <section className="space-y-4 rounded-xl border bg-card p-4 sm:p-6">
         <h2 className="flex items-center gap-2 text-lg font-semibold"><CalendarDays className="h-5 w-5" /> Kalender automatisch aktualisieren</h2>
         <p className="text-sm text-muted-foreground">Abonniere deinen Plan einmal als Haupt-Feed oder lege darunter beliebig viele getrennte Kalender-Abos mit unterschiedlichen Einstellungen an.</p>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm">
-            <span>🌴 Urlaubstage</span>
-            <Switch checked={prefs.feedIncludeVacations ?? true} onCheckedChange={checked => updatePrefs.mutate({ feedIncludeVacations: checked })} />
-          </label>
-          <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm">
-            <span>⏰ Gleittage</span>
-            <Switch checked={prefs.feedIncludeGleittage ?? true} onCheckedChange={checked => updatePrefs.mutate({ feedIncludeGleittage: checked })} />
-          </label>
-          <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm">
-            <span>📝 Meine Notizen</span>
-            <Switch checked={Boolean(prefs.feedIncludeNotes)} onCheckedChange={checked => updatePrefs.mutate({ feedIncludeNotes: checked })} />
-          </label>
-          <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm">
-            <span>🔒 Notiz-Texte zeigen</span>
-            <Switch checked={prefs.feedIncludeNoteTitles ?? true} disabled={!prefs.feedIncludeNotes} onCheckedChange={checked => updatePrefs.mutate({ feedIncludeNoteTitles: checked })} />
-          </label>
-          <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm">
-            <span>🎉 Feiertage {regionLabel}</span>
-            <Switch checked={Boolean(prefs.feedIncludePublicHolidays)} disabled={!home.locationReady} onCheckedChange={checked => updatePrefs.mutate({ feedIncludePublicHolidays: checked })} />
-          </label>
-          <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm">
-            <span>🏫 Schulferien {regionLabel}</span>
-            <Switch checked={Boolean(prefs.feedIncludeSchoolHolidays)} disabled={!home.locationReady} onCheckedChange={checked => updatePrefs.mutate({ feedIncludeSchoolHolidays: checked })} />
-          </label>
-          <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm sm:col-span-2">
-            <span>🌉 Brückentag-Empfehlungen {regionLabel}</span>
-            <Switch checked={Boolean(prefs.feedIncludeBridgeDays)} disabled={!home.locationReady} onCheckedChange={checked => updatePrefs.mutate({ feedIncludeBridgeDays: checked })} />
-          </label>
-        </div>
+        <CalendarFeedOptions
+          prefs={prefs}
+          sharedOverlays={prefs.sharedOverlays ?? []}
+          locationReady={home.locationReady}
+          regionLabel={regionLabel}
+          onUpdate={patch => updatePrefs.mutate(patch)}
+        />
         {!home.locationReady && <p className="text-xs text-muted-foreground">Wähle zuerst deine Region, um Ferien, Feiertage und Brückentage einzuschließen.</p>}
         {home.region.ambiguous && prefs.feedIncludeSchoolHolidays && <p className="text-xs text-muted-foreground">Wähle deine Ferienregion, damit das Abo nur deine Schulferien enthält.</p>}
         <p className="text-xs text-muted-foreground">Ferien und Feiertage umfassen das vorherige, aktuelle und nächste Jahr.</p>
@@ -234,6 +211,7 @@ export function SettingsClient({
 
         <CalendarFeedsList
           feeds={feeds}
+          sharedOverlays={prefs.sharedOverlays ?? []}
           origin={origin}
           locationReady={home.locationReady}
           regionLabel={regionLabel}
