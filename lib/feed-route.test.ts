@@ -101,4 +101,20 @@ describe('calendar subscription feed', () => {
     expect(response.status).toBe(503)
     expect(response.headers.get('retry-after')).toBe('300')
   })
+  it('merges contiguous vacation days with the same custom title in the subscription feed', async () => {
+    user.getUserByToken.mockResolvedValue({
+      id: 'user-1',
+      name: 'Jan',
+      preferences: {},
+      vacations: [
+        { id: 'v1', userId: 'user-1', date: new Date('2026-07-06T00:00:00Z'), type: 'vacation', title: 'Urlaub Fuerteventura', year: 2026, createdAt: new Date('2026-01-01T10:00:00Z'), updatedAt: new Date('2026-01-02T10:00:00Z') },
+        { id: 'v2', userId: 'user-1', date: new Date('2026-07-07T00:00:00Z'), type: 'vacation', title: 'Urlaub Fuerteventura', year: 2026, createdAt: new Date('2026-01-01T10:00:00Z'), updatedAt: new Date('2026-01-02T10:00:00Z') },
+        { id: 'v3', userId: 'user-1', date: new Date('2026-07-08T00:00:00Z'), type: 'vacation', title: 'Urlaub Fuerteventura', year: 2026, createdAt: new Date('2026-01-01T10:00:00Z'), updatedAt: new Date('2026-01-02T10:00:00Z') },
+      ],
+    })
+    const ics = await (await call()).text()
+    expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(1)
+    expect(ics).toContain('DTSTART;VALUE=DATE:20260706\r\nDTEND;VALUE=DATE:20260709')
+    expect(ics).toContain('SUMMARY:Urlaub: Urlaub Fuerteventura')
+  })
 })

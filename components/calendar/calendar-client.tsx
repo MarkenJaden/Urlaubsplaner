@@ -8,6 +8,8 @@ import { YearView, type CalendarInteractionMode } from '@/components/calendar/ye
 import { SettingsPanel } from '@/components/calendar/settings-panel'
 import { SuggestionsPanel } from '@/components/calendar/suggestions-panel'
 import { ClipboardExportDialog } from '@/components/calendar/clipboard-export-dialog'
+import { VacationNamesDialog } from '@/components/calendar/vacation-names-dialog'
+import { groupEntriesIntoBlocks } from '@/lib/export'
 import { ShareDialog, GUEST_OWNED_SHARES_STORAGE_KEY, type StoredShareLink } from '@/components/calendar/share-dialog'
 import { SubscribeDialog } from '@/components/calendar/subscribe-dialog'
 import { ScorecardDialog } from '@/components/calendar/scorecard-dialog'
@@ -201,9 +203,9 @@ function DayInfoDetails({ day }: { day: DayInfo }) {
           }
         >
           {day.entry.type === 'vacation'
-            ? '🌴 Geplanter Urlaub'
+            ? `🌴 Geplanter Urlaub${day.entry.title ? `: ${day.entry.title}` : ''}`
             : day.entry.type === 'gleittag'
-              ? '⏰ Geplanter Gleittag'
+              ? `⏰ Geplanter Gleittag${day.entry.title ? `: ${day.entry.title}` : ''}`
               : day.entry.type === 'special'
                 ? `✨ Sonderurlaub / Frei${day.entry.title ? `: ${day.entry.title}` : ''}`
                 : `📝 ${day.entry.title ?? 'Notiz'}`}
@@ -236,9 +238,9 @@ function DayInfoDetails({ day }: { day: DayInfo }) {
               <span className="font-medium">{shared.label}:</span>
               <span>
                 {shared.type === 'vacation'
-                  ? 'Urlaub'
+                  ? `Urlaub${shared.title ? `: ${shared.title}` : ''}`
                   : shared.type === 'gleittag'
-                    ? 'Gleittag'
+                    ? `Gleittag${shared.title ? `: ${shared.title}` : ''}`
                     : shared.type === 'off_day'
                       ? `Regulär frei (${shared.title || 'Teilzeit/4-Tage'})`
                       : shared.title || 'Notiz'}
@@ -319,6 +321,7 @@ export function CalendarClient({
   const [selectedType, setSelectedType] = useState<EntryType>('vacation')
   const [localConfig, setConfig] = useState<LocalConfig | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [showRenameDialog, setShowRenameDialog] = useState(false)
   const [showClipboardDialog, setShowClipboardDialog] = useState(false)
   const [showShareDialog, setShowShareDialog] = useState(false)
   const [showSubscribeDialog, setShowSubscribeDialog] = useState(false)
@@ -333,6 +336,7 @@ export function CalendarClient({
   const [mobileMode, setMobileMode] = useState<'inspect' | 'edit' | 'range'>('inspect')
   const [rangeAnchorKey, setRangeAnchorKey] = useState<string | null>(null)
   const [mobileNoteDraft, setMobileNoteDraft] = useState('')
+  const [mobileEntryTitleDraft, setMobileEntryTitleDraft] = useState('')
   const [mobilePreviewExpanded, setMobilePreviewExpanded] = useState(false)
   const [defaultNoteText, setDefaultNoteText] = useState('')
 
@@ -680,7 +684,7 @@ export function CalendarClient({
 
   const { data: countriesData = [] } = useCountries()
   const { data: serverEntries = [], isLoading: entriesLoading, isError: entriesError } = useVacations(year, isLoggedIn)
-  const { addMutation, removeMutation } = useToggleVacation(year, isLoggedIn)
+  const { addMutation, removeMutation, updateTitlesMutation } = useToggleVacation(year, isLoggedIn)
 
   const baseEntries = useMemo(
     () => isLoggedIn ? serverEntries : (localConfig ? configToEntries(localConfig, year) : []),
@@ -1550,10 +1554,29 @@ export function CalendarClient({
 
   useEffect(() => {
     setMobileNoteDraft(activeDayInfo?.noteEntry?.title ?? '')
-  }, [activeDayKey, activeDayInfo?.noteEntry?.title])
+    setMobileEntryTitleDraft(activeDayInfo?.entry && activeDayInfo.entry.type !== 'note' ? (activeDayInfo.entry.title ?? '') : '')
+  }, [activeDayKey, activeDayInfo?.noteEntry?.title, activeDayInfo?.entry])
 
-  const hasSyncError = profile.isError || entriesError || updatePreferences.isError || addMutation.isError || removeMutation.isError
-  const isSavingOrLoading = profile.isLoading || entriesLoading || updatePreferences.isPending || addMutation.isPending || removeMutation.isPending
+  const handleUpdateEntryTitles = useCallback((dates: string[], type: EntryType, title: string | null) => {
+    if (dates.length === 0) return
+    const normalizedTitle = title?.trim() || null
+    const dateSet = new Set(dates.map(d => d.slice(0, 10)))
+    recordUndo()
+    if (isLoggedIn) {
+      updateTitlesMutation?.mutate({ dates: [...dateSet], type, title: normalizedTitle })
+    } else {
+      updateLocalEntries(current =>
+        current.map(e =>
+          e.type === type && dateSet.has(e.date.slice(0, 10))
+            ? { ...e, title: normalizedTitle ?? undefined }
+            : e,
+        ),
+      )
+    }
+  }, [isLoggedIn, recordUndo, updateLocalEntries, updateTitlesMutation])
+
+  const hasSyncError = profile.isError || entriesError || updatePreferences.isError || addMutation.isError || removeMutation.isError || Boolean(updateTitlesMutation?.isError)
+  const isSavingOrLoading = profile.isLoading || entriesLoading || updatePreferences.isPending || addMutation.isPending || removeMutation.isPending || Boolean(updateTitlesMutation?.isPending)
 
   const activePreviewBlock = previewSuggestions[selectedPreviewIndex] ?? previewSuggestions[0] ?? null
   const previewTotalCost = useMemo(() => previewSuggestions.reduce((s, b) => s + b.cost, 0), [previewSuggestions])
@@ -1610,6 +1633,15 @@ export function CalendarClient({
         isLoggedIn={isLoggedIn}
         onSaveConfig={next => updateConfig({ approvalSheetConfig: next })}
         onTriggerPrint={() => triggerPrint('request')}
+      />
+
+      <VacationNamesDialog
+        open={showRenameDialog}
+        onOpenChange={setShowRenameDialog}
+        year={year}
+        entries={entries}
+        workDays={workDays}
+        onSaveBlockTitle={handleUpdateEntryTitles}
       />
 
       <ClipboardExportDialog
@@ -2116,9 +2148,10 @@ export function CalendarClient({
           flex={flex} remainingWorkDays={remainingWorkDays}
           canUndo={canUndo}
           onUndo={() => void handleUndo()}
-          entries={entries} preferences={isLoggedIn ? (prefs as Record<string, unknown>) : ((config ?? {}) as unknown as Record<string, unknown>)}
+          entries={entries} holidayDates={holidayDates} preferences={isLoggedIn ? (prefs as Record<string, unknown>) : ((config ?? {}) as unknown as Record<string, unknown>)}
           localConfig={isLoggedIn ? null : config}
           onOpenSuggestions={() => setShowSuggestions(true)}
+          onOpenRename={() => setShowRenameDialog(true)}
           onOpenClipboardExport={() => setShowClipboardDialog(true)}
           onOpenShare={() => setShowShareDialog(true)}
           onOpenSubscribe={() => setShowSubscribeDialog(true)}
@@ -2435,6 +2468,39 @@ export function CalendarClient({
                 Zeitraum ab hier
               </button>
             </div>
+
+            {activeDayInfo.entry && activeDayInfo.entry.type !== 'note' && (() => {
+              const activeEntry = activeDayInfo.entry
+              const activeKey = getDateKey(activeDayInfo.date)
+              const matchingBlock = groupEntriesIntoBlocks(
+                entries.filter(e => e.type === activeEntry.type),
+                { workDays, splitByTitle: true },
+              ).find(b => b.dates.includes(activeKey))
+              const targetDates = matchingBlock?.dates ?? [activeKey]
+              const isDirty = mobileEntryTitleDraft.trim() !== (activeEntry.title ?? '').trim()
+              return (
+                <form
+                  className="flex items-center gap-1.5 border-t border-border/70 pt-2"
+                  onSubmit={e => {
+                    e.preventDefault()
+                    handleUpdateEntryTitles(targetDates, activeEntry.type, mobileEntryTitleDraft.trim() || null)
+                  }}
+                >
+                  <input
+                    type="text"
+                    maxLength={500}
+                    value={mobileEntryTitleDraft}
+                    onChange={e => setMobileEntryTitleDraft(e.target.value)}
+                    placeholder="Urlaub benennen (z.B. Fuerteventura)…"
+                    aria-label="Bezeichnung für diesen Zeitraum"
+                    className="min-h-9 flex-1 min-w-0 rounded-lg border border-input bg-background px-2.5 text-xs"
+                  />
+                  <Button type="submit" size="sm" variant={isDirty ? 'default' : 'secondary'} className="h-9 px-2.5 text-xs shrink-0">
+                    {targetDates.length > 1 ? `Speichern (${targetDates.length}T)` : 'Speichern'}
+                  </Button>
+                </form>
+              )
+            })()}
 
             <div className="flex items-center gap-1.5 border-t border-border/70 pt-2">
               {activeDayInfo.noteEntry ? (

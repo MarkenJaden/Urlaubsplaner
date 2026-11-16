@@ -1,5 +1,6 @@
 import type { Holiday, VacationEntry } from '@/types'
 import { localizedName } from './holiday-regions'
+import { isOffDayKey } from './vacation-accounting'
 
 function escapeText(value: string): string {
   return value
@@ -26,6 +27,99 @@ function nextDay(date: string): string {
   return day.toISOString().slice(0, 10)
 }
 
+function diffDays(startDateKey: string, endDateKey: string): number {
+  const start = new Date(`${startDateKey}T00:00:00Z`)
+  const end = new Date(`${endDateKey}T00:00:00Z`)
+  return Math.round((end.getTime() - start.getTime()) / 86_400_000)
+}
+
+function isNonWorkingCalendarGap(
+  startDateKey: string,
+  endDateKey: string,
+  workDays?: number[],
+  holidaySet?: Set<string>
+): boolean {
+  const gap = diffDays(startDateKey, endDateKey)
+  if (gap <= 1) return gap >= 0
+  if (gap > 4) return false
+  for (let i = 1; i < gap; i++) {
+    const d = new Date(`${startDateKey}T00:00:00Z`)
+    d.setUTCDate(d.getUTCDate() + i)
+    const key = d.toISOString().slice(0, 10)
+    if (!isOffDayKey(key, workDays) && !holidaySet?.has(key)) {
+      return false
+    }
+  }
+  return true
+}
+
+const MERGEABLE_ENTRY_TYPES = new Set(['vacation', 'gleittag', 'special', 'note'])
+
+function latestTimestamp(a?: string, b?: string): string | undefined {
+  if (!a) return b
+  if (!b) return a
+  const ta = new Date(a).getTime()
+  const tb = new Date(b).getTime()
+  if (!Number.isFinite(ta)) return b
+  if (!Number.isFinite(tb)) return a
+  return tb > ta ? b : a
+}
+
+export function mergeContiguousCalendarEntries(
+  entries: CalendarEntry[],
+  options?: { workDays?: number[]; holidayDates?: Iterable<string> }
+): CalendarEntry[] {
+  const holidaySet = options?.holidayDates ? new Set(options.holidayDates) : undefined
+  const mergeable: CalendarEntry[] = []
+  const passthrough: CalendarEntry[] = []
+
+  for (const entry of entries) {
+    const dateKey = entry.date.split('T')[0]
+    const validDate = /^\d{4}-\d{2}-\d{2}$/.test(dateKey) && Number.isFinite(new Date(`${dateKey}T00:00:00Z`).getTime())
+    if (validDate && !entry.endDate && MERGEABLE_ENTRY_TYPES.has(entry.type)) {
+      mergeable.push(entry)
+    } else {
+      passthrough.push(entry)
+    }
+  }
+
+  mergeable.sort((a, b) =>
+    a.type.localeCompare(b.type) ||
+    a.date.split('T')[0].localeCompare(b.date.split('T')[0]) ||
+    a.id.localeCompare(b.id)
+  )
+
+  const merged: CalendarEntry[] = []
+  for (const entry of mergeable) {
+    const dateKey = entry.date.split('T')[0]
+    const normTitle = (entry.title ?? '').trim()
+    const last = merged.at(-1)
+    if (last && last.type === entry.type && (last.title ?? '').trim() === normTitle) {
+      const lastEnd = last.endDate ?? last.date.split('T')[0]
+      const gap = diffDays(lastEnd, dateKey)
+      const canMerge =
+        entry.type === 'note'
+          ? (gap === 0 || (gap === 1 && normTitle !== ''))
+          : isNonWorkingCalendarGap(lastEnd, dateKey, options?.workDays, holidaySet)
+      if (gap >= 0 && canMerge) {
+        if (gap > 0) {
+          last.endDate = dateKey
+        }
+        const latestUpdated = latestTimestamp(last.updatedAt ?? last.createdAt, entry.updatedAt ?? entry.createdAt)
+        if (latestUpdated) last.updatedAt = latestUpdated
+        continue
+      }
+    }
+    merged.push({
+      ...entry,
+      date: dateKey,
+      endDate: dateKey,
+    })
+  }
+
+  return [...merged, ...passthrough]
+}
+
 export type CalendarEntry = Omit<VacationEntry, 'type'> & {
   type: string
   /** Inclusive last day for multi-day events such as school holidays. */
@@ -36,14 +130,18 @@ export interface CalendarOptions {
   name?: string
   /** Suggested refresh interval for subscriptions, e.g. PT6H. */
   refreshInterval?: string
+  workDays?: number[]
+  holidayDates?: Iterable<string>
 }
 
 export function createCalendar(entries: CalendarEntry[], options: CalendarOptions | string = {}): string {
-  const { name = 'Urlaubsplaner', refreshInterval } = typeof options === 'string' ? { name: options } : options
+  const { name = 'Urlaubsplaner', refreshInterval, workDays, holidayDates } =
+    typeof options === 'string' ? { name: options } : options
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Urlaubsplaner//DE', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', `X-WR-CALNAME:${escapeText(name)}`]
   if (refreshInterval) lines.push(`REFRESH-INTERVAL;VALUE=DURATION:${refreshInterval}`, `X-PUBLISHED-TTL:${refreshInterval}`)
   const labels: Record<string, string> = { vacation: 'Urlaub', gleittag: 'Gleittag', special: 'Sonderurlaub / Frei', note: 'Notiz', public: 'Feiertag', school: 'Schulferien' }
-  for (const entry of [...entries].sort((a, b) => a.date.localeCompare(b.date) || a.type.localeCompare(b.type) || a.id.localeCompare(b.id))) {
+  const normalizedEntries = mergeContiguousCalendarEntries(entries, { workDays, holidayDates })
+  for (const entry of normalizedEntries.sort((a, b) => a.date.localeCompare(b.date) || a.type.localeCompare(b.type) || a.id.localeCompare(b.id))) {
     const date = entry.date.split('T')[0]
     const start = new Date(`${date}T00:00:00Z`)
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(start.getTime())) continue

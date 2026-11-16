@@ -542,7 +542,7 @@ export function ComparisonTimeline({
 
                       const titleParts = [format(d, 'dd.MM.yyyy (EE)', { locale: de })]
                       if (pubName) titleParts.push(`Feiertag: ${pubName}`)
-                      if (entry) titleParts.push(entry.type === 'vacation' ? 'Urlaub' : entry.type === 'gleittag' ? 'Gleittag' : entry.title || entry.type)
+                      if (entry) titleParts.push(entry.type === 'vacation' ? (entry.title ? `Urlaub: ${entry.title}` : 'Urlaub') : entry.type === 'gleittag' ? (entry.title ? `Gleittag: ${entry.title}` : 'Gleittag') : entry.title || entry.type)
 
                       return (
                         <button

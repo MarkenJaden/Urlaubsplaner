@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { exportToCSV, exportToClipboardText, exportToJSON, exportToICS, parseImportFile, parseConfigJSON, exportConfigJSON, formatCustomClipboardExport } from './export'
+import { exportToCSV, exportToClipboardText, exportToJSON, exportToICS, parseImportFile, parseConfigJSON, exportConfigJSON, formatCustomClipboardExport, groupEntriesIntoBlocks } from './export'
 import type { VacationEntry } from '@/types'
 
 const mkEntry = (date: string, type: 'vacation' | 'gleittag' | 'special' | 'note', title?: string): VacationEntry => ({
@@ -268,5 +268,18 @@ describe('onlyWorkdays export filtering', () => {
     expect(csv).toContain('05.06.2026')
     expect(csv).not.toContain('06.06.2026')
     expect(csv).not.toContain('07.06.2026')
+  })
+
+  it('splits adjacent vacation blocks by title when splitByTitle is enabled', () => {
+    const namedEntries = [
+      mkEntry('2026-07-06', 'vacation', 'Urlaub Fuerteventura'),
+      mkEntry('2026-07-07', 'vacation', 'Urlaub Fuerteventura'),
+      mkEntry('2026-07-08', 'vacation', 'Freizeitparkurlaub'),
+    ]
+    expect(groupEntriesIntoBlocks(namedEntries)).toHaveLength(1)
+    const split = groupEntriesIntoBlocks(namedEntries, { splitByTitle: true })
+    expect(split).toHaveLength(2)
+    expect(split[0]).toMatchObject({ startDate: '2026-07-06', endDate: '2026-07-07', titles: ['Urlaub Fuerteventura'] })
+    expect(split[1]).toMatchObject({ startDate: '2026-07-08', endDate: '2026-07-08', titles: ['Freizeitparkurlaub'] })
   })
 })

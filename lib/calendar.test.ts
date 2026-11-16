@@ -40,6 +40,49 @@ describe('subscription calendar', () => {
   it('removes control characters that calendar apps reject', () => {
     expect(createCalendar([{ ...entry, title: 'A\u0007B\u0000C' }])).toContain('SUMMARY:Urlaub: ABC')
   })
+  it('merges contiguous vacation days and weekend gaps into one multi-day VEVENT', () => {
+    const twoWeeks: VacationEntry[] = [
+      '2026-07-06', '2026-07-07', '2026-07-08', '2026-07-09', '2026-07-10',
+      '2026-07-13', '2026-07-14', '2026-07-15', '2026-07-16', '2026-07-17',
+    ].map((date, idx) => ({ ...entry, id: `v-${idx}`, date, title: 'Urlaub Fuerteventura' }))
+    const ics = createCalendar(twoWeeks)
+    expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(1)
+    expect(ics).toContain('DTSTART;VALUE=DATE:20260706')
+    expect(ics).toContain('DTEND;VALUE=DATE:20260718')
+    expect(ics).toContain('SUMMARY:Urlaub: Urlaub Fuerteventura')
+  })
+  it('bridges public holidays between vacation days when holidayDates are given', () => {
+    const aroundHoliday: VacationEntry[] = [
+      { ...entry, id: 'v1', date: '2026-05-13', title: 'Kurzurlaub' },
+      { ...entry, id: 'v2', date: '2026-05-15', title: 'Kurzurlaub' },
+    ]
+    const ics = createCalendar(aroundHoliday, { holidayDates: ['2026-05-14'] })
+    expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(1)
+    expect(ics).toContain('DTSTART;VALUE=DATE:20260513')
+    expect(ics).toContain('DTEND;VALUE=DATE:20260516')
+  })
+  it('keeps adjacent vacations with different custom titles as separate events', () => {
+    const differentTitles: VacationEntry[] = [
+      { ...entry, id: 'v1', date: '2026-07-06', title: 'Urlaub Fuerteventura' },
+      { ...entry, id: 'v2', date: '2026-07-07', title: 'Urlaub Fuerteventura' },
+      { ...entry, id: 'v3', date: '2026-07-08', title: 'Freizeitparkurlaub' },
+    ]
+    const ics = createCalendar(differentTitles)
+    expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(2)
+    expect(ics).toContain('SUMMARY:Urlaub: Urlaub Fuerteventura')
+    expect(ics).toContain('SUMMARY:Urlaub: Freizeitparkurlaub')
+  })
+  it('does not let a note on the same day split a contiguous vacation block', () => {
+    const mixed: VacationEntry[] = [
+      { ...entry, id: 'v1', date: '2026-07-06', title: 'Sommerurlaub' },
+      { ...entry, id: 'n1', date: '2026-07-06', type: 'note', title: 'Abflug 08:00' },
+      { ...entry, id: 'v2', date: '2026-07-07', title: 'Sommerurlaub' },
+    ]
+    const ics = createCalendar(mixed)
+    expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(2)
+    expect(ics).toContain('DTSTART;VALUE=DATE:20260706\r\nDTEND;VALUE=DATE:20260708\r\nSUMMARY:Urlaub: Sommerurlaub')
+    expect(ics).toContain('SUMMARY:Notiz: Abflug 08:00')
+  })
 })
 
 describe('holiday events in the subscription', () => {

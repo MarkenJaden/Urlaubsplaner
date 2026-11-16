@@ -102,21 +102,24 @@ export interface GroupedEntryBlock {
 
 export function groupEntriesIntoBlocks(
   entries: VacationEntry[],
-  options?: { workDays?: number[] }
+  options?: { workDays?: number[]; splitByTitle?: boolean }
 ): GroupedEntryBlock[] {
   const sorted = [...entries].sort((a, b) => a.date.slice(0, 10).localeCompare(b.date.slice(0, 10)) || a.type.localeCompare(b.type))
   const blocks: GroupedEntryBlock[] = []
 
   for (const entry of sorted) {
     const dKey = entry.date.slice(0, 10)
+    const entryNormTitle = (entry.title ?? '').trim()
     const last = blocks.at(-1)
     if (last && last.type === entry.type) {
+      const lastNormTitle = (last.titles[0] ?? '').trim()
+      const titleMatches = !options?.splitByTitle || lastNormTitle === entryNormTitle
       const gap = differenceInCalendarDays(parseISO(dKey), parseISO(last.endDate))
       const canMerge =
         entry.type === 'vacation' || entry.type === 'gleittag' || entry.type === 'special'
           ? isNonWorkingGap(last.endDate, dKey, options?.workDays)
           : gap <= 1
-      if (gap >= 0 && canMerge) {
+      if (titleMatches && gap >= 0 && canMerge) {
         if (gap > 0) {
           last.endDate = dKey
           last.daysCount += 1
@@ -356,8 +359,11 @@ export function exportToJSON(entries: VacationEntry[], preferences: Record<strin
   }, null, 2)
 }
 
-export function exportToICS(entries: VacationEntry[]): string {
-  return createCalendar(entries)
+export function exportToICS(
+  entries: VacationEntry[],
+  options?: { workDays?: number[]; holidayDates?: Iterable<string> }
+): string {
+  return createCalendar(entries, options)
 }
 
 export interface ImportData {

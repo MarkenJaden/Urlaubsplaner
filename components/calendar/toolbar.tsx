@@ -4,7 +4,7 @@ import { useRef } from 'react'
 import {
   ChevronLeft, ChevronRight, Sparkles, Download, Upload, Printer,
   Settings2, MoreHorizontal, Clipboard, FileJson, CalendarDays,
-  Trash2, Undo2, Share2, Trophy, FileText,
+  Trash2, Undo2, Share2, Trophy, FileText, Tag,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -60,10 +60,12 @@ interface ToolbarProps {
   canUndo: boolean
   onUndo: () => void
   entries: VacationEntry[]
+  holidayDates?: Iterable<string>
   preferences: Record<string, unknown>
   localConfig?: LocalConfig | null
   activeOverlaysCount?: number
   onOpenSuggestions: () => void
+  onOpenRename?: () => void
   onOpenClipboardExport?: () => void
   onOpenShare?: () => void
   onOpenSubscribe?: () => void
@@ -84,9 +86,9 @@ export function Toolbar({
   vacationDaysUsed, vacationDaysTotal, workDays, workDaysLabel,
   flex, remainingWorkDays, sharedPlanSummaries = [],
   canUndo, onUndo,
-  entries, preferences, localConfig,
+  entries, holidayDates, preferences, localConfig,
   activeOverlaysCount = 0,
-  onOpenSuggestions, onOpenClipboardExport, onOpenShare, onOpenSubscribe,
+  onOpenSuggestions, onOpenRename, onOpenClipboardExport, onOpenShare, onOpenSubscribe,
   onOpenScorecard, onPrintCalendar, onPrintRequestSheet,
   onImport, onImportConfig, onReset,
 }: ToolbarProps) {
@@ -104,7 +106,8 @@ export function Toolbar({
   }
 
   const handleExportICS = () => {
-    downloadFile(exportToICS(entries), `urlaubsplaner-${year}.ics`, 'text/calendar')
+    const activeWorkDays = workDays ?? localConfig?.workDays ?? (preferences?.workDays as number[] | undefined)
+    downloadFile(exportToICS(entries, { workDays: activeWorkDays, holidayDates }), `urlaubsplaner-${year}.ics`, 'text/calendar')
   }
 
   const handleExportConfig = () => {
@@ -221,6 +224,12 @@ export function Toolbar({
               <Sparkles className="h-3.5 w-3.5" />
               Planen
             </Button>
+            {onOpenRename && (
+              <Button size="sm" variant="outline" onClick={onOpenRename} className="h-8 gap-1.5 px-2.5" title="Eingetragene Urlaube & Zeiträume benennen">
+                <Tag className="h-3.5 w-3.5" />
+                <span className="hidden lg:inline">Benennen</span>
+              </Button>
+            )}
             {onOpenShare && (
               <Button size="sm" variant="outline" onClick={onOpenShare} className="h-8 gap-1.5 px-2.5">
                 <Share2 className="h-3.5 w-3.5" />

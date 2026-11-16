@@ -85,5 +85,38 @@ export function useToggleVacation(year: number, enabled = true) {
     },
   })
 
-  return { addMutation, removeMutation }
+  const updateTitlesMutation = useMutation({
+    mutationFn: async ({ dates, type, title }: { dates: string[]; type: EntryType; title: string | null }) => {
+      const res = await fetch('/api/vacations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dates, type, title }),
+      })
+      if (!res.ok) throw new Error('Failed to update titles')
+      return res.json()
+    },
+    onMutate: async ({ dates, type, title }) => {
+      if (!enabled) return
+      await queryClient.cancelQueries({ queryKey })
+      const previous = queryClient.getQueryData<VacationEntry[]>(queryKey)
+      const dateSet = new Set(dates.map(d => d.slice(0, 10)))
+      const normalizedTitle = title?.trim() || null
+      queryClient.setQueryData<VacationEntry[]>(queryKey, old =>
+        (old ?? []).map(e =>
+          e.type === type && dateSet.has(e.date.slice(0, 10))
+            ? { ...e, title: normalizedTitle }
+            : e
+        )
+      )
+      return { previous }
+    },
+    onError: (_error, _variables, context) => {
+      queryClient.setQueryData(queryKey, context?.previous ?? [])
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey })
+    },
+  })
+
+  return { addMutation, removeMutation, updateTitlesMutation }
 }

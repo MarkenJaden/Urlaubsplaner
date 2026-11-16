@@ -64,6 +64,52 @@ export async function POST(request: Request) {
   return NextResponse.json(entry)
 }
 
+/** Batch-update the custom title/name for existing entries of one type. */
+export async function PATCH(request: Request) {
+  if (!validOrigin(request)) return jsonError('Ungültige Anfrage.', 403)
+  const session = await auth()
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const body = await readJson(request)
+  const datesRaw = body?.dates
+  const type = body?.type
+  const titleRaw = body?.title
+
+  if (!Array.isArray(datesRaw) || datesRaw.length === 0 || datesRaw.length > 500) {
+    return jsonError('Ungültige Datumsliste.')
+  }
+  if (typeof type !== 'string' || !['vacation', 'gleittag', 'special', 'note'].includes(type)) {
+    return jsonError('Ungültiger Eintragstyp.')
+  }
+  if (titleRaw !== null && titleRaw !== undefined && (typeof titleRaw !== 'string' || titleRaw.length > 500)) {
+    return jsonError('Ungültige Bezeichnung (maximal 500 Zeichen).')
+  }
+
+  const parsedDates: Date[] = []
+  for (const item of datesRaw) {
+    const parsed = parseEntry({ date: item, type })
+    if (!parsed) return jsonError('Ungültiges Datum in der Anfrage.')
+    parsedDates.push(parsed.date)
+  }
+
+  const normalizedTitle = typeof titleRaw === 'string' ? (titleRaw.trim() || null) : null
+  const user = await getUserFromSession(session)
+
+  const { count } = await prisma.vacationEntry.updateMany({
+    where: {
+      userId: user.id,
+      type,
+      date: { in: parsedDates },
+    },
+    data: { title: normalizedTitle },
+  })
+
+  publishPlanUpdate({ userId: user.id })
+  return NextResponse.json({ updated: count }, { headers: { 'Cache-Control': 'no-store' } })
+}
+
 /** "Planung zurücksetzen": removes all of the signed-in user's entries. */
 export async function DELETE(request: Request) {
   if (!validOrigin(request)) return jsonError('Ungültige Anfrage.', 403)

@@ -101,6 +101,7 @@ export async function GET(
       updatedAt: entry.updatedAt.toISOString(),
     }))
 
+  const holidayDateKeys = new Set<string>()
   if (includePublicHolidays || includeSchoolHolidays || includeBridgeDays) {
     const country = prefs.country ?? DEFAULT_COUNTRY
     const year = new Date().getUTCFullYear()
@@ -115,6 +116,14 @@ export async function GET(
         let publicByYear: Holiday[][] = []
         if (needPublic) {
           publicByYear = await Promise.all(years.map(y => fetchHolidays(country, prefs.subdivision, y, 'public')))
+          for (const h of publicByYear.flat()) {
+            const cur = new Date(`${h.startDate}T00:00:00Z`)
+            const end = new Date(`${h.endDate}T00:00:00Z`)
+            while (cur <= end) {
+              holidayDateKeys.add(cur.toISOString().slice(0, 10))
+              cur.setUTCDate(cur.getUTCDate() + 1)
+            }
+          }
         }
         if (includePublicHolidays) {
           entries.push(...holidayEvents(user.id, 'public', publicByYear.flat()))
@@ -157,6 +166,8 @@ export async function GET(
   const ics = createCalendar(entries, {
     name: calendarName,
     refreshInterval: 'PT6H',
+    workDays: prefs.workDays,
+    holidayDates: holidayDateKeys.size > 0 ? holidayDateKeys : undefined,
   })
 
   return new Response(ics, {

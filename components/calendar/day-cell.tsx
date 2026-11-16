@@ -150,16 +150,16 @@ export function DayCell({
     } else if (showBridgeDays && isBridgeDay) {
       parts.push('🌉 Brückentag')
     }
-    if (vacation) parts.push('🌴 Urlaub')
-    if (gleittag) parts.push('⏰ Gleittag')
+    if (vacation) parts.push(`🌴 Urlaub${vacation.title ? `: ${vacation.title}` : ''}`)
+    if (gleittag) parts.push(`⏰ Gleittag${gleittag.title ? `: ${gleittag.title}` : ''}`)
     if (special) parts.push(`✨ Sonderurlaub / Frei${special.title ? `: ${special.title}` : ''}`)
     if (note) parts.push(`📝 Notiz: ${note.title ?? 'Notiz'}`)
     for (const s of sharedItems) {
       const tLabel =
         s.type === 'vacation'
-          ? 'Urlaub'
+          ? `Urlaub${s.title ? `: ${s.title}` : ''}`
           : s.type === 'gleittag'
-            ? 'Gleittag'
+            ? `Gleittag${s.title ? `: ${s.title}` : ''}`
             : s.type === 'off_day'
               ? `Regulär frei (${s.title || 'Arbeitszeitmodell'})`
               : s.title || 'Notiz'
