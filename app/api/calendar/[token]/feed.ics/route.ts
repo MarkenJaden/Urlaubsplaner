@@ -1,10 +1,11 @@
 import * as userLib from '@/lib/user'
-import { createCalendar, holidayEvents } from '@/lib/calendar'
+import { prisma } from '@/lib/prisma'
+import { createCalendar, holidayEvents, sharedOverlayEvents } from '@/lib/calendar'
 import type { CalendarEntry } from '@/lib/calendar'
 import { fetchHolidays, fetchSubdivisions, resolveSchoolGroup } from '@/lib/holiday-api'
 import { DEFAULT_COUNTRY } from '@/lib/holiday-regions'
 import { detectBridgeDays } from '@/lib/bridge-days'
-import type { UserPreferences, Holiday } from '@/types'
+import type { UserPreferences, Holiday, SharedPlanOverlay } from '@/types'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -33,6 +34,9 @@ export async function GET(
     includePublicHolidays: boolean
     includeSchoolHolidays: boolean
     includeBridgeDays: boolean
+    includeSharedOverlays?: boolean
+    sharedOverlayIds?: unknown
+    color?: string | null
   } | null = null
 
   if (!user && typeof userLib.getCalendarFeedByToken === 'function') {
@@ -85,6 +89,15 @@ export async function GET(
     'bridge',
     feedOverride ? feedOverride.includeBridgeDays : Boolean(prefs.feedIncludeBridgeDays)
   )
+  const includeSharedOverlays = boolParam(
+    searchParams,
+    'shared',
+    feedOverride ? Boolean(feedOverride.includeSharedOverlays) : Boolean(prefs.feedIncludeSharedOverlays)
+  )
+  const rawOverlayIds = feedOverride ? feedOverride.sharedOverlayIds : prefs.feedSharedOverlayIds
+  const selectedOverlayIds = Array.isArray(rawOverlayIds)
+    ? rawOverlayIds.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)
+    : null
 
   const entries: CalendarEntry[] = user.vacations
     .filter(entry => {
@@ -157,6 +170,69 @@ export async function GET(
     }
   }
 
+  if (includeSharedOverlays && Array.isArray(prefs.sharedOverlays) && prefs.sharedOverlays.length > 0) {
+    const overlaysToInclude: SharedPlanOverlay[] =
+      selectedOverlayIds && selectedOverlayIds.length > 0
+        ? prefs.sharedOverlays.filter(o => selectedOverlayIds.includes(o.id))
+        : prefs.sharedOverlays.filter(o => o.enabled !== false)
+
+    for (const overlay of overlaysToInclude) {
+      let resolvedEntries: Array<{ date: string; type: string; title?: string | null }> = overlay.entries ?? []
+      let overlayWorkDays = overlay.workDays
+
+      if (overlay.token) {
+        try {
+          if (overlay.token.startsWith('g_')) {
+            const setting = await prisma.systemSetting.findUnique({
+              where: { key: `guest_share:${overlay.token}` },
+            })
+            const record = setting?.value as unknown as {
+              includeNotes?: boolean
+              preferences?: UserPreferences
+              entries?: Array<{ date: string; type: string; title?: string | null }>
+            } | undefined
+            if (record?.entries) {
+              resolvedEntries = record.entries.filter(e => record.includeNotes || e.type !== 'note')
+              if (record.preferences?.workDays) overlayWorkDays = record.preferences.workDays
+            }
+          } else {
+            const share = await prisma.planShare.findUnique({
+              where: { token: overlay.token },
+              include: { user: { include: { vacations: true } } },
+            })
+            if (share) {
+              const ownerPrefs = (share.user.preferences ?? {}) as UserPreferences
+              if (ownerPrefs.workDays) overlayWorkDays = ownerPrefs.workDays
+              resolvedEntries = share.user.vacations
+                .filter(v => share.includeNotes || v.type !== 'note')
+                .map(v => ({
+                  date: v.date.toISOString().slice(0, 10),
+                  type: v.type,
+                  title: v.title,
+                }))
+            }
+          }
+        } catch {
+          // Fall back to embedded snapshot entries if live lookup fails
+        }
+      }
+
+      entries.push(
+        ...sharedOverlayEvents(
+          user.id,
+          {
+            id: overlay.id,
+            label: overlay.label,
+            color: overlay.color,
+            workDays: overlayWorkDays,
+            entries: resolvedEntries,
+          },
+          { holidayDates: holidayDateKeys.size > 0 ? holidayDateKeys : undefined }
+        )
+      )
+    }
+  }
+
   const calendarName = feedOverride
     ? `Urlaubsplaner – ${feedOverride.name}`
     : user.name
@@ -168,6 +244,7 @@ export async function GET(
     refreshInterval: 'PT6H',
     workDays: prefs.workDays,
     holidayDates: holidayDateKeys.size > 0 ? holidayDateKeys : undefined,
+    color: feedOverride?.color ?? null,
   })
 
   return new Response(ics, {

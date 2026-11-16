@@ -17,6 +17,7 @@ const booleanKeys = new Set([
   'feedIncludeNotes',
   'feedIncludeNoteTitles',
   'feedIncludeBridgeDays',
+  'feedIncludeSharedOverlays',
 ])
 // Location values that a patch may clear with null (e.g. after a country change).
 const clearableKeys = new Set(['subdivision', 'holidayGroup'])
@@ -201,6 +202,11 @@ export function parsePreferences(input: unknown): PreferencesPatch | null {
       const parsedConfig = parseApprovalSheetConfig(value)
       if (!parsedConfig) return null
       result[key] = parsedConfig
+      continue
+    }
+    else if (key === 'feedSharedOverlayIds') {
+      if (!Array.isArray(value) || value.length > 25 || value.some(id => typeof id !== 'string' || !id.trim() || id.length > 120)) return null
+      result[key] = [...new Set(value.map(id => id.trim()))]
       continue
     }
     else if (key === 'compareSubdivisions') {

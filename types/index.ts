@@ -22,6 +22,9 @@ export interface CalendarFeedSubscription {
   includePublicHolidays: boolean
   includeSchoolHolidays: boolean
   includeBridgeDays: boolean
+  includeSharedOverlays?: boolean
+  sharedOverlayIds?: string[] | null
+  color?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -113,6 +116,8 @@ export interface UserPreferences extends Partial<Omit<LocalConfig, 'entries'>> {
   feedIncludeNotes?: boolean
   feedIncludeNoteTitles?: boolean
   feedIncludeBridgeDays?: boolean
+  feedIncludeSharedOverlays?: boolean
+  feedSharedOverlayIds?: string[]
   /** Legacy single budget; vacationDaysPerYear takes precedence. */
   vacationDays?: number
 }

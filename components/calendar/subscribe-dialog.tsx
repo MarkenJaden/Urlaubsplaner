@@ -9,15 +9,16 @@ import { Switch } from '@/components/ui/switch'
 import { CalendarDays, Copy, Check, ExternalLink, RefreshCw, ShieldCheck, Download, LogIn } from 'lucide-react'
 import { useProfile, useUpdatePreferences } from '@/hooks/use-profile'
 import { CalendarFeedsList } from '@/components/calendar/calendar-feeds-list'
-import { createCalendar } from '@/lib/calendar'
+import { createCalendar, sharedOverlayEvents } from '@/lib/calendar'
 import { downloadFile } from '@/lib/export'
-import type { UserPreferences, UserProfile, VacationEntry } from '@/types'
+import type { SharedPlanOverlay, UserPreferences, UserProfile, VacationEntry } from '@/types'
 
 interface SubscribeDialogProps {
   open: boolean
   onClose: () => void
   isLoggedIn: boolean
   entries: VacationEntry[]
+  sharedOverlays?: SharedPlanOverlay[]
   year: number
   locationReady: boolean
   regionLabel?: string
@@ -28,6 +29,7 @@ export function SubscribeDialog({
   onClose,
   isLoggedIn,
   entries,
+  sharedOverlays: propOverlays,
   year,
   locationReady,
   regionLabel = 'meiner Region',
@@ -45,6 +47,7 @@ export function SubscribeDialog({
   const [guestGleittage, setGuestGleittage] = useState(true)
   const [guestNotes, setGuestNotes] = useState(false)
   const [guestNoteTitles, setGuestNoteTitles] = useState(true)
+  const [guestSharedOverlays, setGuestSharedOverlays] = useState(false)
 
   useEffect(() => {
     setOrigin(window.location.origin)
@@ -53,6 +56,7 @@ export function SubscribeDialog({
   const prefs = (profile.data?.preferences ?? {}) as UserPreferences
   const token = profile.data?.calendarToken ?? ''
   const customFeeds = profile.data?.calendarFeeds ?? []
+  const sharedOverlays = propOverlays ?? prefs.sharedOverlays ?? []
 
   const includeVacations = prefs.feedIncludeVacations ?? true
   const includeGleittage = prefs.feedIncludeGleittage ?? true
@@ -61,6 +65,8 @@ export function SubscribeDialog({
   const includePublic = Boolean(prefs.feedIncludePublicHolidays)
   const includeSchool = Boolean(prefs.feedIncludeSchoolHolidays)
   const includeBridge = Boolean(prefs.feedIncludeBridgeDays)
+  const includeSharedOverlays = Boolean(prefs.feedIncludeSharedOverlays)
+  const selectedSharedIds = prefs.feedSharedOverlayIds ?? []
 
   const calendarUrl = token && origin ? `${origin}/api/calendar/${token}/feed.ics` : ''
   const webcalUrl = calendarUrl ? calendarUrl.replace(/^https?:/, 'webcal:') : ''
@@ -113,7 +119,12 @@ export function SubscribeDialog({
         ...e,
         title: e.type === 'note' && !guestNoteTitles ? null : e.title,
       }))
-    downloadFile(createCalendar(filtered), `urlaubsplaner-${year}.ics`, 'text/calendar')
+    const overlayCalEntries = guestSharedOverlays
+      ? sharedOverlays
+          .filter(o => o.enabled !== false)
+          .flatMap(o => sharedOverlayEvents('guest', o))
+      : []
+    downloadFile(createCalendar([...filtered, ...overlayCalEntries]), `urlaubsplaner-${year}.ics`, 'text/calendar')
   }
 
   return (
@@ -192,7 +203,49 @@ export function SubscribeDialog({
                     onCheckedChange={checked => updatePrefs.mutate({ feedIncludeBridgeDays: checked })}
                   />
                 </label>
+                <label className="flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-md border bg-background px-2.5 py-1.5 sm:col-span-2">
+                  <span>🤝 Geteilte Pläne einbeziehen ({sharedOverlays.length})</span>
+                  <Switch
+                    checked={includeSharedOverlays}
+                    disabled={sharedOverlays.length === 0}
+                    onCheckedChange={checked => updatePrefs.mutate({ feedIncludeSharedOverlays: checked })}
+                  />
+                </label>
               </div>
+              {includeSharedOverlays && sharedOverlays.length > 0 && (
+                <div className="rounded-md border bg-background/70 p-2 space-y-1.5 text-[11px]">
+                  <span className="font-medium text-muted-foreground block">
+                    Ausgewählte geteilte Pläne (leer = alle aktivierten):
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {sharedOverlays.map(ov => {
+                      const active = selectedSharedIds.length === 0 ? ov.enabled !== false : selectedSharedIds.includes(ov.id)
+                      return (
+                        <button
+                          key={ov.id}
+                          type="button"
+                          onClick={() => {
+                            const base = selectedSharedIds.length === 0
+                              ? sharedOverlays.filter(o => o.enabled !== false).map(o => o.id)
+                              : selectedSharedIds
+                            const next = base.includes(ov.id) ? base.filter(id => id !== ov.id) : [...base, ov.id]
+                            updatePrefs.mutate({ feedSharedOverlayIds: next })
+                          }}
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 transition-colors ${
+                            active ? 'border-primary bg-primary/10 text-foreground font-medium' : 'border-border text-muted-foreground opacity-70'
+                          }`}
+                        >
+                          <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: ov.color }} />
+                          {ov.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Tipp: Für eine eigene Kalenderfarbe in Google Kalender oder Outlook lege unten ein separates Abo nur für den geteilten Plan an.
+                  </p>
+                </div>
+              )}
               {!locationReady && (
                 <p className="text-[11px] text-muted-foreground">
                   Wähle zuerst dein Bundesland / deine Region, um Feiertage, Schulferien und Brückentage im Abo einzuschließen.
@@ -260,6 +313,7 @@ export function SubscribeDialog({
             {/* Multiple Calendar Feeds Section */}
             <CalendarFeedsList
               feeds={customFeeds}
+              sharedOverlays={sharedOverlays}
               origin={origin}
               locationReady={locationReady}
               regionLabel={regionLabel}
@@ -307,6 +361,12 @@ export function SubscribeDialog({
                   <span>🔒 Notiz-Texte</span>
                   <Switch checked={guestNoteTitles} disabled={!guestNotes} onCheckedChange={setGuestNoteTitles} />
                 </label>
+                {sharedOverlays.length > 0 && (
+                  <label className="flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-md border bg-background px-2.5 py-1.5 col-span-2">
+                    <span>🤝 Geteilte Pläne ({sharedOverlays.filter(o => o.enabled !== false).length})</span>
+                    <Switch checked={guestSharedOverlays} onCheckedChange={setGuestSharedOverlays} />
+                  </label>
+                )}
               </div>
               <Button variant="secondary" onClick={handleGuestDownloadICS} className="w-full mt-2">
                 <Download className="h-4 w-4" /> ICS-Kalenderdatei für {year} herunterladen

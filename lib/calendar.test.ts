@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { VacationEntry } from '@/types'
-import { createCalendar, holidayEvents } from './calendar'
+import { createCalendar, holidayEvents, sharedOverlayEvents } from './calendar'
 import type { Holiday } from '@/types'
 
 const entry: VacationEntry = { id: 'local_0', userId: 'user-1', date: '2026-03-29', type: 'vacation', title: 'Reise, See;\nPause\\Ende', year: 2026, createdAt: '2026-01-01T10:00:00Z', updatedAt: '2026-01-02T10:00:00Z' }
@@ -101,5 +101,28 @@ describe('holiday events in the subscription', () => {
     const uid = (ics: string) => ics.split('\r\n').find(line => line.startsWith('UID:'))
     expect(uid(createCalendar(events))).toBe(uid(createCalendar(holidayEvents('user-1', 'school', [{ ...christmas, startDate: '2026-12-19', endDate: '2027-01-03' }]))))
     expect(createCalendar(events)).toContain('DTEND;VALUE=DATE:20270104')
+  })
+})
+
+describe('shared overlay events and calendar colors', () => {
+  it('merges contiguous shared overlay days with label prefix, categories, color, and unique UID', () => {
+    const shared = sharedOverlayEvents('user-1', {
+      id: 'ov-1',
+      label: 'Freundin',
+      color: '#ec4899',
+      entries: [
+        { date: '2026-07-06', type: 'vacation', title: 'Urlaub Fuerteventura' },
+        { date: '2026-07-07', type: 'vacation', title: 'Urlaub Fuerteventura' },
+      ],
+    })
+    const own: VacationEntry = { ...entry, id: 'own-1', date: '2026-07-06', title: 'Mein Urlaub' }
+    const ics = createCalendar([own, ...shared], { color: '#ec4899' })
+    expect(ics).toContain('X-APPLE-CALENDAR-COLOR:#EC4899')
+    expect(ics).toContain('COLOR:hotpink')
+    expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(2)
+    expect(ics).toContain('SUMMARY:Freundin: Urlaub: Urlaub Fuerteventura')
+    expect(ics).toContain('CATEGORIES:Freundin')
+    expect(ics).toContain('UID:user-1-2026-07-06-shared-ov-1-vacation@urlaubsplaner')
+    expect(ics).toContain('UID:user-1-2026-07-06-vacation@urlaubsplaner')
   })
 })

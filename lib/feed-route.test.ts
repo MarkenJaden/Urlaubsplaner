@@ -117,4 +117,67 @@ describe('calendar subscription feed', () => {
     expect(ics).toContain('DTSTART;VALUE=DATE:20260706\r\nDTEND;VALUE=DATE:20260709')
     expect(ics).toContain('SUMMARY:Urlaub: Urlaub Fuerteventura')
   })
+  it('includes enabled shared overlays when feedIncludeSharedOverlays is enabled', async () => {
+    user.getUserByToken.mockResolvedValue(stored({
+      feedIncludeSharedOverlays: true,
+      sharedOverlays: [
+        {
+          id: 'ov-partner',
+          label: 'Freundin',
+          color: '#ec4899',
+          enabled: true,
+          permission: 'view',
+          entries: [
+            { date: '2026-08-03', type: 'vacation', title: 'Ostsee' },
+            { date: '2026-08-04', type: 'vacation', title: 'Ostsee' },
+          ],
+        },
+      ],
+    }))
+    const ics = await (await call()).text()
+    expect(ics).toContain('SUMMARY:Freundin: Urlaub: Ostsee')
+    expect(ics).toContain('DTSTART;VALUE=DATE:20260803\r\nDTEND;VALUE=DATE:20260805')
+  })
+  it('applies custom feed color and sharedOverlayIds filter', async () => {
+    user.getUserByToken.mockResolvedValue(null)
+    user.getCalendarFeedByToken.mockResolvedValue({
+      id: 'feed-partner',
+      name: 'Freundin',
+      token,
+      includeVacations: false,
+      includeGleittage: false,
+      includeNotes: false,
+      includeNoteTitles: false,
+      includePublicHolidays: false,
+      includeSchoolHolidays: false,
+      includeBridgeDays: false,
+      includeSharedOverlays: true,
+      sharedOverlayIds: ['ov-1'],
+      color: '#ec4899',
+      user: stored({
+        sharedOverlays: [
+          {
+            id: 'ov-1',
+            label: 'Freundin',
+            color: '#ec4899',
+            enabled: true,
+            permission: 'view',
+            entries: [{ date: '2026-09-01', type: 'vacation' }],
+          },
+          {
+            id: 'ov-2',
+            label: 'Kollege',
+            color: '#3b82f6',
+            enabled: true,
+            permission: 'view',
+            entries: [{ date: '2026-09-02', type: 'vacation' }],
+          },
+        ],
+      }),
+    })
+    const ics = await (await call()).text()
+    expect(ics).toContain('X-APPLE-CALENDAR-COLOR:#EC4899')
+    expect(ics).toContain('SUMMARY:Freundin: Urlaub')
+    expect(ics).not.toContain('Kollege')
+  })
 })

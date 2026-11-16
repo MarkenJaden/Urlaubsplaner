@@ -58,6 +58,9 @@ export default async function SettingsPage() {
       calendarToken={user.calendarToken}
       initialFeeds={user.calendarFeeds.map(f => ({
         ...f,
+        sharedOverlayIds: Array.isArray(f.sharedOverlayIds)
+          ? f.sharedOverlayIds.filter((id): id is string => typeof id === 'string')
+          : null,
         createdAt: f.createdAt.toISOString(),
         updatedAt: f.updatedAt.toISOString(),
       }))}

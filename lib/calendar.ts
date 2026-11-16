@@ -124,6 +124,14 @@ export type CalendarEntry = Omit<VacationEntry, 'type'> & {
   type: string
   /** Inclusive last day for multi-day events such as school holidays. */
   endDate?: string
+  /** Optional prefix in SUMMARY, e.g. shared plan label. */
+  summaryPrefix?: string
+  /** Optional RFC 5545 CATEGORIES value. */
+  category?: string
+  /** Optional hex color (#RRGGBB) mapped to RFC 7986 COLOR on VEVENT. */
+  color?: string
+  /** Optional UID scope so shared events never collide with own events on the same date. */
+  uidScope?: string
 }
 
 export interface CalendarOptions {
@@ -132,12 +140,59 @@ export interface CalendarOptions {
   refreshInterval?: string
   workDays?: number[]
   holidayDates?: Iterable<string>
+  /** Optional hex color (#RRGGBB) for calendar-level color hints (Apple / RFC 7986). */
+  color?: string | null
+}
+
+const CSS3_COLORS: Array<[string, number, number, number]> = [
+  ['crimson', 220, 20, 60],
+  ['red', 255, 0, 0],
+  ['orangered', 255, 69, 0],
+  ['darkorange', 255, 140, 0],
+  ['gold', 255, 215, 0],
+  ['yellowgreen', 154, 205, 50],
+  ['mediumseagreen', 60, 179, 113],
+  ['emerald', 16, 185, 129],
+  ['teal', 0, 128, 128],
+  ['darkturquoise', 0, 206, 209],
+  ['dodgerblue', 30, 144, 255],
+  ['royalblue', 65, 105, 225],
+  ['indigo', 75, 0, 130],
+  ['blueviolet', 138, 43, 226],
+  ['mediumorchid', 186, 85, 211],
+  ['deeppink', 255, 20, 147],
+  ['hotpink', 255, 105, 180],
+  ['slategray', 112, 128, 144],
+]
+
+/** Maps a #RRGGBB hex string to the nearest RFC 7986 CSS3 color name (avoiding non-standard 'emerald' if needed). */
+function hexToCss3ColorName(hex?: string | null): string | null {
+  if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return null
+  const r = parseInt(hex.slice(1, 3), 16)
+  const g = parseInt(hex.slice(3, 5), 16)
+  const b = parseInt(hex.slice(5, 7), 16)
+  let bestName = 'dodgerblue'
+  let bestDist = Infinity
+  for (const [name, cr, cg, cb] of CSS3_COLORS) {
+    if (name === 'emerald') continue
+    const dist = (r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2
+    if (dist < bestDist) {
+      bestDist = dist
+      bestName = name
+    }
+  }
+  return bestName
 }
 
 export function createCalendar(entries: CalendarEntry[], options: CalendarOptions | string = {}): string {
-  const { name = 'Urlaubsplaner', refreshInterval, workDays, holidayDates } =
+  const { name = 'Urlaubsplaner', refreshInterval, workDays, holidayDates, color } =
     typeof options === 'string' ? { name: options } : options
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Urlaubsplaner//DE', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', `X-WR-CALNAME:${escapeText(name)}`]
+  if (color && /^#[0-9a-fA-F]{6}$/.test(color)) {
+    lines.push(`X-APPLE-CALENDAR-COLOR:${color.toUpperCase()}`)
+    const cssColor = hexToCss3ColorName(color)
+    if (cssColor) lines.push(`COLOR:${cssColor}`)
+  }
   if (refreshInterval) lines.push(`REFRESH-INTERVAL;VALUE=DURATION:${refreshInterval}`, `X-PUBLISHED-TTL:${refreshInterval}`)
   const labels: Record<string, string> = { vacation: 'Urlaub', gleittag: 'Gleittag', special: 'Sonderurlaub / Frei', note: 'Notiz', public: 'Feiertag', school: 'Schulferien' }
   const normalizedEntries = mergeContiguousCalendarEntries(entries, { workDays, holidayDates })
@@ -149,18 +204,63 @@ export function createCalendar(entries: CalendarEntry[], options: CalendarOption
     const stamp = new Date(entry.updatedAt ?? entry.createdAt)
     const timestamp = (Number.isFinite(stamp.getTime()) ? stamp.toISOString() : `${date}T00:00:00.000Z`).replace(/[-:]/g, '').replace(/\.\d{3}/, '')
     const label = labels[entry.type] ?? entry.type
+    const baseSummary = entry.title ? `${label}: ${entry.title}` : label
+    const summary = entry.summaryPrefix ? `${entry.summaryPrefix}: ${baseSummary}` : baseSummary
+    const uidSuffix = entry.uidScope
+      ? encodeURIComponent(entry.uidScope)
+      : `${encodeURIComponent(entry.type)}${['vacation', 'gleittag', 'special', 'note'].includes(entry.type) ? '' : `-${encodeURIComponent(entry.id)}`}`
+    const eventColor = hexToCss3ColorName(entry.color)
     lines.push('BEGIN:VEVENT',
-      `UID:${encodeURIComponent(entry.userId)}-${date}-${encodeURIComponent(entry.type)}${['vacation', 'gleittag', 'special', 'note'].includes(entry.type) ? '' : `-${encodeURIComponent(entry.id)}`}@urlaubsplaner`,
+      `UID:${encodeURIComponent(entry.userId)}-${date}-${uidSuffix}@urlaubsplaner`,
       `DTSTAMP:${timestamp}`,
       `DTSTART;VALUE=DATE:${date.replace(/-/g, '')}`,
       // DTEND is exclusive for all-day events: the day after the last day.
       `DTEND;VALUE=DATE:${nextDay(last).replace(/-/g, '')}`,
-      `SUMMARY:${escapeText(entry.title ? `${label}: ${entry.title}` : label)}`,
+      `SUMMARY:${escapeText(summary)}`,
       ...(entry.title ? [`DESCRIPTION:${escapeText(entry.title)}`] : []),
+      ...(entry.category ? [`CATEGORIES:${escapeText(entry.category)}`] : []),
+      ...(eventColor ? [`COLOR:${eventColor}`] : []),
       'END:VEVENT')
   }
   lines.push('END:VCALENDAR')
   return lines.map(foldLine).join('\r\n') + '\r\n'
+}
+
+export function sharedOverlayEvents(
+  userId: string,
+  overlay: {
+    id: string
+    label: string
+    color?: string
+    workDays?: number[]
+    entries: Array<{ date: string; type: string; title?: string | null }>
+  },
+  options?: { holidayDates?: Iterable<string> }
+): CalendarEntry[] {
+  const raw: CalendarEntry[] = overlay.entries.map((item, idx) => {
+    const dateKey = item.date.slice(0, 10)
+    return {
+      id: `shared-${overlay.id}-${idx}-${dateKey}`,
+      userId,
+      date: dateKey,
+      type: item.type,
+      title: item.title ?? null,
+      year: Number(dateKey.slice(0, 4)),
+      createdAt: `${dateKey}T00:00:00Z`,
+      updatedAt: `${dateKey}T00:00:00Z`,
+    }
+  })
+  const merged = mergeContiguousCalendarEntries(raw, {
+    workDays: overlay.workDays,
+    holidayDates: options?.holidayDates,
+  })
+  return merged.map(entry => ({
+    ...entry,
+    summaryPrefix: overlay.label,
+    category: overlay.label,
+    color: overlay.color,
+    uidScope: `shared-${overlay.id}-${entry.type}`,
+  }))
 }
 
 /** One event per holiday; intervals split at year boundaries are joined again. */

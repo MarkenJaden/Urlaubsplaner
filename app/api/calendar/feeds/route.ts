@@ -15,6 +15,21 @@ export async function GET() {
   return NextResponse.json({ feeds }, { headers: { 'Cache-Control': 'no-store' } })
 }
 
+function parseSharedOverlayIds(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null
+  const ids = raw
+    .filter((item): item is string => typeof item === 'string' && item.trim().length > 0 && item.length <= 120)
+    .map(item => item.trim())
+    .slice(0, 25)
+  return ids.length > 0 ? [...new Set(ids)] : null
+}
+
+function parseHexColor(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const trimmed = raw.trim()
+  return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed.toLowerCase() : null
+}
+
 export async function POST(request: Request) {
   if (!validOrigin(request)) return jsonError('Ungültige Anfrage.', 403)
   const session = await auth()
@@ -43,6 +58,9 @@ export async function POST(request: Request) {
       includePublicHolidays: Boolean(body?.includePublicHolidays),
       includeSchoolHolidays: Boolean(body?.includeSchoolHolidays),
       includeBridgeDays: Boolean(body?.includeBridgeDays),
+      includeSharedOverlays: Boolean(body?.includeSharedOverlays),
+      sharedOverlayIds: parseSharedOverlayIds(body?.sharedOverlayIds) ?? undefined,
+      color: parseHexColor(body?.color),
     },
   })
 
@@ -76,6 +94,13 @@ export async function PATCH(request: Request) {
   if (typeof body.includePublicHolidays === 'boolean') data.includePublicHolidays = body.includePublicHolidays
   if (typeof body.includeSchoolHolidays === 'boolean') data.includeSchoolHolidays = body.includeSchoolHolidays
   if (typeof body.includeBridgeDays === 'boolean') data.includeBridgeDays = body.includeBridgeDays
+  if (typeof body.includeSharedOverlays === 'boolean') data.includeSharedOverlays = body.includeSharedOverlays
+  if (body.sharedOverlayIds !== undefined) {
+    data.sharedOverlayIds = body.sharedOverlayIds === null ? null : parseSharedOverlayIds(body.sharedOverlayIds)
+  }
+  if (body.color !== undefined) {
+    data.color = body.color === null || body.color === '' ? null : parseHexColor(body.color)
+  }
   if (body.rotateToken === true) {
     data.token = randomBytes(32).toString('base64url')
   }

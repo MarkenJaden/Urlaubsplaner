@@ -66,6 +66,9 @@ model CalendarFeed {
   includePublicHolidays Boolean  @default(false)
   includeSchoolHolidays Boolean  @default(false)
   includeBridgeDays     Boolean  @default(false)
+  includeSharedOverlays Boolean  @default(false)
+  sharedOverlayIds      Json?
+  color                 String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 

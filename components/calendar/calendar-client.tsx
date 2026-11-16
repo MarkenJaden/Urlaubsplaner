@@ -1701,6 +1701,7 @@ export function CalendarClient({
         isLoggedIn={isLoggedIn}
         year={year}
         entries={entries}
+        sharedOverlays={sharedOverlays}
         locationReady={locationReady}
         regionLabel={subdivision ? regionName(subdivision) : country}
       />

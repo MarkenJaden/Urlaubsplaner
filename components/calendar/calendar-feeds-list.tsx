@@ -15,10 +15,11 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react'
-import type { CalendarFeedSubscription, UserProfile } from '@/types'
+import type { CalendarFeedSubscription, SharedPlanOverlay, UserProfile } from '@/types'
 
 interface CalendarFeedsListProps {
   feeds: CalendarFeedSubscription[]
+  sharedOverlays?: SharedPlanOverlay[]
   origin: string
   locationReady: boolean
   regionLabel: string
@@ -73,6 +74,7 @@ const PRESETS = [
 
 export function CalendarFeedsList({
   feeds,
+  sharedOverlays = [],
   origin,
   locationReady,
   regionLabel,
@@ -89,7 +91,19 @@ export function CalendarFeedsList({
     await queryClient.invalidateQueries({ queryKey: ['profile'] })
   }
 
-  async function createFeed(preset?: (typeof PRESETS)[number]) {
+  async function createFeed(preset?: {
+    name: string
+    includeVacations: boolean
+    includeGleittage: boolean
+    includeNotes: boolean
+    includeNoteTitles: boolean
+    includePublicHolidays: boolean
+    includeSchoolHolidays: boolean
+    includeBridgeDays: boolean
+    includeSharedOverlays?: boolean
+    sharedOverlayIds?: string[]
+    color?: string
+  }) {
     setCreating(true)
     setError('')
     try {
@@ -103,6 +117,9 @@ export function CalendarFeedsList({
             includePublicHolidays: preset.includePublicHolidays,
             includeSchoolHolidays: preset.includeSchoolHolidays,
             includeBridgeDays: preset.includeBridgeDays,
+            includeSharedOverlays: Boolean(preset.includeSharedOverlays),
+            ...(preset.sharedOverlayIds ? { sharedOverlayIds: preset.sharedOverlayIds } : {}),
+            ...(preset.color ? { color: preset.color } : {}),
           }
         : {
             name: newName.trim() || `Weiteres Kalender-Abo ${feeds.length + 1}`,
@@ -222,6 +239,34 @@ export function CalendarFeedsList({
               {preset.label}
             </Button>
           ))}
+          {sharedOverlays.map(ov => (
+            <Button
+              key={ov.id}
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={creating}
+              onClick={() =>
+                void createFeed({
+                  name: ov.label.slice(0, 60),
+                  includeVacations: false,
+                  includeGleittage: false,
+                  includeNotes: false,
+                  includeNoteTitles: false,
+                  includePublicHolidays: false,
+                  includeSchoolHolidays: false,
+                  includeBridgeDays: false,
+                  includeSharedOverlays: true,
+                  sharedOverlayIds: [ov.id],
+                  color: ov.color,
+                })
+              }
+              className="h-7 text-xs gap-1.5"
+            >
+              <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: ov.color }} />
+              Nur {ov.label}
+            </Button>
+          ))}
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
@@ -267,6 +312,7 @@ export function CalendarFeedsList({
             if (feed.includePublicHolidays) activeTags.push('🎉 Feiertage')
             if (feed.includeSchoolHolidays) activeTags.push('🏫 Ferien')
             if (feed.includeBridgeDays) activeTags.push('🌉 Brückentage')
+            if (feed.includeSharedOverlays) activeTags.push('🤝 Geteilte Pläne')
 
             return (
               <div key={feed.id} className="rounded-xl border bg-background/70 p-3 space-y-3">
@@ -379,6 +425,71 @@ export function CalendarFeedsList({
                           onCheckedChange={checked => void updateFeed(feed.id, { includeBridgeDays: checked })}
                         />
                       </label>
+                      <label className="flex min-h-9 items-center justify-between gap-2 rounded-md border bg-card px-2.5 py-1 sm:col-span-2">
+                        <span>🤝 Geteilte Pläne einbeziehen ({sharedOverlays.length})</span>
+                        <Switch
+                          checked={Boolean(feed.includeSharedOverlays)}
+                          disabled={sharedOverlays.length === 0}
+                          onCheckedChange={checked => void updateFeed(feed.id, { includeSharedOverlays: checked })}
+                        />
+                      </label>
+                    </div>
+
+                    {feed.includeSharedOverlays && sharedOverlays.length > 0 && (
+                      <div className="rounded-md border bg-card/70 p-2 space-y-1.5">
+                        <span className="font-medium text-muted-foreground block">
+                          Ausgewählte geteilte Pläne (leer = alle aktivierten):
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {sharedOverlays.map(ov => {
+                            const selected = Array.isArray(feed.sharedOverlayIds) ? feed.sharedOverlayIds : []
+                            const active = selected.length === 0 ? ov.enabled !== false : selected.includes(ov.id)
+                            return (
+                              <button
+                                key={ov.id}
+                                type="button"
+                                onClick={() => {
+                                  const base = selected.length === 0
+                                    ? sharedOverlays.filter(o => o.enabled !== false).map(o => o.id)
+                                    : selected
+                                  const next = base.includes(ov.id) ? base.filter(id => id !== ov.id) : [...base, ov.id]
+                                  void updateFeed(feed.id, { sharedOverlayIds: next.length > 0 ? next : null })
+                                }}
+                                className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 transition-colors ${
+                                  active ? 'border-primary bg-primary/10 text-foreground font-medium' : 'border-border text-muted-foreground opacity-70'
+                                }`}
+                              >
+                                <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: ov.color }} />
+                                {ov.label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-card px-2.5 py-1.5">
+                      <span className="text-muted-foreground">
+                        Kalenderfarbe (für Apple Kalender &amp; RFC 7986 Clients):
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          aria-label={`Kalenderfarbe für ${feed.name}`}
+                          value={feed.color || '#3b82f6'}
+                          onChange={e => void updateFeed(feed.id, { color: e.target.value })}
+                          className="h-6 w-8 cursor-pointer rounded border bg-transparent p-0"
+                        />
+                        {feed.color && (
+                          <button
+                            type="button"
+                            onClick={() => void updateFeed(feed.id, { color: null })}
+                            className="text-[11px] text-muted-foreground hover:text-foreground underline"
+                          >
+                            Zurücksetzen
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <input
