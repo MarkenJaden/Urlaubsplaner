@@ -46,6 +46,7 @@ interface ShareDialogProps {
   overlays: SharedPlanOverlay[]
   sharedPlanSummaries?: SharedPlanStatSummary[]
   onToggleOverlay: (id: string, enabled: boolean) => void
+  onChangeOverlayColor: (id: string, color: string) => void
   onRemoveOverlay: (id: string) => void
   onAddOverlayByLink: (linkOrToken: string) => Promise<boolean>
   onRefreshOverlays?: () => Promise<void>
@@ -67,6 +68,7 @@ export function ShareDialog({
   overlays,
   sharedPlanSummaries = [],
   onToggleOverlay,
+  onChangeOverlayColor,
   onRemoveOverlay,
   onAddOverlayByLink,
   onRefreshOverlays,
@@ -78,7 +80,7 @@ export function ShareDialog({
   const [label, setLabel] = useState('Mein Urlaubsplan')
   const [permission, setPermission] = useState<'view' | 'edit'>('view')
   const [includeNotes, setIncludeNotes] = useState(false)
-  const [color, setColor] = useState('#10b981')
+  const [editingColorId, setEditingColorId] = useState<string | null>(null)
   const [shares, setShares] = useState<StoredShareLink[]>([])
   const [loadingShares, setLoadingShares] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -126,7 +128,6 @@ export function ShareDialog({
       .map(e => ({ date: e.date.slice(0, 10), type: e.type, ...(e.title ? { title: e.title } : {}) }))
     const encoded = encodeSharePayload({
       label: label.trim() || 'Geteilter Plan',
-      color,
       country,
       subdivision,
       workDays,
@@ -152,7 +153,7 @@ export function ShareDialog({
     setCreating(true)
     setError('')
     try {
-      const payload: Record<string, unknown> = { label, permission, includeNotes, color }
+      const payload: Record<string, unknown> = { label, permission, includeNotes }
       if (!isLoggedIn) {
         payload.entries = entries.map(e => ({
           date: e.date.slice(0, 10),
@@ -282,37 +283,17 @@ export function ShareDialog({
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">
             1. Deinen Plan in Echtzeit teilen
           </span>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="space-y-1 text-xs">
-              <span className="text-muted-foreground block">Anzeigename des Plans</span>
-              <input
-                type="text"
-                maxLength={60}
-                value={label}
-                onChange={e => setLabel(e.target.value)}
-                placeholder="z.B. Jans Urlaub"
-                className="min-h-10 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
-              />
-            </label>
-            <div className="space-y-1 text-xs">
-              <span className="text-muted-foreground block">Markierungsfarbe beim Einblenden</span>
-              <div className="flex items-center gap-2 pt-1">
-                {COLOR_SWATCHES.map(s => (
-                  <button
-                    key={s.hex}
-                    type="button"
-                    onClick={() => setColor(s.hex)}
-                    title={s.name}
-                    aria-label={`Farbe ${s.name}`}
-                    className={`h-7 w-7 rounded-full border-2 transition-transform ${
-                      color === s.hex ? 'scale-110 border-foreground ring-2 ring-primary/40' : 'border-transparent opacity-80 hover:opacity-100'
-                    }`}
-                    style={{ backgroundColor: s.hex }}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
+          <label className="block space-y-1 text-xs">
+            <span className="text-muted-foreground block">Anzeigename des Plans</span>
+            <input
+              type="text"
+              maxLength={60}
+              value={label}
+              onChange={e => setLabel(e.target.value)}
+              placeholder="z.B. Jans Urlaub"
+              className="min-h-10 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+            />
+          </label>
 
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 text-xs">
             <div className="grid grid-cols-2 gap-1.5">
@@ -378,7 +359,6 @@ export function ShareDialog({
               {shares.map(s => (
                 <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2 text-xs">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
                     <span className="font-medium truncate">{s.label}</span>
                     <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
                       ● Echtzeit
@@ -451,60 +431,104 @@ export function ShareDialog({
             <div className="space-y-2">
               {overlays.map(ov => {
                 const isEditingThis = activeCollabToken !== null && ov.token === activeCollabToken
+                const isPickingColor = editingColorId === ov.id
                 const stat = sharedPlanSummaries.find(s => s.id === ov.id)
                 const wdLabel = formatWorkDaysLabel(ov.workDays)
                 const isCustomWd = !isStandardFiveDayWeek(ov.workDays)
                 return (
-                  <div key={ov.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2 text-xs">
-                    <div className="flex flex-wrap items-center gap-2 min-w-0">
-                      <Switch
-                        checked={ov.enabled}
-                        onCheckedChange={v => onToggleOverlay(ov.id, v)}
-                        aria-label={`${ov.label} einblenden`}
-                      />
-                      <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: ov.color }} />
-                      <span className="font-medium truncate">{ov.label}</span>
-                      {ov.token ? (
-                        <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
-                          ● Live
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="text-[10px]">
-                          Momentaufnahme
-                        </Badge>
-                      )}
-                      {stat && (
-                        <Badge variant="outline" className="text-[10px]">
-                          Urlaub: {formatDays(stat.used)}/{formatDays(stat.total)} ({formatDays(stat.remaining)} übrig)
-                        </Badge>
-                      )}
-                      {isCustomWd && (
-                        <Badge variant="secondary" className="text-[10px]">
-                          {wdLabel}
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {ov.permission === 'edit' && ov.token && (
+                  <div key={ov.id} className="flex flex-col gap-2 rounded-lg border bg-card px-3 py-2 text-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2 min-w-0">
+                        <Switch
+                          checked={ov.enabled}
+                          onCheckedChange={v => onToggleOverlay(ov.id, v)}
+                          aria-label={`${ov.label} einblenden`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setEditingColorId(isPickingColor ? null : ov.id)}
+                          aria-label={`Farbe für ${ov.label} ändern`}
+                          aria-expanded={isPickingColor}
+                          title="Farbe ändern"
+                          className={`h-5 w-5 rounded-full border-2 shrink-0 transition-transform hover:scale-110 ${
+                            isPickingColor ? 'scale-110 border-foreground ring-2 ring-primary/40' : 'border-background ring-1 ring-border'
+                          }`}
+                          style={{ backgroundColor: ov.color }}
+                        />
+                        <span className="font-medium truncate">{ov.label}</span>
+                        {ov.token ? (
+                          <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
+                            ● Live
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Momentaufnahme
+                          </Badge>
+                        )}
+                        {stat && (
+                          <Badge variant="outline" className="text-[10px]">
+                            Urlaub: {formatDays(stat.used)}/{formatDays(stat.total)} ({formatDays(stat.remaining)} übrig)
+                          </Badge>
+                        )}
+                        {isCustomWd && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            {wdLabel}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        {ov.permission === 'edit' && ov.token && (
+                          <Button
+                            size="sm"
+                            variant={isEditingThis ? 'default' : 'outline'}
+                            onClick={() => onSelectCollabToken(isEditingThis ? null : ov.token!)}
+                          >
+                            <Edit3 className="h-3.5 w-3.5" />
+                            {isEditingThis ? 'Bearbeitungsmodus aktiv' : 'Jetzt mitbearbeiten'}
+                          </Button>
+                        )}
                         <Button
-                          size="sm"
-                          variant={isEditingThis ? 'default' : 'outline'}
-                          onClick={() => onSelectCollabToken(isEditingThis ? null : ov.token!)}
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => onRemoveOverlay(ov.id)}
+                          aria-label="Eingeblendeten Plan entfernen"
+                          className="text-muted-foreground hover:text-destructive"
                         >
-                          <Edit3 className="h-3.5 w-3.5" />
-                          {isEditingThis ? 'Bearbeitungsmodus aktiv' : 'Jetzt mitbearbeiten'}
+                          <Trash2 className="h-3.5 w-3.5" />
                         </Button>
-                      )}
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => onRemoveOverlay(ov.id)}
-                        aria-label="Eingeblendeten Plan entfernen"
-                        className="text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      </div>
                     </div>
+                    {isPickingColor && (
+                      <div className="flex flex-wrap items-center gap-2 border-t pt-2">
+                        <span className="text-[11px] text-muted-foreground">Farbe wählen:</span>
+                        {COLOR_SWATCHES.map(s => (
+                          <button
+                            key={s.hex}
+                            type="button"
+                            onClick={() => {
+                              onChangeOverlayColor(ov.id, s.hex)
+                              setEditingColorId(null)
+                            }}
+                            title={s.name}
+                            aria-label={`Farbe ${s.name} für ${ov.label}`}
+                            className={`h-6 w-6 rounded-full border-2 transition-transform ${
+                              ov.color.toLowerCase() === s.hex ? 'scale-110 border-foreground ring-2 ring-primary/40' : 'border-transparent opacity-85 hover:opacity-100 hover:scale-105'
+                            }`}
+                            style={{ backgroundColor: s.hex }}
+                          />
+                        ))}
+                        <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer ml-1">
+                          <span>Eigene:</span>
+                          <input
+                            type="color"
+                            value={ov.color}
+                            onChange={e => onChangeOverlayColor(ov.id, e.target.value)}
+                            aria-label={`Eigene Farbe für ${ov.label}`}
+                            className="h-6 w-7 cursor-pointer rounded border bg-transparent p-0"
+                          />
+                        </label>
+                      </div>
+                    )}
                   </div>
                 )
               })}

@@ -1671,6 +1671,9 @@ export function CalendarClient({
         onToggleOverlay={(id, enabled) =>
           saveSharedOverlays(sharedOverlays.map(o => (o.id === id ? { ...o, enabled } : o)))
         }
+        onChangeOverlayColor={(id, color) =>
+          saveSharedOverlays(sharedOverlays.map(o => (o.id === id ? { ...o, color } : o)))
+        }
         onRemoveOverlay={id => saveSharedOverlays(sharedOverlays.filter(o => o.id !== id))}
         onAddOverlayByLink={handleAddOverlayByLink}
         activeCollabToken={activeCollab && collabMode === 'edit' ? activeCollab.token : null}
