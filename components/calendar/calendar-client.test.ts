@@ -146,3 +146,45 @@ describe('preferences follow the visible controls', () => {
     }
   })
 })
+
+describe('self-shared overlay prevention and cleanup', () => {
+  it('automatically removes guest-owned share overlays from stored overlays on load', () => {
+    const ownToken = 'g_ownsharetoken12345678901'
+    localStorage.setItem(
+      'urlaubsplaner_guest_owned_shares_v1',
+      JSON.stringify([{ id: ownToken, token: ownToken, ownerSecret: 'sec', label: 'Mein Plan', permission: 'view', includeNotes: false, color: '#10b981', createdAt: '2026-01-01T00:00:00Z' }]),
+    )
+    localStorage.setItem(
+      'urlaubsplaner_shared_overlays_v1',
+      JSON.stringify([
+        { id: `token-${ownToken.slice(0, 10)}`, token: ownToken, label: 'Mein Plan', color: '#10b981', enabled: true, permission: 'view', entries: [] },
+        { id: 'token-partner1234', token: 'partner_token_123456789012', label: 'Partner', color: '#06b6d4', enabled: true, permission: 'view', entries: [] },
+      ]),
+    )
+
+    renderCalendar(false)
+
+    expect(screen.queryByRole('button', { name: /Mein Plan.*sichtbar/ })).toBeNull()
+    expect(screen.getByRole('button', { name: /Partner.*sichtbar/ })).toBeTruthy()
+    const persisted = JSON.parse(localStorage.getItem('urlaubsplaner_shared_overlays_v1') ?? '[]')
+    expect(persisted).toHaveLength(1)
+    expect(persisted[0].id).toBe('token-partner1234')
+  })
+
+  it('ignores own guest shareToken in URL and removes shareToken from window.location.search', () => {
+    const ownToken = 'g_ownsharetoken12345678901'
+    localStorage.setItem(
+      'urlaubsplaner_guest_owned_shares_v1',
+      JSON.stringify([{ id: ownToken, token: ownToken, ownerSecret: 'sec', label: 'Mein Plan', permission: 'view', includeNotes: false, color: '#10b981', createdAt: '2026-01-01T00:00:00Z' }]),
+    )
+    window.history.replaceState({}, '', `/?shareToken=${ownToken}`)
+
+    try {
+      renderCalendar(false)
+      expect(window.location.search).toBe('')
+      expect(screen.queryByRole('button', { name: /Mein Plan.*sichtbar/ })).toBeNull()
+    } finally {
+      window.history.replaceState({}, '', '/')
+    }
+  })
+})

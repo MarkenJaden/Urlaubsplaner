@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { parseEntry, parsePreferences } from '@/lib/preferences'
 import { jsonError, readJson, validOrigin } from '@/lib/request'
@@ -77,25 +78,39 @@ export async function GET(
     )
   }
 
-  const share = await prisma.planShare.findUnique({
-    where: { token },
-    include: {
-      user: {
-        select: {
-          name: true,
-          username: true,
-          updatedAt: true,
-          preferences: true,
-          vacations: {
-            where: yearFilter ? { year: yearFilter } : undefined,
-            orderBy: { date: 'asc' },
+  const [share, session] = await Promise.all([
+    prisma.planShare.findUnique({
+      where: { token },
+      include: {
+        user: {
+          select: {
+            name: true,
+            username: true,
+            updatedAt: true,
+            preferences: true,
+            vacations: {
+              where: yearFilter ? { year: yearFilter } : undefined,
+              orderBy: { date: 'asc' },
+            },
           },
         },
       },
-    },
-  })
+    }),
+    auth(),
+  ])
 
   if (!share) return jsonError('Geteilter Plan nicht gefunden oder widerrufen.', 404)
+
+  if (session?.user?.id && share.userId === session.user.id) {
+    return NextResponse.json(
+      {
+        error: 'Du kannst deinen eigenen Freigabe-Link nicht als fremden Plan hinzufügen.',
+        code: 'SELF_SHARE',
+        isOwner: true,
+      },
+      { status: 403, headers: { 'Cache-Control': 'no-store' } },
+    )
+  }
 
   const prefs = (share.user.preferences ?? {}) as UserPreferences
   const entries = share.user.vacations

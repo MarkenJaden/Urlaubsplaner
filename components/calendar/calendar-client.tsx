@@ -294,6 +294,23 @@ function mapApiShareToOverlay(
   }
 }
 
+function getGuestOwnedShareTokens(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = localStorage.getItem(GUEST_OWNED_SHARES_STORAGE_KEY)
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return new Set()
+    return new Set(
+      parsed
+        .map(item => (item && typeof item === 'object' ? (item as { token?: unknown }).token : undefined))
+        .filter((token): token is string => typeof token === 'string' && token.length > 0),
+    )
+  } catch {
+    return new Set()
+  }
+}
+
 export function CalendarClient({
   preferences: serverPrefs,
   isLoggedIn,
@@ -452,8 +469,15 @@ export function CalendarClient({
       if (!initialOverlaySyncRef.current) {
         initialOverlaySyncRef.current = true
         const fromConfig = loadConfig().sharedOverlays ?? []
-        const merged = mergeSharedOverlays(fromConfig, localOverlays)
+        const ownGuestTokens = getGuestOwnedShareTokens()
+        const rawMerged = mergeSharedOverlays(fromConfig, localOverlays)
+        const merged = ownGuestTokens.size > 0
+          ? rawMerged.filter(o => !o.token || !ownGuestTokens.has(o.token))
+          : rawMerged
         if (merged.length > 0) setSharedOverlays(merged)
+        if (merged.length !== rawMerged.length) {
+          persistOverlays(merged)
+        }
       }
       return
     }
@@ -465,15 +489,19 @@ export function CalendarClient({
       if (profile.isLoading) return
       initialOverlaySyncRef.current = true
       lastServerOverlaysSigRef.current = serverSig
-      const merged = mergeSharedOverlays(accountList, localOverlays)
+      const ownGuestTokens = getGuestOwnedShareTokens()
+      const rawMerged = mergeSharedOverlays(accountList, localOverlays)
+      const merged = ownGuestTokens.size > 0
+        ? rawMerged.filter(o => !o.token || !ownGuestTokens.has(o.token))
+        : rawMerged
       setSharedOverlays(merged)
       try {
         localStorage.setItem(SHARED_OVERLAYS_STORAGE_KEY, JSON.stringify(merged))
       } catch {
         // ignore
       }
-      // If this browser had local overlays not yet stored in the account, upload them once
-      if (merged.length > accountList.length) {
+      // If this browser had local overlays not yet stored in the account, or self-owned overlays were stripped, sync once
+      if (merged.length !== accountList.length) {
         updatePreferences.mutate({ sharedOverlays: merged })
       }
       return
@@ -490,17 +518,25 @@ export function CalendarClient({
     }
   }, [isLoggedIn, profile.isLoading, serverOverlays, updatePreferences])
 
+  const persistOverlaysRef = useRef(persistOverlays)
+  useEffect(() => {
+    persistOverlaysRef.current = persistOverlays
+  }, [persistOverlays])
+
   const saveSharedOverlays = useCallback(
     (next: SharedPlanOverlay[]) => {
+      if (isLoggedIn) {
+        lastServerOverlaysSigRef.current = JSON.stringify(next.map(o => [o.id, o.token, o.enabled, o.color, o.label]))
+      }
       setSharedOverlays(next)
       persistOverlays(next)
     },
-    [persistOverlays],
+    [isLoggedIn, persistOverlays],
   )
 
-  const handleAddOverlayByLink = useCallback(async (input: string): Promise<boolean> => {
+  const handleAddOverlayByLink = useCallback(async (input: string): Promise<{ ok: boolean; error?: string }> => {
     const trimmed = input.trim()
-    if (!trimmed) return false
+    if (!trimmed) return { ok: false }
     try {
       let shareSnapshot: string | null = null
       let shareToken: string | null = null
@@ -517,7 +553,7 @@ export function CalendarClient({
 
       if (shareSnapshot) {
         const decoded = decodeSharePayload(shareSnapshot)
-        if (!decoded || decoded.entries.length === 0) return false
+        if (!decoded || decoded.entries.length === 0) return { ok: false }
         const id = `snapshot-${decoded.label.toLowerCase().replace(/[^a-z0-9]/g, '-')}`
         setSharedOverlays(prev => {
           const exists = prev.find(o => o.id === id)
@@ -538,15 +574,28 @@ export function CalendarClient({
           persistOverlays(updated)
           return updated
         })
-        return true
+        return { ok: true }
       }
 
       if (shareToken) {
+        if (getGuestOwnedShareTokens().has(shareToken)) {
+          return { ok: false, error: 'Du kannst deinen eigenen Freigabe-Link nicht als fremden Plan hinzufügen.' }
+        }
         const res = await fetch(`/api/shares/${encodeURIComponent(shareToken)}?_t=${Date.now()}`, {
           cache: 'no-store',
         })
-        if (!res.ok) return false
-        const data = (await res.json()) as Record<string, unknown>
+        const data = (await res.json().catch(() => null)) as Record<string, unknown> | null
+        if (!res.ok || !data) {
+          if (data?.code === 'SELF_SHARE' || data?.isOwner) {
+            return {
+              ok: false,
+              error: typeof data.error === 'string'
+                ? data.error
+                : 'Du kannst deinen eigenen Freigabe-Link nicht als fremden Plan hinzufügen.',
+            }
+          }
+          return { ok: false }
+        }
         const id = `token-${shareToken.slice(0, 10)}`
         setSharedOverlays(prev => {
           const exists = prev.find(o => o.id === id || o.token === shareToken)
@@ -571,20 +620,30 @@ export function CalendarClient({
             }>,
           })
         }
-        return true
+        return { ok: true }
       }
-      return false
+      return { ok: false }
     } catch {
-      return false
+      return { ok: false }
     }
   }, [persistOverlays])
 
-  // Handle ?share= and ?shareToken= URL query parameters
+  // Handle ?share= and ?shareToken= URL query parameters once on load
+  const handledUrlShareRef = useRef(false)
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || handledUrlShareRef.current) return
     const params = new URLSearchParams(window.location.search)
     const shareSnapshot = params.get('share')
     const shareToken = params.get('shareToken')
+    if (!shareSnapshot && !shareToken) return
+    handledUrlShareRef.current = true
+
+    const clearShareParamsFromUrl = () => {
+      const nextUrl = new URL(window.location.href)
+      nextUrl.searchParams.delete('share')
+      nextUrl.searchParams.delete('shareToken')
+      window.history.replaceState({}, '', `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`)
+    }
 
     if (shareSnapshot) {
       const decoded = decodeSharePayload(shareSnapshot)
@@ -610,22 +669,33 @@ export function CalendarClient({
             entries: decoded.entries,
           }
           const updated = exists ? prev.map(o => o.id === id ? nextOverlay : o) : [...prev, nextOverlay]
-          persistOverlays(updated)
+          persistOverlaysRef.current(updated)
           return updated
         })
         setArrivedViaShareLabel(decoded.label)
         setSyncMessage(`Geteilter Plan „${decoded.label}“ wurde im Kalender eingeblendet.`)
       }
+      clearShareParamsFromUrl()
     }
 
     if (shareToken) {
+      if (getGuestOwnedShareTokens().has(shareToken)) {
+        setSyncMessage('Das ist dein eigener Freigabe-Link – er muss nicht zusätzlich eingeblendet werden.')
+        clearShareParamsFromUrl()
+        return
+      }
       void (async () => {
         try {
           const res = await fetch(`/api/shares/${encodeURIComponent(shareToken)}?_t=${Date.now()}`, {
             cache: 'no-store',
           })
-          if (!res.ok) return
-          const data = (await res.json()) as Record<string, unknown>
+          const data = (await res.json().catch(() => null)) as Record<string, unknown> | null
+          if (!res.ok || !data) {
+            if (data?.code === 'SELF_SHARE' || data?.isOwner) {
+              setSyncMessage('Das ist dein eigener Freigabe-Link – er muss nicht zusätzlich eingeblendet werden.')
+            }
+            return
+          }
           const id = `token-${shareToken.slice(0, 10)}`
           setSharedOverlays(prev => {
             const exists = prev.find(o => o.id === id || o.token === shareToken)
@@ -634,7 +704,7 @@ export function CalendarClient({
             const updated = exists
               ? prev.map(o => (o.id === id || o.token === shareToken ? nextOverlay : o))
               : [...prev, nextOverlay]
-            persistOverlays(updated)
+            persistOverlaysRef.current(updated)
             return updated
           })
           const label = typeof data.label === 'string' ? data.label : 'Geteilter Plan'
@@ -658,10 +728,12 @@ export function CalendarClient({
           }
         } catch {
           // ignore
+        } finally {
+          clearShareParamsFromUrl()
         }
       })()
     }
-  }, [persistOverlays])
+  }, [])
 
   const config = isLoggedIn ? { ...defaultConfig(), ...prefs, entries: [] } as LocalConfig : localConfig
   // Country → subdivision → holiday group (e.g. NL-UT → NL-MI).
@@ -786,15 +858,40 @@ export function CalendarClient({
   const refreshLiveOverlays = useCallback(async (onlyTokens?: string[]) => {
     const targets = onlyTokens?.length ? onlyTokens.filter(t => liveTokens.includes(t)) : liveTokens
     if (targets.length === 0) return
-    const results = await Promise.all(targets.map(async token => {
+    const ownGuestTokens = getGuestOwnedShareTokens()
+    const selfTokens = new Set<string>(targets.filter(t => ownGuestTokens.has(t)))
+    const fetchTargets = targets.filter(t => !selfTokens.has(t))
+
+    const results = await Promise.all(fetchTargets.map(async token => {
       try {
         const res = await fetch(`/api/shares/${encodeURIComponent(token)}?_t=${Date.now()}`, { cache: 'no-store' })
-        if (!res.ok) return null
-        return { token, data: (await res.json()) as Record<string, unknown> }
+        const data = (await res.json().catch(() => null)) as Record<string, unknown> | null
+        if (!res.ok || !data) {
+          if (data?.code === 'SELF_SHARE' || data?.isOwner) {
+            selfTokens.add(token)
+          }
+          return null
+        }
+        return { token, data }
       } catch {
         return null
       }
     }))
+
+    if (selfTokens.size > 0) {
+      setSharedOverlays(prev => {
+        const updated = prev.filter(o => !o.token || !selfTokens.has(o.token))
+        if (updated.length !== prev.length) {
+          if (isLoggedIn) {
+            lastServerOverlaysSigRef.current = JSON.stringify(updated.map(o => [o.id, o.token, o.enabled, o.color, o.label]))
+          }
+          persistOverlaysRef.current(updated)
+        }
+        return updated
+      })
+      setActiveCollab(prev => (prev && selfTokens.has(prev.token) ? null : prev))
+    }
+
     const fresh = results.filter((r): r is { token: string; data: Record<string, unknown> } => Boolean(r))
     if (fresh.length === 0) return
 
@@ -828,7 +925,7 @@ export function CalendarClient({
         entries: (Array.isArray(match.data.entries) ? match.data.entries : []) as typeof prev.entries,
       }
     })
-  }, [liveTokens])
+  }, [isLoggedIn, liveTokens])
 
   const refreshLiveOverlaysRef = useRef(refreshLiveOverlays)
   useEffect(() => {
@@ -1674,7 +1771,14 @@ export function CalendarClient({
         onChangeOverlayColor={(id, color) =>
           saveSharedOverlays(sharedOverlays.map(o => (o.id === id ? { ...o, color } : o)))
         }
-        onRemoveOverlay={id => saveSharedOverlays(sharedOverlays.filter(o => o.id !== id))}
+        onRemoveOverlay={id => {
+          const removed = sharedOverlays.find(o => o.id === id)
+          if (removed?.token && activeCollab?.token === removed.token) {
+            setActiveCollab(null)
+            setCollabMode('overlay')
+          }
+          saveSharedOverlays(sharedOverlays.filter(o => o.id !== id))
+        }}
         onAddOverlayByLink={handleAddOverlayByLink}
         activeCollabToken={activeCollab && collabMode === 'edit' ? activeCollab.token : null}
         onSelectCollabToken={token => {

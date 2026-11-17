@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 import { mergePreferences, parsePreferences } from '@/lib/preferences'
 import { jsonError, readJson, validOrigin } from '@/lib/request'
 import { publishPlanUpdate } from '@/lib/realtime-hub'
+import { stripOwnShareOverlays } from '@/lib/user'
 import type { UserPreferences } from '@/types'
 
 export async function GET() {
@@ -30,6 +31,13 @@ export async function GET() {
     }),
     getPublicOAuthStatus(),
   ])
+  const cleaned = await stripOwnShareOverlays(user.id, (user.preferences ?? {}) as UserPreferences)
+  if (cleaned.changed) {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { preferences: cleaned.preferences as object },
+    })
+  }
   return NextResponse.json(
     {
       id: user.id,
@@ -45,7 +53,7 @@ export async function GET() {
       githubOAuthEnabled: oauthStatus.githubEnabled,
       calendarToken: user.calendarToken,
       calendarFeeds: user.calendarFeeds,
-      preferences: user.preferences,
+      preferences: cleaned.preferences,
       isAdmin: isUserAdmin(user),
     },
     { headers: { 'Cache-Control': 'no-store' } }
@@ -63,8 +71,9 @@ export async function PATCH(request: Request) {
     const rows = await tx.$queryRaw<Array<{ preferences: UserPreferences }>>`SELECT "preferences" FROM "User" WHERE "id" = ${session.user.id} FOR UPDATE`
     if (!rows[0]) throw new Error('User no longer exists')
     const merged = mergePreferences(rows[0].preferences, patch)
-    await tx.user.update({ where: { id: session.user.id }, data: { preferences: merged as object } })
-    return merged
+    const { preferences: cleanedPrefs } = await stripOwnShareOverlays(session.user.id, merged)
+    await tx.user.update({ where: { id: session.user.id }, data: { preferences: cleanedPrefs as object } })
+    return cleanedPrefs
   })
   publishPlanUpdate({ userId: session.user.id })
   return NextResponse.json({ preferences }, { headers: { 'Cache-Control': 'no-store' } })

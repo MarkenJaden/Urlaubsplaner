@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import type { UserPreferences } from '@/types'
 import { prisma } from './prisma'
 import { normalizeOptionalEmail } from './password'
 
@@ -186,4 +187,38 @@ export async function getUserFromSession(session: { user: { id: string } }) {
     user.lastActiveAt = now
   }
   return user
+}
+
+/**
+ * Removes any shared plan overlays whose token belongs to the user themselves,
+ * so users cannot accidentally keep their own shared plan embedded as a foreign overlay.
+ */
+export async function stripOwnShareOverlays(
+  userId: string,
+  preferences: UserPreferences,
+): Promise<{ preferences: UserPreferences; changed: boolean }> {
+  const overlays = preferences.sharedOverlays
+  if (!Array.isArray(overlays) || overlays.length === 0) {
+    return { preferences, changed: false }
+  }
+  const tokens = overlays.map(o => o.token).filter((t): t is string => Boolean(t))
+  if (tokens.length === 0) {
+    return { preferences, changed: false }
+  }
+  const ownShares = await prisma.planShare.findMany({
+    where: { userId, token: { in: tokens } },
+    select: { token: true },
+  })
+  if (ownShares.length === 0) {
+    return { preferences, changed: false }
+  }
+  const ownTokens = new Set(ownShares.map(s => s.token))
+  const filtered = overlays.filter(o => !o.token || !ownTokens.has(o.token))
+  if (filtered.length === overlays.length) {
+    return { preferences, changed: false }
+  }
+  return {
+    preferences: { ...preferences, sharedOverlays: filtered },
+    changed: true,
+  }
 }

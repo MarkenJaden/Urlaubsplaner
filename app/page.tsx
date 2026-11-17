@@ -2,7 +2,8 @@ import type { Metadata } from 'next'
 import { auth } from '@/auth'
 import { prisma } from '@/lib/prisma'
 import { decodeSharePayload } from '@/lib/export'
-import { getUserFromSession } from '@/lib/user'
+import { getUserFromSession, stripOwnShareOverlays } from '@/lib/user'
+import type { UserPreferences } from '@/types'
 import { isCountryCode, isRegionCode } from '@/lib/holiday-regions'
 import { CalendarClient } from '@/components/calendar/calendar-client'
 
@@ -144,7 +145,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     try {
       const user = await getUserFromSession(session)
       userId = user.id
-      preferences = user.preferences as Record<string, unknown>
+      const cleaned = await stripOwnShareOverlays(user.id, (user.preferences ?? {}) as UserPreferences)
+      preferences = cleaned.preferences as Record<string, unknown>
+      if (cleaned.changed) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { preferences: cleaned.preferences as object },
+        })
+      }
     } catch {
       // DB nicht erreichbar o.ä. — trotzdem rendern
     }

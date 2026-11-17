@@ -48,7 +48,7 @@ interface ShareDialogProps {
   onToggleOverlay: (id: string, enabled: boolean) => void
   onChangeOverlayColor: (id: string, color: string) => void
   onRemoveOverlay: (id: string) => void
-  onAddOverlayByLink: (linkOrToken: string) => Promise<boolean>
+  onAddOverlayByLink: (linkOrToken: string) => Promise<boolean | { ok: boolean; error?: string }>
   onRefreshOverlays?: () => Promise<void>
   onGuestShareCreated?: (share: StoredShareLink) => void
   activeCollabToken: string | null
@@ -244,9 +244,13 @@ export function ShareDialog({
     setAddingExternal(true)
     setError('')
     try {
-      const ok = await onAddOverlayByLink(externalInput.trim())
-      if (ok) setExternalInput('')
-      else setError('Ungültiger oder abgelaufener Freigabe-Link.')
+      const result = await onAddOverlayByLink(externalInput.trim())
+      const ok = typeof result === 'boolean' ? result : result.ok
+      if (ok) {
+        setExternalInput('')
+      } else {
+        setError((typeof result === 'object' && result.error) || 'Ungültiger oder abgelaufener Freigabe-Link.')
+      }
     } finally {
       setAddingExternal(false)
     }
