@@ -31,6 +31,7 @@ model User {
   vacations           VacationEntry[]
   shares              PlanShare[]
   calendarFeeds       CalendarFeed[]
+  calendarWidgets     CalendarWidget[]
   passkeys            PasskeyCredential[]
 
   @@index([email])
@@ -134,6 +135,46 @@ model AnalyticsDaily {
   exportsCount    Int    @default(0)
   sharesCreated   Int    @default(0)
   feedsFetched    Int    @default(0)
+  widgetViews     Int    @default(0)
+}
+
+model CalendarWidget {
+  id                    String    @id @default(cuid())
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token                 String    @unique
+  name                  String    @default("Mein Widget")
+  year                  Int?
+  viewMode              String    @default("calendar")
+  includeVacations      Boolean   @default(true)
+  includeGleittage      Boolean   @default(true)
+  includeSpecial        Boolean   @default(true)
+  includeNotes          Boolean   @default(false)
+  includeNoteTitles     Boolean   @default(false)
+  includePublicHolidays Boolean   @default(true)
+  includeSchoolHolidays Boolean   @default(true)
+  includeBridgeDays     Boolean   @default(false)
+  includeSharedOverlays Boolean   @default(false)
+  sharedOverlayIds      String[]  @default([])
+  showLegend            Boolean   @default(true)
+  showStats             Boolean   @default(true)
+  viewCount             Int       @default(0)
+  lastViewedAt          DateTime?
+  createdAt             DateTime  @default(now())
+
+  @@index([userId])
+}
+
+model WidgetViewDaily {
+  date       String
+  widgetType String
+  region     String @default("")
+  embedHost  String @default("")
+  views      Int    @default(0)
+
+  @@id([date, widgetType, region, embedHost])
+  @@index([date])
+  @@index([widgetType])
 }
 
 model ContactMessage {

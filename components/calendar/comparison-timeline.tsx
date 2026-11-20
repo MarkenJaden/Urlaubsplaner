@@ -574,21 +574,44 @@ export function ComparisonTimeline({
                         const pe = byDate.get(k)
                         const isPartnerOffDay = isOffDayKey(k, ovWorkDays)
                         const hasLeave = pe && (pe.type === 'vacation' || pe.type === 'gleittag' || pe.type === 'special')
+                        const hasNote = !hasLeave && pe?.type === 'note'
                         return (
                           <div
                             key={k}
                             title={`${overlay.label} (${format(d, 'dd.MM.')}): ${
-                              hasLeave ? 'Urlaub / Frei' : isPartnerOffDay ? 'Regulär frei' : 'Arbeitstag'
+                              hasLeave
+                                ? 'Urlaub / Frei'
+                                : hasNote
+                                  ? `Notiz${pe?.title ? `: ${pe.title}` : ''}`
+                                  : isPartnerOffDay
+                                    ? 'Regulär frei'
+                                    : 'Arbeitstag'
                             }`}
-                            className={`h-3.5 rounded-xs ${
+                            className={`h-3.5 rounded-xs flex items-center justify-center ${
                               hasLeave
                                 ? ''
-                                : isPartnerOffDay
-                                  ? 'bg-muted/60 border border-dashed border-border'
-                                  : 'bg-background/60 border border-border/30'
+                                : hasNote
+                                  ? 'border bg-background/80'
+                                  : isPartnerOffDay
+                                    ? 'bg-muted/60 border border-dashed border-border'
+                                    : 'bg-background/60 border border-border/30'
                             }`}
-                            style={hasLeave ? { backgroundColor: overlay.color } : undefined}
-                          />
+                            style={
+                              hasLeave
+                                ? { backgroundColor: overlay.color }
+                                : hasNote
+                                  ? { borderColor: overlay.color, backgroundColor: `${overlay.color}22` }
+                                  : undefined
+                            }
+                          >
+                            {hasNote && (
+                              <span
+                                className="h-1.5 w-1.5 rounded-full"
+                                style={{ backgroundColor: overlay.color }}
+                                aria-hidden="true"
+                              />
+                            )}
+                          </div>
                         )
                       })}
                     </div>

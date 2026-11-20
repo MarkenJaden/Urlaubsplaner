@@ -1,11 +1,13 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { headers } from 'next/headers'
 import { differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { fetchHolidays, resolveSchoolGroup } from '@/lib/holiday-api'
 import { detectBridgeDays } from '@/lib/bridge-days'
 import { localizedName } from '@/lib/holiday-regions'
 import { PublicYearCalendar } from '@/components/calendar/public-year-calendar'
+import { recordWidgetView } from '@/lib/widget-analytics'
 import {
   SEO_REGIONS,
   buildPlannerHref,
@@ -15,6 +17,8 @@ import {
 } from '@/lib/seo-regions'
 import type { Holiday } from '@/types'
 import { GraduationCap, ExternalLink } from 'lucide-react'
+
+export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: 'Schulferien-Kalender Widget · Urlaubsplaner',
@@ -37,6 +41,14 @@ export default async function EmbedSchulferienPage({ searchParams }: EmbedPagePr
   const regionSlug = firstParam(params.region) ?? 'nordrhein-westfalen'
   const view = firstParam(params.view) === 'list' ? 'list' : 'calendar'
   const region = getSeoRegionBySlug(regionSlug) ?? SEO_REGIONS[0]
+
+  const reqHeaders = await headers()
+  void recordWidgetView({
+    widgetType: 'schulferien',
+    region: region.slug,
+    referer: reqHeaders.get('referer'),
+    host: reqHeaders.get('x-forwarded-host') ?? reqHeaders.get('host'),
+  })
 
   let publicHolidays: Holiday[] = []
   let schoolHolidays: Holiday[] = []

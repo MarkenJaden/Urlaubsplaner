@@ -135,8 +135,8 @@ export function DayCell({
     if (publicHoliday) {
       const regLabel = isPublicHolidayRegional ? ' (Feiertag im eigenen Bundesland)' : ' (Gesetzlicher Feiertag)'
       parts.push(`🎉 Feiertag: ${getHolidayName(publicHoliday)}${regLabel}`)
-      if (hasVacation) parts.push('⚠️ Hinweis: Urlaub an einem gesetzlichen Feiertag eingetragen!')
-      if (hasGleittag) parts.push('⚠️ Hinweis: Gleittag an einem gesetzlichen Feiertag eingetragen!')
+      if (hasVacation) parts.push('Feiertag im Urlaub (0 Urlaubstage abgezogen)')
+      if (hasGleittag) parts.push('Hinweis: Gleittag auf einem gesetzlichen Feiertag')
     }
     if (schoolHoliday) {
       parts.push(`🏫 Schulferien: ${getHolidayName(schoolHoliday)}`)
@@ -160,9 +160,11 @@ export function DayCell({
           ? `Urlaub${s.title ? `: ${s.title}` : ''}`
           : s.type === 'gleittag'
             ? `Gleittag${s.title ? `: ${s.title}` : ''}`
-            : s.type === 'off_day'
-              ? `Regulär frei (${s.title || 'Arbeitszeitmodell'})`
-              : s.title || 'Notiz'
+            : s.type === 'special'
+              ? `Sonderurlaub / Frei${s.title ? `: ${s.title}` : ''}`
+              : s.type === 'off_day'
+                ? `Regulär frei (${s.title || 'Arbeitszeitmodell'})`
+                : `Notiz${s.title ? `: ${s.title}` : ''}`
       parts.push(`${s.label}: ${tLabel}`)
     }
     if (comparisonStates.length) parts.push(`Ferien-Dichte (${comparisonStates.length} Regionen): ${comparisonStates.join(', ')}`)
@@ -203,6 +205,14 @@ export function DayCell({
   // Note-only without vacation/gleittag on a public holiday keeps the public holiday styling, decorated with a note marker
   const isPublicHolidayDominant = Boolean(publicHoliday && !hasPlannedOff && !suggestionPreview?.isVacationDay)
   const hasRegionalHolidayBottomBorder = Boolean(publicHoliday && hasPlannedOff && isPublicHolidayRegional)
+  const sharedLeaveItems = sharedItems.filter(s => s.type !== 'note')
+  const sharedNoteItems = sharedItems.filter(s => s.type === 'note')
+  const hasHolidayBadge = Boolean(publicHoliday && hasPlannedOff)
+  const sharedNoteSlots: Array<'top-0.5 left-0.5' | 'top-0.5 right-0.5' | 'bottom-0.5 right-0.5'> = [
+    ...(!note ? (['top-0.5 left-0.5'] as const) : []),
+    ...(!hasHolidayBadge ? (['top-0.5 right-0.5'] as const) : []),
+    'bottom-0.5 right-0.5',
+  ]
 
   return (
     <button
@@ -309,10 +319,10 @@ export function DayCell({
         />
       )}
 
-      {/* Shared plan overlay bar at top-center (inset past left/right corner badges) */}
-      {sharedItems.length > 0 && (
+      {/* Shared plan overlay bar at top-center (leave/off-days only; notes use framed icons) */}
+      {sharedLeaveItems.length > 0 && (
         <div className="absolute top-0.5 inset-x-3.5 flex gap-0.5 justify-center pointer-events-none">
-          {sharedItems.slice(0, 3).map((s, idx) =>
+          {sharedLeaveItems.slice(0, 3).map((s, idx) =>
             s.type === 'off_day' ? (
               <span
                 key={idx}
@@ -340,6 +350,35 @@ export function DayCell({
           <StickyNote className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-amber-300 fill-amber-400/50 dark:text-amber-200 dark:fill-amber-300/50" />
         </span>
       )}
+
+      {/* Shared note indicator icons: framed in the shared plan's color and shifted cleanly around collisions */}
+      {sharedNoteItems.slice(0, 2).map((s, idx) => {
+        const slotClass = sharedNoteSlots[idx] ?? 'bottom-0.5 right-0.5'
+        const noteTitle = `${s.label}: Notiz${s.title ? `: ${s.title}` : ''}`
+        return (
+          <span
+            key={`shared-note-${idx}`}
+            data-shared-note-color={s.color}
+            className={cn(
+              'absolute inline-flex items-center justify-center rounded-[4px] border-[1.5px] bg-card/90 dark:bg-slate-900/90 p-[1px] shadow-xs pointer-events-none select-none',
+              slotClass,
+            )}
+            style={{ borderColor: s.color }}
+            title={noteTitle}
+            aria-hidden="true"
+          >
+            <StickyNote
+              className="h-2.5 w-2.5 sm:h-3 sm:w-3"
+              style={{ color: s.color, fill: `${s.color}38` }}
+            />
+            {idx === 1 && sharedNoteItems.length > 2 && (
+              <span className="ml-0.5 text-[7px] font-bold leading-none" style={{ color: s.color }}>
+                +{sharedNoteItems.length - 2}
+              </span>
+            )}
+          </span>
+        )
+      })}
 
       {/* Feiertags-Indikator oben rechts: wenn an diesem Tag Urlaub oder Gleittag geplant ist,
           bleibt der Feiertag durch diesen leuchtenden Smaragd-Punkt (bzw. Stern bei regionalem Feiertag) sofort erkennbar */}

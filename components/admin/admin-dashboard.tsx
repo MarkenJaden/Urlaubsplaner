@@ -34,6 +34,8 @@ import {
   Smartphone,
   Tablet,
   Clock,
+  Code2,
+  Globe,
 } from 'lucide-react'
 
 interface SafeOAuthSettings {
@@ -111,7 +113,18 @@ interface AdminStatsResponse {
     uniqueVisitors: number
     registeredUsers: number
     guestUsers: number
+    widgetViews?: number
   }>
+  widgets?: {
+    viewsToday: number
+    views7d: number
+    views30d: number
+    personalWidgetsCount: number
+    personalWidgetViewsTotal: number
+    byType: Array<{ type: string; views: number }>
+    topHosts: Array<{ host: string; views: number }>
+    topRegions: Array<{ region: string; views: number }>
+  }
   contactMessages: Array<{
     id: string
     name: string
@@ -1658,6 +1671,118 @@ export function AdminDashboard() {
           )}
         </div>
       </div>
+
+      {/* Widget Analytics (GDPR Anonymous) */}
+      {data.widgets && (
+        <div className="rounded-xl border bg-card p-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="font-semibold text-base flex items-center gap-2">
+                <Code2 className="h-4 w-4 text-primary" />
+                Widget-Nutzung &amp; Einbettungen (DSGVO-anonym)
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Reine Summenzählung ohne Cookies, IP-Adressen oder URL-Pfade – nach Typ, Hostname und Region.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border bg-background/60 p-3">
+              <div className="text-[11px] text-muted-foreground">Aufrufe heute</div>
+              <div className="mt-1 text-xl font-bold">{data.widgets.viewsToday.toLocaleString('de-DE')}</div>
+            </div>
+            <div className="rounded-lg border bg-background/60 p-3">
+              <div className="text-[11px] text-muted-foreground">Aufrufe (7 Tage)</div>
+              <div className="mt-1 text-xl font-bold">{data.widgets.views7d.toLocaleString('de-DE')}</div>
+            </div>
+            <div className="rounded-lg border bg-background/60 p-3">
+              <div className="text-[11px] text-muted-foreground">Aufrufe (30 Tage)</div>
+              <div className="mt-1 text-xl font-bold">{data.widgets.views30d.toLocaleString('de-DE')}</div>
+            </div>
+            <div className="rounded-lg border bg-background/60 p-3">
+              <div className="text-[11px] text-muted-foreground">Persönliche Widgets</div>
+              <div className="mt-1 text-xl font-bold">{data.widgets.personalWidgetsCount.toLocaleString('de-DE')}</div>
+              <div className="text-[10px] text-muted-foreground">
+                {data.widgets.personalWidgetViewsTotal.toLocaleString('de-DE')} Aufrufe gesamt
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3 text-xs">
+            <div className="rounded-lg border bg-background/60 p-3.5 space-y-2">
+              <div className="font-semibold text-foreground">Nach Widget-Typ (30 Tage)</div>
+              {data.widgets.byType.length === 0 ? (
+                <p className="text-muted-foreground">Noch keine Widget-Aufrufe erfasst.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {data.widgets.byType.map(item => {
+                    const labels: Record<string, string> = {
+                      widget: 'All-in-One Interaktiv',
+                      brueckentage: 'Brückentage',
+                      schulferien: 'Schulferien',
+                      heatmap: 'Ferien-Heatmap',
+                      personal: 'Persönliches Widget',
+                    }
+                    return (
+                      <div key={item.type} className="flex items-center justify-between gap-2">
+                        <span>{labels[item.type] ?? item.type}</span>
+                        <span className="font-semibold">{item.views.toLocaleString('de-DE')}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-lg border bg-background/60 p-3.5 space-y-2">
+              <div className="font-semibold text-foreground flex items-center gap-1.5">
+                <Globe className="h-3.5 w-3.5 text-primary" />
+                Top Einbettungs-Hosts (30 Tage)
+              </div>
+              {data.widgets.topHosts.length === 0 ? (
+                <p className="text-muted-foreground">Noch keine externen Einbettungen erfasst.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {data.widgets.topHosts.map(item => {
+                    const hostText =
+                      item.host === 'self'
+                        ? 'Eigene Vorschau (urlaubsplaner)'
+                        : item.host === 'direct'
+                          ? 'Direktaufruf / ohne Referer'
+                          : item.host
+                    return (
+                      <div key={item.host} className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-[11px] truncate">{hostText}</span>
+                        <span className="font-semibold shrink-0">{item.views.toLocaleString('de-DE')}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-lg border bg-background/60 p-3.5 space-y-2">
+              <div className="font-semibold text-foreground flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5 text-primary" />
+                Top Widget-Regionen (30 Tage)
+              </div>
+              {data.widgets.topRegions.length === 0 ? (
+                <p className="text-muted-foreground">Keine Regionsdaten vorhanden.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {data.widgets.topRegions.map(item => (
+                    <div key={item.region} className="flex items-center justify-between gap-2">
+                      <span>{item.region}</span>
+                      <span className="font-semibold">{item.views.toLocaleString('de-DE')}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Contact Messages Inbox */}
       <div className="rounded-xl border bg-card p-5 space-y-4">

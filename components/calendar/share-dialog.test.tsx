@@ -37,11 +37,12 @@ describe('ShareDialog overlay color selection', () => {
     expect(screen.queryByText('Markierungsfarbe beim Einblenden')).toBeNull()
   })
 
-  it('lets the viewer change the color of an embedded shared plan', () => {
+  it('lets the viewer change the color of an embedded shared plan on the overlays tab', () => {
     const onChangeOverlayColor = vi.fn()
     render(
       <ShareDialog
         open
+        initialTab="overlays"
         onClose={() => {}}
         isLoggedIn={false}
         entries={[]}
@@ -68,10 +69,40 @@ describe('ShareDialog overlay color selection', () => {
     expect(onChangeOverlayColor).toHaveBeenCalledWith('token-abc1234567', '#123456')
   })
 
+  it('switches cleanly between own share tab and foreign plans tab and supports Direkt bearbeiten', () => {
+    const onClose = vi.fn()
+    const onSelectCollabToken = vi.fn()
+    const editableOverlay: SharedPlanOverlay = { ...sampleOverlay, permission: 'edit' }
+    render(
+      <ShareDialog
+        open
+        onClose={onClose}
+        isLoggedIn={false}
+        entries={[]}
+        overlays={[editableOverlay]}
+        onToggleOverlay={() => {}}
+        onChangeOverlayColor={() => {}}
+        onRemoveOverlay={() => {}}
+        onAddOverlayByLink={async () => true}
+        activeCollabToken={null}
+        onSelectCollabToken={onSelectCollabToken}
+      />,
+    )
+
+    expect(screen.getByText('Berechtigung für Empfänger:')).toBeTruthy()
+    expect(screen.getByText('Darf meinen Plan mitbearbeiten')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('tab', { name: /Fremde Pläne \(1\)/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Direkt bearbeiten' }))
+    expect(onSelectCollabToken).toHaveBeenCalledWith(editableOverlay.token)
+    expect(onClose).toHaveBeenCalled()
+  })
+
   it('shows a specific error message when adding an own share link is rejected', async () => {
     render(
       <ShareDialog
         open
+        initialTab="overlays"
         onClose={() => {}}
         isLoggedIn={false}
         entries={[]}

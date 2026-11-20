@@ -73,7 +73,7 @@ import { Badge } from '@/components/ui/badge'
 import { parsePreferences, parseEntry, countryChangePatch, mergeSharedOverlays } from '@/lib/preferences'
 import { parseISO, format, eachDayOfInterval, differenceInCalendarDays } from 'date-fns'
 import { de } from 'date-fns/locale'
-import type { EntryType, Holiday, LocalConfig, PreferencesPatch, SharedPlanOverlay, UserPreferences } from '@/types'
+import type { EntryType, Holiday, LocalConfig, PartnerPlanningMode, PreferencesPatch, SharedPlanOverlay, UserPreferences } from '@/types'
 import type { DayInfo, SharedDayItem } from '@/components/calendar/day-cell'
 
 interface CalendarClientProps {
@@ -156,19 +156,25 @@ function DayInfoDetails({ day }: { day: DayInfo }) {
         </div>
       )}
       {day.publicHoliday && (
-        <div className="flex flex-wrap items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
-          <span>🎉 {day.publicHoliday}</span>
-          {day.isPublicHolidayRegional && (
-            <span className="text-[10px] rounded bg-emerald-500/15 px-1 py-0.5 text-emerald-700 dark:text-emerald-300 font-semibold">
-              Bundesland-Feiertag
-            </span>
+        <div className="space-y-0.5">
+          <div className="flex flex-wrap items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+            <span>🎉 {day.publicHoliday}</span>
+            {day.isPublicHolidayRegional && (
+              <span className="text-[10px] rounded bg-emerald-500/15 px-1 py-0.5 text-emerald-700 dark:text-emerald-300 font-semibold">
+                Bundesland-Feiertag
+              </span>
+            )}
+          </div>
+          {day.entry?.type === 'vacation' && (
+            <p className="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+              ✓ 0 Urlaubstage abgezogen
+            </p>
           )}
-        </div>
-      )}
-      {viewerHasVacationOrFlex && day.publicHoliday && (
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-1.5 text-[11px] text-amber-700 dark:text-amber-300 leading-snug">
-          <p className="font-semibold">💡 Gesetzlicher Feiertag</p>
-          <p>An diesem Tag hast du bereits einen Feiertag. Wenn du hier arbeitsfrei hast, sparst du deinen Urlaubstag!</p>
+          {day.entry?.type === 'gleittag' && (
+            <p className="text-[11px] text-muted-foreground">
+              Hinweis: Gleittag fällt auf einen gesetzlichen Feiertag.
+            </p>
+          )}
         </div>
       )}
       {day.schoolHoliday && (
@@ -225,25 +231,31 @@ function DayInfoDetails({ day }: { day: DayInfo }) {
           )}
           {day.sharedItems!.map((shared, i) => (
             <p key={i} className="text-xs flex items-center gap-1.5">
-              <span
-                className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${
-                  shared.type === 'off_day' ? 'border border-dashed bg-transparent' : ''
-                }`}
-                style={
-                  shared.type === 'off_day'
-                    ? { borderColor: shared.color }
-                    : { backgroundColor: shared.color }
-                }
-              />
+              {shared.type === 'note' ? (
+                <StickyNote className="h-3 w-3 shrink-0" style={{ color: shared.color }} aria-hidden="true" />
+              ) : (
+                <span
+                  className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${
+                    shared.type === 'off_day' ? 'border border-dashed bg-transparent' : ''
+                  }`}
+                  style={
+                    shared.type === 'off_day'
+                      ? { borderColor: shared.color }
+                      : { backgroundColor: shared.color }
+                  }
+                />
+              )}
               <span className="font-medium">{shared.label}:</span>
               <span>
                 {shared.type === 'vacation'
                   ? `Urlaub${shared.title ? `: ${shared.title}` : ''}`
                   : shared.type === 'gleittag'
                     ? `Gleittag${shared.title ? `: ${shared.title}` : ''}`
-                    : shared.type === 'off_day'
-                      ? `Regulär frei (${shared.title || 'Teilzeit/4-Tage'})`
-                      : shared.title || 'Notiz'}
+                    : shared.type === 'special'
+                      ? `Sonderurlaub / Frei${shared.title ? `: ${shared.title}` : ''}`
+                      : shared.type === 'off_day'
+                        ? `Regulär frei (${shared.title || 'Teilzeit/4-Tage'})`
+                        : `Notiz${shared.title ? `: ${shared.title}` : ''}`}
               </span>
             </p>
           ))}
@@ -338,9 +350,11 @@ export function CalendarClient({
   const [selectedType, setSelectedType] = useState<EntryType>('vacation')
   const [localConfig, setConfig] = useState<LocalConfig | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(false)
+  const [suggestionsInitialPartnerMode, setSuggestionsInitialPartnerMode] = useState<PartnerPlanningMode | undefined>(undefined)
   const [showRenameDialog, setShowRenameDialog] = useState(false)
   const [showClipboardDialog, setShowClipboardDialog] = useState(false)
   const [showShareDialog, setShowShareDialog] = useState(false)
+  const [shareDialogTab, setShareDialogTab] = useState<'share' | 'overlays'>('share')
   const [showSubscribeDialog, setShowSubscribeDialog] = useState(false)
   const [showScorecardDialog, setShowScorecardDialog] = useState(false)
   const [showApprovalSheetDialog, setShowApprovalSheetDialog] = useState(false)
@@ -1262,15 +1276,86 @@ export function CalendarClient({
       end: parseISO(lastKey),
     }).map(d => format(d, 'yyyy-MM-dd'))
 
+    const collabOverlay = activeCollab && collabMode === 'edit'
+      ? sharedOverlays.find(o => o.token === activeCollab.token)
+      : undefined
+    const effectiveWorkDays = collabOverlay?.workDays?.length ? collabOverlay.workDays : workDays
+
     // For vacation and gleittag, skip public holidays and non-working weekdays; for special, allow weekends (shift workers) but skip public holidays
     const targetKeys =
       type === 'note'
         ? allRangeKeys
         : type === 'special'
           ? allRangeKeys.filter(k => !holidayDates.has(k))
-          : allRangeKeys.filter(k => !holidayDates.has(k) && !isOffDayKey(k, workDays))
+          : allRangeKeys.filter(k => !holidayDates.has(k) && !isOffDayKey(k, effectiveWorkDays))
 
     if (targetKeys.length === 0) return
+
+    if (activeCollab && collabMode === 'edit') {
+      const existingSet = new Set(
+        activeCollab.entries.filter(e => e.type === type).map(e => e.date.slice(0, 10)),
+      )
+      const allAlreadyPlanned = targetKeys.every(k => existingSet.has(k))
+
+      if (allAlreadyPlanned) {
+        void (async () => {
+          try {
+            const res = await fetch(`/api/shares/${encodeURIComponent(activeCollab.token)}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'batch_remove', dates: targetKeys, type }),
+            })
+            const data = await res.json().catch(() => null)
+            if (!res.ok) throw new Error(data?.error || 'Fehler beim Entfernen.')
+            if (Array.isArray(data?.entries)) {
+              setActiveCollab(prev => prev ? { ...prev, entries: data.entries } : null)
+            }
+            broadcastRef.current?.postMessage({ type: 'plan-updated', tokens: [activeCollab.token], ts: Date.now() })
+            void refreshLiveOverlays([activeCollab.token])
+          } catch (err) {
+            setSyncMessage(err instanceof Error ? err.message : 'Gemeinsame Änderung konnte nicht gespeichert werden.')
+          }
+        })()
+        return
+      }
+
+      let noteTitle: string | undefined
+      if (type === 'note') {
+        const rangeLabel = `${format(parseISO(firstKey), 'dd.MM.')} – ${format(parseISO(lastKey), 'dd.MM.')} (${targetKeys.length} Tage)`
+        const entered = defaultNoteText || prompt(`Notiz / Event-Text für ${rangeLabel}:`)
+        if (entered === null) return
+        noteTitle = entered.trim() || 'Event'
+      }
+
+      const missingKeys = targetKeys.filter(k => !existingSet.has(k))
+      if (missingKeys.length === 0) return
+
+      void (async () => {
+        try {
+          const res = await fetch(`/api/shares/${encodeURIComponent(activeCollab.token)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'batch_apply',
+              dates: missingKeys,
+              type,
+              ...(noteTitle ? { title: noteTitle } : {}),
+              year,
+            }),
+          })
+          const data = await res.json().catch(() => null)
+          if (!res.ok) throw new Error(data?.error || 'Fehler beim Speichern.')
+          if (Array.isArray(data?.entries)) {
+            setActiveCollab(prev => prev ? { ...prev, entries: data.entries } : null)
+          }
+          broadcastRef.current?.postMessage({ type: 'plan-updated', tokens: [activeCollab.token], ts: Date.now() })
+          void refreshLiveOverlays([activeCollab.token])
+        } catch (err) {
+          setSyncMessage(err instanceof Error ? err.message : 'Gemeinsame Änderung konnte nicht gespeichert werden.')
+        }
+      })()
+      return
+    }
 
     const sourceList = isLoggedIn ? entries : (localConfig?.entries ?? [])
     const existingSet = new Set(
@@ -1323,7 +1408,36 @@ export function CalendarClient({
         ),
       )
     }
-  }, [holidayDates, workDays, isLoggedIn, entries, localConfig, recordUndo, serverEntries, removeMutation, updateLocalEntries, defaultNoteText, importSavedData])
+  }, [activeCollab, collabMode, sharedOverlays, refreshLiveOverlays, year, holidayDates, workDays, isLoggedIn, entries, localConfig, recordUndo, serverEntries, removeMutation, updateLocalEntries, defaultNoteText, importSavedData])
+
+  const handleApplyPartnerSuggestions = useCallback(
+    async (token: string, dates: string[], replace = false) => {
+      const dateKeys = [...new Set(dates.map(d => d.slice(0, 10)))]
+      if (dateKeys.length === 0) return
+      const res = await fetch(`/api/shares/${encodeURIComponent(token)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'batch_apply',
+          dates: dateKeys,
+          type: 'vacation',
+          replace,
+          year,
+        }),
+      })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        throw new Error(data?.error || 'Partner-Kalender konnte nicht aktualisiert werden.')
+      }
+      if (Array.isArray(data?.entries)) {
+        setActiveCollab(prev => (prev && prev.token === token ? { ...prev, entries: data.entries } : prev))
+      }
+      broadcastRef.current?.postMessage({ type: 'plan-updated', tokens: [token], ts: Date.now() })
+      await refreshLiveOverlays([token])
+      setSyncMessage('Urlaubstage wurden auch direkt in den Partner-Kalender übernommen.')
+    },
+    [year, refreshLiveOverlays],
+  )
 
   const handleApplySuggestions = (dates: string[], type: EntryType, replace = false) => {
     const dateKeys = [...new Set(dates.map(date => date.split('T')[0]))]
@@ -1685,7 +1799,12 @@ export function CalendarClient({
       <Header isLoggedIn={isLoggedIn} />
 
       <SuggestionsPanel
-        open={showSuggestions} onClose={() => setShowSuggestions(false)}
+        open={showSuggestions}
+        onClose={() => {
+          setShowSuggestions(false)
+          setSuggestionsInitialPartnerMode(undefined)
+        }}
+        initialPartnerMode={suggestionsInitialPartnerMode}
         year={year} country={country} subdivision={subdivision} group={region.group}
         remainingDays={vacationDaysTotal - vacationDaysUsed}
         totalDays={vacationDaysTotal}
@@ -1697,7 +1816,9 @@ export function CalendarClient({
         existingVacationDates={existingVacationDates}
         noteDates={existingNoteDates}
         partnerOverlays={sharedOverlays}
+        sharedPlanSummaries={sharedPlanSummaries}
         onApply={handleApplySuggestions}
+        onApplyPartner={handleApplyPartnerSuggestions}
         onRemove={handleRemoveSuggestion}
         onOpenCalendarPreview={(blocks, overwrite) => {
           setPreviewSuggestions(blocks)
@@ -1753,6 +1874,7 @@ export function CalendarClient({
 
       <ShareDialog
         open={showShareDialog}
+        initialTab={shareDialogTab}
         onClose={() => setShowShareDialog(false)}
         isLoggedIn={isLoggedIn}
         country={country}
@@ -1841,7 +1963,7 @@ export function CalendarClient({
                 variant="outline"
                 size="sm"
                 className="h-8 sm:h-7 px-2.5 text-xs bg-background/80"
-                onClick={() => setShowShareDialog(true)}
+                onClick={() => { setShareDialogTab('share'); setShowShareDialog(true) }}
               >
                 <Share2 className="mr-1.5 h-3.5 w-3.5" />
                 <span className="sm:hidden">Teilen</span>
@@ -1900,7 +2022,7 @@ export function CalendarClient({
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2 text-xs"
-                onClick={() => setShowShareDialog(true)}
+                onClick={() => { setShareDialogTab('share'); setShowShareDialog(true) }}
               >
                 <Share2 className="mr-1 h-3.5 w-3.5" />
                 Teilen
@@ -1927,46 +2049,144 @@ export function CalendarClient({
           </div>
         )}
 
-        {/* Active Collaborative Plan Banner */}
-        {activeCollab && (
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-teal-500/40 bg-teal-50/70 dark:bg-teal-950/30 p-3 text-sm print:hidden">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-teal-600 dark:text-teal-400 shrink-0" />
-              <div>
-                <span className="font-semibold">Geteilter Plan: „{activeCollab.label}“</span>{' '}
-                <span className="text-muted-foreground">(von {activeCollab.ownerName})</span>
+        {/* Unified Shared Plans Control Bar */}
+        {(sharedOverlays.length > 0 || activeCollab) && (
+          <div
+            className={`flex flex-col gap-2 rounded-xl border px-3 py-2.5 text-xs print:hidden ${
+              collabMode === 'edit' && activeCollab
+                ? 'border-2 border-teal-500/60 bg-teal-50/75 dark:bg-teal-950/35'
+                : 'bg-muted/40'
+            }`}
+          >
+            {collabMode === 'edit' && activeCollab && (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-teal-500/30 pb-2">
+                <div className="flex items-center gap-2 font-medium text-teal-900 dark:text-teal-100">
+                  <Edit3 className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                  <span>
+                    Bearbeitungsmodus aktiv: Änderungen werden direkt in{' '}
+                    <strong>„{activeCollab.label}“</strong> gespeichert
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="default"
+                  className="h-7 px-2.5 text-xs bg-teal-600 hover:bg-teal-700 text-white"
+                  onClick={() => setCollabMode('overlay')}
+                >
+                  <Eye className="mr-1 h-3.5 w-3.5" />
+                  Zurück zu meinem Plan
+                </Button>
               </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <Button
-                size="sm"
-                variant={collabMode === 'overlay' ? 'default' : 'outline'}
-                className="h-8 text-xs"
-                onClick={() => setCollabMode('overlay')}
-              >
-                <Eye className="mr-1.5 h-3.5 w-3.5" />
-                Neben meinem Plan vergleichen
-              </Button>
-              <Button
-                size="sm"
-                variant={collabMode === 'edit' ? 'default' : 'outline'}
-                className="h-8 text-xs"
-                onClick={() => setCollabMode('edit')}
-              >
-                <Edit3 className="mr-1.5 h-3.5 w-3.5" />
-                Diesen Plan direkt bearbeiten
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-8 text-xs"
-                onClick={() => {
-                  setActiveCollab(null)
-                  setCollabMode('overlay')
-                }}
-              >
-                Beenden
-              </Button>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium text-muted-foreground flex items-center gap-1">
+                  <Users className="h-3.5 w-3.5" /> Eingeblendete Pläne:
+                </span>
+                {sharedOverlays.map(overlay => {
+                  const isEditingThis = collabMode === 'edit' && activeCollab?.token === overlay.token
+                  const canEdit = overlay.permission === 'edit' && Boolean(overlay.token)
+                  return (
+                    <div
+                      key={overlay.id}
+                      className={`inline-flex items-center gap-1 rounded-full border p-0.5 transition-opacity ${
+                        isEditingThis
+                          ? 'border-teal-500 bg-background shadow-xs opacity-100'
+                          : overlay.enabled
+                            ? 'bg-background shadow-xs opacity-100'
+                            : 'bg-background/60 opacity-60'
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          saveSharedOverlays(
+                            sharedOverlays.map(o => (o.id === overlay.id ? { ...o, enabled: !o.enabled } : o))
+                          )
+                        }
+                        className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 font-medium"
+                      >
+                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: overlay.color }} />
+                        <span>{overlay.label}</span>
+                        <span className="text-[10px] text-muted-foreground">
+                          ({overlay.enabled ? 'sichtbar' : 'ausgeblendet'})
+                        </span>
+                      </button>
+
+                      {canEdit && (
+                        <div className="inline-flex items-center rounded-full bg-muted/70 p-0.5 text-[11px]" role="group" aria-label={`Modus für ${overlay.label}`}>
+                          <button
+                            type="button"
+                            onClick={() => setCollabMode('overlay')}
+                            aria-pressed={!isEditingThis}
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium transition-colors ${
+                              !isEditingThis
+                                ? 'bg-background text-foreground shadow-2xs'
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            <Eye className="h-3 w-3" aria-hidden="true" />
+                            <span>Vergleichen</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveCollab({
+                                token: overlay.token!,
+                                label: overlay.label,
+                                ownerName: overlay.ownerName ?? overlay.label,
+                                entries: overlay.entries,
+                              })
+                              setCollabMode('edit')
+                            }}
+                            aria-pressed={isEditingThis}
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium transition-colors ${
+                              isEditingThis
+                                ? 'bg-teal-600 text-white shadow-2xs'
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            <Edit3 className="h-3 w-3" aria-hidden="true" />
+                            <span>Bearbeiten</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+                {entries.length === 0 && collabMode !== 'edit' && (
+                  <span className="text-teal-700 dark:text-teal-300 font-medium">
+                    · Deinen Plan danebenlegen? Klicke Tage im Kalender an oder starte den Paar-Optimierer:
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="h-7 px-2.5 text-xs gap-1"
+                  onClick={() => {
+                    setSuggestionsInitialPartnerMode('plan_both')
+                    setShowSuggestions(true)
+                  }}
+                >
+                  <Sparkles className="h-3 w-3 text-teal-600" />
+                  Gemeinsam planen
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => {
+                    setShareDialogTab('overlays')
+                    setShowShareDialog(true)
+                  }}
+                >
+                  Verwalten
+                </Button>
+              </div>
             </div>
           </div>
         )}
@@ -1989,6 +2209,7 @@ export function CalendarClient({
                 className="h-8 text-xs gap-1.5 bg-teal-600 hover:bg-teal-700 text-white"
                 onClick={() => {
                   setArrivedViaShareLabel(null)
+                  setSuggestionsInitialPartnerMode('align_to_partner')
                   setShowSuggestions(true)
                 }}
               >
@@ -2017,56 +2238,6 @@ export function CalendarClient({
                 aria-label="Willkommenskarte schließen"
               >
                 <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Shared Overlays Quick Bar when overlays exist */}
-        {sharedOverlays.length > 0 && !activeCollab && (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border bg-muted/40 px-3 py-2 text-xs print:hidden">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium text-muted-foreground flex items-center gap-1">
-                <Users className="h-3.5 w-3.5" /> Eingeblendete Pläne:
-              </span>
-              {sharedOverlays.map(overlay => (
-                <button
-                  key={overlay.id}
-                  type="button"
-                  onClick={() =>
-                    saveSharedOverlays(
-                      sharedOverlays.map(o => (o.id === overlay.id ? { ...o, enabled: !o.enabled } : o))
-                    )
-                  }
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-medium transition-opacity ${
-                    overlay.enabled ? 'bg-background shadow-xs opacity-100' : 'opacity-50'
-                  }`}
-                >
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: overlay.color }} />
-                  <span>{overlay.label}</span>
-                  <span className="text-[10px] text-muted-foreground">
-                    ({overlay.enabled ? 'sichtbar' : 'ausgeblendet'})
-                  </span>
-                </button>
-              ))}
-              {entries.length === 0 && (
-                <span className="text-teal-700 dark:text-teal-300 font-medium">
-                  · Deinen Plan danebenlegen? Klicke Tage im Kalender an oder starte den Paar-Optimierer:
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="secondary"
-                size="sm"
-                className="h-6 px-2.5 text-xs gap-1"
-                onClick={() => setShowSuggestions(true)}
-              >
-                <Sparkles className="h-3 w-3 text-teal-600" />
-                Gemeinsam planen
-              </Button>
-              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setShowShareDialog(true)}>
-                Verwalten
               </Button>
             </div>
           </div>
@@ -2238,7 +2409,7 @@ export function CalendarClient({
           apiError={home.isError || holidaysError || schoolError || comparison.isError}
           onRetryApi={handleRetryApi}
           onOpenSubscribe={() => setShowSubscribeDialog(true)}
-          onOpenShare={() => setShowShareDialog(true)}
+          onOpenShare={() => { setShareDialogTab('share'); setShowShareDialog(true) }}
           onOpenApprovalSheet={() => setShowApprovalSheetDialog(true)}
         />
 
@@ -2261,7 +2432,7 @@ export function CalendarClient({
           onOpenSuggestions={() => setShowSuggestions(true)}
           onOpenRename={() => setShowRenameDialog(true)}
           onOpenClipboardExport={() => setShowClipboardDialog(true)}
-          onOpenShare={() => setShowShareDialog(true)}
+          onOpenShare={() => { setShareDialogTab('share'); setShowShareDialog(true) }}
           onOpenSubscribe={() => setShowSubscribeDialog(true)}
           onOpenScorecard={() => setShowScorecardDialog(true)}
           onPrintCalendar={() => triggerPrint('calendar')}
@@ -2743,15 +2914,6 @@ export function CalendarClient({
                   >
                     <Undo2 className="h-4 w-4" aria-hidden="true" />
                   </Button>
-                  <Button
-                    type="button"
-                    size="icon"
-                    onClick={() => setShowSuggestions(true)}
-                    className="h-9 w-9 shrink-0 bg-teal-600 hover:bg-teal-700 text-white"
-                    aria-label="Urlaub planen"
-                  >
-                    <Sparkles className="h-4 w-4" aria-hidden="true" />
-                  </Button>
                 </div>
               </div>
             )}
@@ -2772,10 +2934,24 @@ export function CalendarClient({
                 <span>Feiertag</span>
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="relative w-3.5 h-3.5 rounded-sm bg-blue-600 ring-1 ring-inset ring-white border-b-2 border-b-amber-300">
-                  <span className="absolute top-0.5 right-0.5 w-1 h-1 rounded-full bg-emerald-400 ring-0.5 ring-white" />
+                <span className="w-3.5 h-3.5 rounded-sm bg-emerald-100 ring-1 ring-inset ring-emerald-700/50 dark:ring-white/80 border border-emerald-400 border-b-2 border-b-emerald-600 dark:bg-emerald-500/35 dark:border-b-white/90" />
+                <span>Regionaler Feiertag</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="relative w-3.5 h-3.5 rounded-sm bg-blue-600 ring-1 ring-inset ring-white">
+                  <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 ring-1 ring-white dark:ring-slate-900" />
                 </span>
-                <span>Urlaub auf Feiertag/Ferien</span>
+                <span>Feiertag im Urlaub (0 UT)</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="relative w-3.5 h-3.5 rounded-sm bg-blue-600 ring-1 ring-inset ring-white">
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-400 text-emerald-950 ring-1 ring-white dark:ring-slate-900 flex items-center justify-center text-[7px] font-extrabold leading-none">★</span>
+                </span>
+                <span>Regionaler Feiertag im Urlaub (0 UT)</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-3.5 h-3.5 rounded-sm bg-blue-600 border-b-[3px] border-b-amber-300 dark:border-b-amber-400" />
+                <span>Urlaub in Schulferien</span>
               </span>
               {!showHeatmap && (
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-amber-100/85 border border-amber-300 border-b-2 border-b-amber-400 dark:bg-amber-400/20 dark:border-amber-400/50" /> Eigene Schulferien</span>
@@ -2784,6 +2960,24 @@ export function CalendarClient({
                 <span className="w-4 h-3.5 rounded-sm bg-orange-50 ring-1 ring-inset ring-orange-400 border-l-[3px] border-l-emerald-500 dark:bg-orange-500/20 flex items-center justify-center text-[8px] font-bold text-orange-600 dark:text-orange-300">←</span>
                 <span>Brückentag (Pfeil zeigt zum Feiertag)</span>
               </span>
+              {sharedOverlays.some(o => o.enabled) && (
+                <>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3.5 h-1.5 rounded-full bg-teal-500" />
+                    <span>Geteilter Urlaub</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-3.5 h-1 border-t-2 border-dashed border-teal-500" />
+                    <span>Partner regulär frei</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="inline-flex items-center justify-center rounded-[4px] border-[1.5px] border-teal-500 bg-card p-[1px]">
+                      <StickyNote className="h-2.5 w-2.5 text-teal-500 fill-teal-500/25" />
+                    </span>
+                    <span>Geteilte Notiz</span>
+                  </span>
+                </>
+              )}
               <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-sm bg-muted/60 opacity-45 grayscale border" /> Vergangener Tag</span>
             </div>
             <div className="hidden sm:flex items-center gap-2 text-[11px] text-muted-foreground">

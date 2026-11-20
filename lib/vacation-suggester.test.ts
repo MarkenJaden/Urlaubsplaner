@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { suggestVacation, recalculateSuggestionBlock, DEFAULT_PREFERENCES } from './vacation-suggester'
+import { suggestVacation, recalculateSuggestionBlock, DEFAULT_PREFERENCES, buildNonWorkSet, type PartnerContext } from './vacation-suggester'
 import type { Holiday } from '@/types'
 
 const samplePublicHolidays: Holiday[] = [
@@ -358,6 +358,204 @@ describe('suggestVacation smart optimizer', () => {
         '2027-09-10',
       ])
       expect(blocks[0].partnerFreeOverlapDays).toBe(9)
+    })
+
+    it('gives mandatory include rules (exact_range & must_have) precedence over excludedDateRanges and avoidMonths', () => {
+      const blocks = suggestVacation(
+        2027,
+        holidays2027NRW,
+        schoolHolidays2027NRW,
+        new Set(),
+        25,
+        new Set(),
+        {
+          ...DEFAULT_PREFERENCES,
+          planStartMode: 'year_start',
+          avoidMonths: [8],
+          excludedDateRanges: [
+            { startDate: '2027-06-01', endDate: '2027-06-30', label: 'Sperrzeitraum Juni' },
+            { startDate: '2027-08-01', endDate: '2027-08-15', label: 'Sperrzeitraum Anfang August' },
+          ],
+          periodPreferences: [
+            {
+              type: 'exact_range',
+              months: [6],
+              startDate: '2027-06-14',
+              endDate: '2027-06-18',
+              minDuration: 5,
+              label: 'Pflicht-Reise Juni',
+            },
+            {
+              type: 'must_have',
+              months: [8],
+              minDuration: 5,
+              exactDays: 5,
+              label: 'August-Pflichturlaub',
+            },
+          ],
+        },
+        false,
+      )
+
+      const juneMandatory = blocks.find(b => b.label === 'Pflicht-Reise Juni')
+      expect(juneMandatory).toBeDefined()
+      expect(juneMandatory?.vacationDays).toEqual([
+        '2027-06-14',
+        '2027-06-15',
+        '2027-06-16',
+        '2027-06-17',
+        '2027-06-18',
+      ])
+
+      // August must_have overrides avoidMonths: [8] and prefers non-excluded late August over excluded early August
+      const allDates = blocks.flatMap(b => b.vacationDays)
+      const augDates = allDates.filter(d => d.startsWith('2027-08-'))
+      expect(augDates.length).toBeGreaterThanOrEqual(5)
+      expect(augDates.every(d => d > '2027-08-15')).toBe(true)
+    })
+
+    it('never spams standalone non-holiday Fridays when aligning with a 4-day-week partner under max_efficiency', () => {
+      const partnerOffWeekdays = new Set<string>()
+      const cur = new Date(2027, 0, 1)
+      while (cur.getFullYear() === 2027) {
+        if (cur.getDay() === 5) {
+          const y = cur.getFullYear()
+          const m = String(cur.getMonth() + 1).padStart(2, '0')
+          const d = String(cur.getDate()).padStart(2, '0')
+          partnerOffWeekdays.add(`${y}-${m}-${d}`)
+        }
+        cur.setDate(cur.getDate() + 1)
+      }
+      const allPartnerFree = new Set([
+        ...buildNonWorkSet(new Date(2027, 0, 1), new Date(2027, 11, 31), holidays2027NRW, false, [1, 2, 3, 4]),
+      ])
+      const partnerCtx: PartnerContext = {
+        bookedDates: new Set(),
+        holidayDates: new Set(),
+        offWeekdayDates: partnerOffWeekdays,
+        allFreeDates: allPartnerFree,
+        workDays: [1, 2, 3, 4],
+      }
+
+      const blocks = suggestVacation(
+        2027,
+        holidays2027NRW,
+        schoolHolidays2027NRW,
+        new Set(),
+        30,
+        new Set(),
+        {
+          ...DEFAULT_PREFERENCES,
+          goal: 'max_efficiency',
+          planStartMode: 'year_start',
+          partnerOptions: {
+            mode: 'align_to_partner',
+            strength: 'balanced',
+            offWeekdayMode: 'bonus_only',
+          },
+        },
+        false,
+        undefined,
+        partnerCtx,
+      )
+
+      const standaloneNonHolidayFridays = blocks.filter(
+        b =>
+          b.vacationDays.length === 1 &&
+          b.holidaysIncluded.length === 0 &&
+          new Date(`${b.vacationDays[0]}T12:00:00Z`).getUTCDay() === 5,
+      )
+      expect(standaloneNonHolidayFridays).toHaveLength(0)
+
+      // Still picks true holiday Friday bridges (May 7 & May 28)
+      const allDates = blocks.flatMap(b => b.vacationDays)
+      expect(allDates).toContain('2027-05-07')
+      expect(allDates).toContain('2027-05-28')
+    })
+
+    it('plans joint vacations for both partners respecting both budgets and 4-day-week partner schedule (plan_both)', () => {
+      const partnerOffWeekdays = new Set<string>()
+      const cur = new Date(2027, 0, 1)
+      while (cur.getFullYear() === 2027) {
+        if (cur.getDay() === 5) {
+          const y = cur.getFullYear()
+          const m = String(cur.getMonth() + 1).padStart(2, '0')
+          const d = String(cur.getDate()).padStart(2, '0')
+          partnerOffWeekdays.add(`${y}-${m}-${d}`)
+        }
+        cur.setDate(cur.getDate() + 1)
+      }
+      const partnerCtx: PartnerContext = {
+        bookedDates: new Set(),
+        holidayDates: new Set(),
+        offWeekdayDates: partnerOffWeekdays,
+        allFreeDates: buildNonWorkSet(new Date(2027, 0, 1), new Date(2027, 11, 31), holidays2027NRW, false, [1, 2, 3, 4]),
+        workDays: [1, 2, 3, 4],
+        publicHolidays: holidays2027NRW,
+        remainingDays: 24,
+        label: 'Partner',
+      }
+
+      const blocks = suggestVacation(
+        2027,
+        holidays2027NRW,
+        schoolHolidays2027NRW,
+        new Set(),
+        30,
+        new Set(),
+        {
+          ...DEFAULT_PREFERENCES,
+          goal: 'max_efficiency',
+          planStartMode: 'year_start',
+          partnerOptions: {
+            mode: 'plan_both',
+            offWeekdayMode: 'bonus_only',
+            partnerBudget: 24,
+            fillSoloAfterJoint: true,
+          },
+        },
+        false,
+        undefined,
+        partnerCtx,
+      )
+
+      const totalMyCost = blocks.reduce((s, b) => s + b.cost, 0)
+      const totalPartnerCost = blocks.reduce((s, b) => s + (b.partnerCost ?? 0), 0)
+      expect(totalMyCost).toBeLessThanOrEqual(30)
+      expect(totalPartnerCost).toBeLessThanOrEqual(24)
+      expect(totalPartnerCost).toBeGreaterThanOrEqual(16)
+
+      // Partner must never be assigned a Friday as vacation in a Mon-Thu 4-day week
+      for (const b of blocks) {
+        for (const pd of b.partnerVacationDays ?? []) {
+          expect(new Date(`${pd}T12:00:00Z`).getUTCDay()).not.toBe(5)
+        }
+      }
+
+      // Christi Himmelfahrt bridge (May 7) costs viewer 1 day and partner 0 days for 4 joint free days
+      const himmelfahrtBlock = blocks.find(b => b.vacationDays.includes('2027-05-07'))
+      expect(himmelfahrtBlock).toBeDefined()
+      expect(himmelfahrtBlock?.jointFreeDays).toBeGreaterThanOrEqual(4)
+    })
+
+    it('supports mini_breaks goal for frequent short trips across the year', () => {
+      const blocks = suggestVacation(
+        2027,
+        holidays2027NRW,
+        schoolHolidays2027NRW,
+        new Set(),
+        20,
+        new Set(),
+        {
+          ...DEFAULT_PREFERENCES,
+          goal: 'mini_breaks',
+          planStartMode: 'year_start',
+          distributeEvenly: true,
+        },
+        false,
+      )
+      expect(blocks.length).toBeGreaterThanOrEqual(4)
+      expect(blocks.some(b => (b.highlights ?? []).includes('Kurztrip') || b.freeDaysGained <= 5)).toBe(true)
     })
   })
 })

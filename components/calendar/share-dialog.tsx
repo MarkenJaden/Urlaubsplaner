@@ -36,6 +36,7 @@ export interface StoredShareLink {
 interface ShareDialogProps {
   open: boolean
   onClose: () => void
+  initialTab?: 'share' | 'overlays'
   isLoggedIn: boolean
   entries: VacationEntry[]
   country?: string
@@ -58,6 +59,7 @@ interface ShareDialogProps {
 export function ShareDialog({
   open,
   onClose,
+  initialTab = 'share',
   isLoggedIn,
   entries,
   country,
@@ -77,6 +79,7 @@ export function ShareDialog({
   onSelectCollabToken,
 }: ShareDialogProps) {
   const [origin, setOrigin] = useState('')
+  const [activeTab, setActiveTab] = useState<'share' | 'overlays'>(initialTab)
   const [label, setLabel] = useState('Mein Urlaubsplan')
   const [permission, setPermission] = useState<'view' | 'edit'>('view')
   const [includeNotes, setIncludeNotes] = useState(false)
@@ -93,6 +96,10 @@ export function ShareDialog({
   useEffect(() => {
     setOrigin(window.location.origin)
   }, [])
+
+  useEffect(() => {
+    if (open) setActiveTab(initialTab)
+  }, [open, initialTab])
 
   const fetchShares = useCallback(async () => {
     if (!isLoggedIn) {
@@ -270,11 +277,55 @@ export function ShareDialog({
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogTitle className="flex items-center gap-2 text-xl font-bold">
-          <Share2 className="h-5 w-5 text-primary" /> Urlaubsplanung teilen & gemeinsam planen
+          <Share2 className="h-5 w-5 text-primary" /> Urlaubsplanung teilen &amp; fremde Pläne verwalten
         </DialogTitle>
         <p className="text-sm text-muted-foreground mb-3">
-          Erstelle einen <strong>Echtzeit-Freigabe-Link</strong>, damit Partner, Familie oder Kollegen deine Planung live in ihrem Kalender sehen oder direkt mitbearbeiten können.
+          Teile deinen eigenen Kalender als Echtzeit-Link oder verwalte fremde Pläne zum Vergleichen und gemeinsamen Bearbeiten.
         </p>
+
+        <div
+          role="tablist"
+          aria-label="Teilen-Bereiche"
+          className="mb-4 grid grid-cols-2 gap-1.5 rounded-xl border bg-muted/40 p-1 text-xs"
+        >
+          <button
+            type="button"
+            role="tab"
+            id="share-tab-own"
+            aria-selected={activeTab === 'share'}
+            aria-controls="share-panel-own"
+            onClick={() => setActiveTab('share')}
+            className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 font-medium transition-colors ${
+              activeTab === 'share'
+                ? 'bg-background text-foreground shadow-xs ring-1 ring-border'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Share2 className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+            <span>Meinen Plan teilen</span>
+            {shares.length > 0 && (
+              <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
+                {shares.length}
+              </Badge>
+            )}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="share-tab-overlays"
+            aria-selected={activeTab === 'overlays'}
+            aria-controls="share-panel-overlays"
+            onClick={() => setActiveTab('overlays')}
+            className={`flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 font-medium transition-colors ${
+              activeTab === 'overlays'
+                ? 'bg-background text-foreground shadow-xs ring-1 ring-border'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Users className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+            <span>Fremde Pläne ({overlays.length})</span>
+          </button>
+        </div>
 
         {error && (
           <p role="alert" className="mb-3 rounded-lg border border-destructive/30 p-2.5 text-xs text-destructive">
@@ -282,263 +333,276 @@ export function ShareDialog({
           </p>
         )}
 
-        {/* Konfiguration für neuen Link */}
-        <div className="mb-4 rounded-xl border bg-muted/20 p-3.5 space-y-3 text-sm">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">
-            1. Deinen Plan in Echtzeit teilen
-          </span>
-          <label className="block space-y-1 text-xs">
-            <span className="text-muted-foreground block">Anzeigename des Plans</span>
-            <input
-              type="text"
-              maxLength={60}
-              value={label}
-              onChange={e => setLabel(e.target.value)}
-              placeholder="z.B. Jans Urlaub"
-              className="min-h-10 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
-            />
-          </label>
+        {activeTab === 'share' && (
+          <div id="share-panel-own" role="tabpanel" aria-labelledby="share-tab-own" className="space-y-4">
+            {/* Konfiguration für neuen Link */}
+            <div className="rounded-xl border bg-muted/20 p-3.5 space-y-3 text-sm">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">
+                Neuen Freigabe-Link für deinen Plan erstellen
+              </span>
+              <label className="block space-y-1 text-xs">
+                <span className="text-muted-foreground block">Anzeigename des Plans</span>
+                <input
+                  type="text"
+                  maxLength={60}
+                  value={label}
+                  onChange={e => setLabel(e.target.value)}
+                  placeholder="z.B. Jans Urlaub"
+                  className="min-h-10 w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+                />
+              </label>
 
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 text-xs">
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                onClick={() => setPermission('view')}
-                aria-pressed={permission === 'view'}
-                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-2 text-left transition-colors ${
-                  permission === 'view' ? 'border-primary bg-primary/10 font-medium ring-1 ring-primary' : 'bg-background hover:bg-muted'
-                }`}
-              >
-                <Eye className="h-3.5 w-3.5 text-primary shrink-0" />
-                <div>
-                  <div>Nur ansehen</div>
-                  <div className="text-[10px] text-muted-foreground">Live einblenden</div>
+              <div className="space-y-2 text-xs">
+                <span className="text-muted-foreground block font-medium">Berechtigung für Empfänger:</span>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setPermission('view')}
+                    aria-pressed={permission === 'view'}
+                    className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                      permission === 'view' ? 'border-primary bg-primary/10 font-medium ring-1 ring-primary' : 'bg-background hover:bg-muted'
+                    }`}
+                  >
+                    <Eye className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <div>
+                      <div>Nur ansehen (Live-Vergleich)</div>
+                      <div className="text-[10px] text-muted-foreground">Andere sehen Änderungen live</div>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPermission('edit')}
+                    aria-pressed={permission === 'edit'}
+                    className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                      permission === 'edit' ? 'border-primary bg-primary/10 font-medium ring-1 ring-primary' : 'bg-background hover:bg-muted'
+                    }`}
+                  >
+                    <Edit3 className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <div>
+                      <div>Darf meinen Plan mitbearbeiten</div>
+                      <div className="text-[10px] text-muted-foreground">Empfänger kann direkt ändern</div>
+                    </div>
+                  </button>
                 </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setPermission('edit')}
-                aria-pressed={permission === 'edit'}
-                className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-2 text-left transition-colors ${
-                  permission === 'edit' ? 'border-primary bg-primary/10 font-medium ring-1 ring-primary' : 'bg-background hover:bg-muted'
-                }`}
-              >
-                <Edit3 className="h-3.5 w-3.5 text-primary shrink-0" />
-                <div>
-                  <div>Mitbearbeiten</div>
-                  <div className="text-[10px] text-muted-foreground">Gemeinsam planen</div>
-                </div>
-              </button>
+
+                <label className="flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-lg border bg-background px-3 py-2">
+                  <span>📝 Notizen ebenfalls teilen</span>
+                  <Switch checked={includeNotes} onCheckedChange={setIncludeNotes} />
+                </label>
+              </div>
+
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button type="button" onClick={handleCreateLiveShare} disabled={creating}>
+                  <Plus className="h-4 w-4" />
+                  {creating ? 'Erstelle Live-Link…' : `Live-Freigabe-Link erstellen & kopieren (${permission === 'edit' ? 'Bearbeitbar' : 'Nur Ansicht'})`}
+                </Button>
+                <Button type="button" variant="outline" onClick={handleCopySnapshotUrl} title="Statische Kopie ohne Live-Synchronisierung">
+                  {copiedId === 'snapshot' ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+                  {copiedId === 'snapshot' ? 'Statischer Link kopiert!' : 'Statische Momentaufnahme kopieren'}
+                </Button>
+              </div>
             </div>
 
-            <label className="flex min-h-10 cursor-pointer items-center justify-between gap-2 rounded-lg border bg-background px-3 py-2">
-              <span>📝 Notizen ebenfalls teilen</span>
-              <Switch checked={includeNotes} onCheckedChange={setIncludeNotes} />
-            </label>
-          </div>
-
-          <div className="flex flex-wrap gap-2 pt-1">
-            <Button type="button" onClick={handleCreateLiveShare} disabled={creating}>
-              <Plus className="h-4 w-4" />
-              {creating ? 'Erstelle Live-Link…' : `Live-Freigabe-Link erstellen & kopieren (${permission === 'edit' ? 'Bearbeitbar' : 'Echtzeit-Ansicht'})`}
-            </Button>
-            <Button type="button" variant="outline" onClick={handleCopySnapshotUrl} title="Statische Kopie ohne Live-Synchronisierung">
-              {copiedId === 'snapshot' ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
-              {copiedId === 'snapshot' ? 'Statischer Link kopiert!' : 'Statische Momentaufnahme kopieren'}
-            </Button>
-          </div>
-        </div>
-
-        {/* Aktive Live-Freigabe-Links */}
-        <div className="mb-4 space-y-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">
-            2. Deine aktiven Live-Freigabe-Links
-          </span>
-          {loadingShares ? (
-            <p className="text-xs text-muted-foreground">Lade Freigaben…</p>
-          ) : shares.length === 0 ? (
-            <p className="text-xs text-muted-foreground">Noch keine aktiven Live-Freigabe-Links erstellt.</p>
-          ) : (
+            {/* Aktive Live-Freigabe-Links */}
             <div className="space-y-2">
-              {shares.map(s => (
-                <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2 text-xs">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-medium truncate">{s.label}</span>
-                    <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
-                      ● Echtzeit
-                    </Badge>
-                    <Badge variant={s.permission === 'edit' ? 'default' : 'secondary'} className="text-[10px]">
-                      {s.permission === 'edit' ? '✏️ Bearbeitbar' : '👁️ Nur Ansicht'}
-                    </Badge>
-                    {s.includeNotes && <Badge variant="outline" className="text-[10px]">inkl. Notizen</Badge>}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button size="sm" variant="outline" onClick={() => handleCopyLiveLink(s)}>
-                      {copiedId === s.id ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
-                      {copiedId === s.id ? 'Kopiert!' : 'Link kopieren'}
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => handleDeleteShare(s)}
-                      aria-label="Freigabe widerrufen"
-                      title="Freigabe widerrufen"
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Eingeblendete Pläne anderer Personen */}
-        <div className="space-y-2.5">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <Users className="h-3.5 w-3.5" /> 3. Pläne anderer Personen einblenden oder mitbearbeiten
-            </span>
-            {overlays.some(o => Boolean(o.token)) && onRefreshOverlays && (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-7 px-2 text-xs gap-1"
-                disabled={refreshing}
-                onClick={() => void handleManualRefresh()}
-              >
-                <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
-                Jetzt synchronisieren
-              </Button>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={externalInput}
-              onChange={e => setExternalInput(e.target.value)}
-              placeholder="Geteilten Link hier einfügen…"
-              className="min-h-10 flex-1 rounded-md border bg-background px-3 py-1.5 text-xs"
-            />
-            <Button type="button" size="sm" variant="secondary" disabled={addingExternal} onClick={handleAddExternal}>
-              <Plus className="h-4 w-4" /> Einblenden
-            </Button>
-          </div>
-
-          {overlays.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              Aktuell sind keine fremden Pläne eingeblendet. Öffne einen geteilten Link oder füge ihn oben ein, um den Urlaub von Partnern, Freunden oder Kollegen in Echtzeit in deinem Kalender zu sehen.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {overlays.map(ov => {
-                const isEditingThis = activeCollabToken !== null && ov.token === activeCollabToken
-                const isPickingColor = editingColorId === ov.id
-                const stat = sharedPlanSummaries.find(s => s.id === ov.id)
-                const wdLabel = formatWorkDaysLabel(ov.workDays)
-                const isCustomWd = !isStandardFiveDayWeek(ov.workDays)
-                return (
-                  <div key={ov.id} className="flex flex-col gap-2 rounded-lg border bg-card px-3 py-2 text-xs">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-2 min-w-0">
-                        <Switch
-                          checked={ov.enabled}
-                          onCheckedChange={v => onToggleOverlay(ov.id, v)}
-                          aria-label={`${ov.label} einblenden`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setEditingColorId(isPickingColor ? null : ov.id)}
-                          aria-label={`Farbe für ${ov.label} ändern`}
-                          aria-expanded={isPickingColor}
-                          title="Farbe ändern"
-                          className={`h-5 w-5 rounded-full border-2 shrink-0 transition-transform hover:scale-110 ${
-                            isPickingColor ? 'scale-110 border-foreground ring-2 ring-primary/40' : 'border-background ring-1 ring-border'
-                          }`}
-                          style={{ backgroundColor: ov.color }}
-                        />
-                        <span className="font-medium truncate">{ov.label}</span>
-                        {ov.token ? (
-                          <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
-                            ● Live
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary" className="text-[10px]">
-                            Momentaufnahme
-                          </Badge>
-                        )}
-                        {stat && (
-                          <Badge variant="outline" className="text-[10px]">
-                            Urlaub: {formatDays(stat.used)}/{formatDays(stat.total)} ({formatDays(stat.remaining)} übrig)
-                          </Badge>
-                        )}
-                        {isCustomWd && (
-                          <Badge variant="secondary" className="text-[10px]">
-                            {wdLabel}
-                          </Badge>
-                        )}
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block">
+                Deine aktiven Live-Freigabe-Links
+              </span>
+              {loadingShares ? (
+                <p className="text-xs text-muted-foreground">Lade Freigaben…</p>
+              ) : shares.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Noch keine aktiven Live-Freigabe-Links erstellt.</p>
+              ) : (
+                <div className="space-y-2">
+                  {shares.map(s => (
+                    <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-3 py-2 text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-medium truncate">{s.label}</span>
+                        <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
+                          ● Echtzeit
+                        </Badge>
+                        <Badge variant={s.permission === 'edit' ? 'default' : 'secondary'} className="text-[10px]">
+                          {s.permission === 'edit' ? '✏️ Bearbeitbar' : '👁️ Nur Ansicht'}
+                        </Badge>
+                        {s.includeNotes && <Badge variant="outline" className="text-[10px]">inkl. Notizen</Badge>}
                       </div>
-                      <div className="flex items-center gap-1.5">
-                        {ov.permission === 'edit' && ov.token && (
-                          <Button
-                            size="sm"
-                            variant={isEditingThis ? 'default' : 'outline'}
-                            onClick={() => onSelectCollabToken(isEditingThis ? null : ov.token!)}
-                          >
-                            <Edit3 className="h-3.5 w-3.5" />
-                            {isEditingThis ? 'Bearbeitungsmodus aktiv' : 'Jetzt mitbearbeiten'}
-                          </Button>
-                        )}
+                      <div className="flex items-center gap-1">
+                        <Button size="sm" variant="outline" onClick={() => handleCopyLiveLink(s)}>
+                          {copiedId === s.id ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                          {copiedId === s.id ? 'Kopiert!' : 'Link kopieren'}
+                        </Button>
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => onRemoveOverlay(ov.id)}
-                          aria-label="Eingeblendeten Plan entfernen"
-                          className="text-muted-foreground hover:text-destructive"
+                          onClick={() => handleDeleteShare(s)}
+                          aria-label="Freigabe widerrufen"
+                          title="Freigabe widerrufen"
+                          className="text-destructive hover:text-destructive"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                     </div>
-                    {isPickingColor && (
-                      <div className="flex flex-wrap items-center gap-2 border-t pt-2">
-                        <span className="text-[11px] text-muted-foreground">Farbe wählen:</span>
-                        {COLOR_SWATCHES.map(s => (
-                          <button
-                            key={s.hex}
-                            type="button"
-                            onClick={() => {
-                              onChangeOverlayColor(ov.id, s.hex)
-                              setEditingColorId(null)
-                            }}
-                            title={s.name}
-                            aria-label={`Farbe ${s.name} für ${ov.label}`}
-                            className={`h-6 w-6 rounded-full border-2 transition-transform ${
-                              ov.color.toLowerCase() === s.hex ? 'scale-110 border-foreground ring-2 ring-primary/40' : 'border-transparent opacity-85 hover:opacity-100 hover:scale-105'
-                            }`}
-                            style={{ backgroundColor: s.hex }}
-                          />
-                        ))}
-                        <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer ml-1">
-                          <span>Eigene:</span>
-                          <input
-                            type="color"
-                            value={ov.color}
-                            onChange={e => onChangeOverlayColor(ov.id, e.target.value)}
-                            aria-label={`Eigene Farbe für ${ov.label}`}
-                            className="h-6 w-7 cursor-pointer rounded border bg-transparent p-0"
-                          />
-                        </label>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {activeTab === 'overlays' && (
+          <div id="share-panel-overlays" role="tabpanel" aria-labelledby="share-tab-overlays" className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5" /> Eingeblendete Pläne anderer Personen
+              </span>
+              {overlays.some(o => Boolean(o.token)) && onRefreshOverlays && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs gap-1"
+                  disabled={refreshing}
+                  onClick={() => void handleManualRefresh()}
+                >
+                  <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+                  Jetzt synchronisieren
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={externalInput}
+                onChange={e => setExternalInput(e.target.value)}
+                placeholder="Geteilten Link hier einfügen…"
+                className="min-h-10 flex-1 rounded-md border bg-background px-3 py-1.5 text-xs"
+              />
+              <Button type="button" size="sm" variant="secondary" disabled={addingExternal} onClick={handleAddExternal}>
+                <Plus className="h-4 w-4" /> Einblenden
+              </Button>
+            </div>
+
+            {overlays.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Aktuell sind keine fremden Pläne eingeblendet. Öffne einen geteilten Link oder füge ihn oben ein, um den Urlaub von Partnern, Freunden oder Kollegen in Echtzeit in deinem Kalender zu sehen.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {overlays.map(ov => {
+                  const isEditingThis = activeCollabToken !== null && ov.token === activeCollabToken
+                  const isPickingColor = editingColorId === ov.id
+                  const stat = sharedPlanSummaries.find(s => s.id === ov.id)
+                  const wdLabel = formatWorkDaysLabel(ov.workDays)
+                  const isCustomWd = !isStandardFiveDayWeek(ov.workDays)
+                  return (
+                    <div key={ov.id} className="flex flex-col gap-2 rounded-lg border bg-card px-3 py-2 text-xs">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2 min-w-0">
+                          <Switch
+                            checked={ov.enabled}
+                            onCheckedChange={v => onToggleOverlay(ov.id, v)}
+                            aria-label={`${ov.label} einblenden`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setEditingColorId(isPickingColor ? null : ov.id)}
+                            aria-label={`Farbe für ${ov.label} ändern`}
+                            aria-expanded={isPickingColor}
+                            title="Farbe ändern"
+                            className={`h-5 w-5 rounded-full border-2 shrink-0 transition-transform hover:scale-110 ${
+                              isPickingColor ? 'scale-110 border-foreground ring-2 ring-primary/40' : 'border-background ring-1 ring-border'
+                            }`}
+                            style={{ backgroundColor: ov.color }}
+                          />
+                          <span className="font-medium truncate">{ov.label}</span>
+                          {ov.token ? (
+                            <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
+                              ● Live
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary" className="text-[10px]">
+                              Momentaufnahme
+                            </Badge>
+                          )}
+                          {stat && (
+                            <Badge variant="outline" className="text-[10px]">
+                              Urlaub: {formatDays(stat.used)}/{formatDays(stat.total)} ({formatDays(stat.remaining)} übrig)
+                            </Badge>
+                          )}
+                          {isCustomWd && (
+                            <Badge variant="secondary" className="text-[10px]">
+                              {wdLabel}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {ov.permission === 'edit' && ov.token && (
+                            <Button
+                              size="sm"
+                              variant={isEditingThis ? 'default' : 'outline'}
+                              onClick={() => {
+                                if (isEditingThis) {
+                                  onSelectCollabToken(null)
+                                } else {
+                                  onSelectCollabToken(ov.token!)
+                                  onClose()
+                                }
+                              }}
+                            >
+                              {isEditingThis ? <Eye className="h-3.5 w-3.5" /> : <Edit3 className="h-3.5 w-3.5" />}
+                              {isEditingThis ? 'Zurück zum Vergleich' : 'Direkt bearbeiten'}
+                            </Button>
+                          )}
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => onRemoveOverlay(ov.id)}
+                            aria-label="Eingeblendeten Plan entfernen"
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                      {isPickingColor && (
+                        <div className="flex flex-wrap items-center gap-2 border-t pt-2">
+                          <span className="text-[11px] text-muted-foreground">Farbe wählen:</span>
+                          {COLOR_SWATCHES.map(s => (
+                            <button
+                              key={s.hex}
+                              type="button"
+                              onClick={() => {
+                                onChangeOverlayColor(ov.id, s.hex)
+                                setEditingColorId(null)
+                              }}
+                              title={s.name}
+                              aria-label={`Farbe ${s.name} für ${ov.label}`}
+                              className={`h-6 w-6 rounded-full border-2 transition-transform ${
+                                ov.color.toLowerCase() === s.hex ? 'scale-110 border-foreground ring-2 ring-primary/40' : 'border-transparent opacity-85 hover:opacity-100 hover:scale-105'
+                              }`}
+                              style={{ backgroundColor: s.hex }}
+                            />
+                          ))}
+                          <label className="inline-flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer ml-1">
+                            <span>Eigene:</span>
+                            <input
+                              type="color"
+                              value={ov.color}
+                              onChange={e => onChangeOverlayColor(ov.id, e.target.value)}
+                              aria-label={`Eigene Farbe für ${ov.label}`}
+                              className="h-6 w-7 cursor-pointer rounded border bg-transparent p-0"
+                            />
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   )

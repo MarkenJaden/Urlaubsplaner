@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { headers } from 'next/headers'
 import { format, parseISO } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { fetchHolidays, resolveSchoolGroup } from '@/lib/holiday-api'
@@ -7,6 +8,7 @@ import { detectBridgeDays } from '@/lib/bridge-days'
 import { suggestVacation, DEFAULT_PREFERENCES } from '@/lib/vacation-suggester'
 import { formatDays } from '@/lib/vacation-accounting'
 import { PublicYearCalendar } from '@/components/calendar/public-year-calendar'
+import { recordWidgetView } from '@/lib/widget-analytics'
 import {
   SEO_REGIONS,
   buildPlannerHref,
@@ -14,13 +16,23 @@ import {
   getSeoRegionBySlug,
   isValidSeoYear,
 } from '@/lib/seo-regions'
-import type { Holiday } from '@/types'
+import type { Holiday, OptimizationGoal } from '@/types'
 import { Sparkles, ExternalLink } from 'lucide-react'
+
+export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: 'Brückentage-Widget · Urlaubsplaner',
   robots: { index: false, follow: true },
 }
+
+const VALID_GOALS = new Set<OptimizationGoal>([
+  'balanced',
+  'max_efficiency',
+  'long_breaks',
+  'distributed',
+  'mini_breaks',
+])
 
 interface EmbedPageProps {
   searchParams?: Promise<Record<string, string | string[] | undefined>>
@@ -38,6 +50,19 @@ export default async function EmbedBrueckentagePage({ searchParams }: EmbedPageP
   const regionSlug = firstParam(params.region) ?? 'nordrhein-westfalen'
   const view = firstParam(params.view) === 'calendar' ? 'calendar' : 'list'
   const region = getSeoRegionBySlug(regionSlug) ?? SEO_REGIONS[0]
+
+  const rawGoal = firstParam(params.goal) as OptimizationGoal | undefined
+  const goal: OptimizationGoal = rawGoal && VALID_GOALS.has(rawGoal) ? rawGoal : 'max_efficiency'
+  const rawBudget = Number(firstParam(params.budget))
+  const budget = Number.isFinite(rawBudget) && rawBudget >= 1 && rawBudget <= 60 ? rawBudget : 28
+
+  const reqHeaders = await headers()
+  void recordWidgetView({
+    widgetType: 'brueckentage',
+    region: region.slug,
+    referer: reqHeaders.get('referer'),
+    host: reqHeaders.get('x-forwarded-host') ?? reqHeaders.get('host'),
+  })
 
   let publicHolidays: Holiday[] = []
   let schoolHolidays: Holiday[] = []
@@ -62,12 +87,12 @@ export default async function EmbedBrueckentagePage({ searchParams }: EmbedPageP
           publicHolidays,
           schoolHolidays,
           new Set(),
-          28,
+          budget,
           new Set(),
           {
             ...DEFAULT_PREFERENCES,
-            goal: 'max_efficiency',
-            optimizeForEfficiency: true,
+            goal,
+            optimizeForEfficiency: goal === 'max_efficiency',
             planFromToday: false,
             planStartMode: 'year_start',
           },

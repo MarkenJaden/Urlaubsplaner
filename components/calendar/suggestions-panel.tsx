@@ -20,6 +20,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Users,
+  Zap,
+  Copy,
+  Check,
+  Edit3,
+  Eye,
 } from 'lucide-react'
 import type { VacationSuggestionBlock, PlanningPreferences, PeriodPreference } from '@/lib/vacation-suggester'
 import { DEFAULT_PREFERENCES, recalculateSuggestionBlock } from '@/lib/vacation-suggester'
@@ -34,8 +39,12 @@ import type {
   ExcludedDateRange,
   Holiday,
   SharedPlanOverlay,
+  PartnerPlanningMode,
+  PartnerAlignStrength,
+  PartnerOffWeekdayMode,
 } from '@/types'
-import { formatDays, DEFAULT_WORK_DAYS } from '@/lib/vacation-accounting'
+import { formatDays, formatWorkDaysLabel, isStandardFiveDayWeek, DEFAULT_WORK_DAYS } from '@/lib/vacation-accounting'
+import type { SharedPlanStatSummary } from '@/components/calendar/toolbar'
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez']
 
@@ -71,7 +80,10 @@ interface SuggestionsPanelProps {
   existingVacationDates: string[]
   noteDates: string[]
   partnerOverlays?: SharedPlanOverlay[]
+  sharedPlanSummaries?: SharedPlanStatSummary[]
+  initialPartnerMode?: PartnerPlanningMode
   onApply: (dates: string[], type: EntryType, replace: boolean) => void
+  onApplyPartner?: (token: string, dates: string[], replace: boolean) => Promise<void>
   onRemove: (dates: string[]) => void
   onOpenCalendarPreview?: (blocks: VacationSuggestionBlock[], overwrite: boolean) => void
   busy?: boolean
@@ -94,7 +106,10 @@ export function SuggestionsPanel({
   existingVacationDates,
   noteDates,
   partnerOverlays = [],
+  sharedPlanSummaries = [],
+  initialPartnerMode,
   onApply,
+  onApplyPartner,
   onRemove,
   onOpenCalendarPreview,
   busy = false,
@@ -106,10 +121,16 @@ export function SuggestionsPanel({
     workDays,
   })
   const [overwrite, setOverwrite] = useState(false)
-  const [alignWithPartner, setAlignWithPartner] = useState(true)
+  const [partnerMode, setPartnerMode] = useState<PartnerPlanningMode>('align_to_partner')
+  const [partnerStrength, setPartnerStrength] = useState<PartnerAlignStrength>('balanced')
+  const [partnerOffWeekdayMode, setPartnerOffWeekdayMode] = useState<PartnerOffWeekdayMode>('bonus_only')
+  const [partnerBudgetInput, setPartnerBudgetInput] = useState<string>('')
+  const [fillSoloAfterJoint, setFillSoloAfterJoint] = useState<boolean>(true)
   const [selectedPartnerId, setSelectedPartnerId] = useState<string>('')
   const [suggestions, setSuggestions] = useState<VacationSuggestionBlock[]>([])
   const [loading, setLoading] = useState(false)
+  const [partnerApplying, setPartnerApplying] = useState(false)
+  const [copiedPartnerKey, setCopiedPartnerKey] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [addedByBlock, setAddedByBlock] = useState<Record<number, string[]>>({})
   const [expandedBlock, setExpandedBlock] = useState<number | null>(null)
@@ -152,8 +173,9 @@ export function SuggestionsPanel({
       setRuleEndDate(`${year}-07-24`)
       setExcludeStart(`${year}-05-04`)
       setExcludeEnd(`${year}-05-08`)
+      if (initialPartnerMode) setPartnerMode(initialPartnerMode)
     }
-  }, [open, halfDaysChristmas, countWeekendsAsVacation, workDays, year])
+  }, [open, halfDaysChristmas, countWeekendsAsVacation, workDays, year, initialPartnerMode])
 
   const existingVacationSet = useMemo(() => new Set(existingVacationDates), [existingVacationDates])
 
@@ -198,8 +220,94 @@ export function SuggestionsPanel({
       const next = current.includes(monthNumber)
         ? current.filter(m => m !== monthNumber)
         : [...current, monthNumber].sort((a, b) => a - b)
-      return { ...p, avoidMonths: next }
+      return {
+        ...p,
+        avoidMonths: next,
+        preferredMonths: (p.preferredMonths ?? []).filter(m => !next.includes(m)),
+      }
     })
+  }
+
+  const togglePreferredMonth = (monthNumber: number) => {
+    setPrefs(p => {
+      const current = p.preferredMonths ?? []
+      const next = current.includes(monthNumber)
+        ? current.filter(m => m !== monthNumber)
+        : [...current, monthNumber].sort((a, b) => a - b)
+      return {
+        ...p,
+        preferredMonths: next,
+        avoidMonths: (p.avoidMonths ?? []).filter(m => !next.includes(m)),
+      }
+    })
+  }
+
+  const applyQuickPreset = (presetId: 'balanced' | 'bridges' | 'family' | 'two_big' | 'mini') => {
+    if (presetId === 'balanced') {
+      setPrefs(p => ({
+        ...p,
+        goal: 'balanced',
+        optimizeForEfficiency: false,
+        schoolStrategy: 'neutral',
+        preferSchoolHolidays: false,
+        avoidSchoolHolidays: false,
+        avoidAllStatesSchoolHolidays: false,
+        preferBridgeDays: true,
+        allowSingleDayBridges: true,
+        distributeEvenly: true,
+        requireMainVacationDays: null,
+        minDaysPerBlock: 1,
+        maxDaysPerBlock: null,
+      }))
+    } else if (presetId === 'bridges') {
+      setPrefs(p => ({
+        ...p,
+        goal: 'max_efficiency',
+        optimizeForEfficiency: true,
+        preferBridgeDays: true,
+        allowSingleDayBridges: true,
+        distributeEvenly: false,
+        requireMainVacationDays: null,
+        minDaysPerBlock: 1,
+        maxDaysPerBlock: null,
+      }))
+    } else if (presetId === 'family') {
+      setPrefs(p => ({
+        ...p,
+        goal: 'balanced',
+        optimizeForEfficiency: false,
+        schoolStrategy: 'prefer',
+        preferSchoolHolidays: true,
+        avoidSchoolHolidays: false,
+        avoidAllStatesSchoolHolidays: false,
+        preferBridgeDays: true,
+        requireMainVacationDays: 8,
+        minDaysPerBlock: 1,
+        maxDaysPerBlock: null,
+      }))
+    } else if (presetId === 'two_big') {
+      setPrefs(p => ({
+        ...p,
+        goal: 'long_breaks',
+        optimizeForEfficiency: false,
+        distributeEvenly: true,
+        requireMainVacationDays: 8,
+        minDaysPerBlock: 3,
+        maxDaysPerBlock: null,
+      }))
+    } else if (presetId === 'mini') {
+      setPrefs(p => ({
+        ...p,
+        goal: 'mini_breaks',
+        optimizeForEfficiency: false,
+        distributeEvenly: true,
+        allowSingleDayBridges: true,
+        preferBridgeDays: true,
+        requireMainVacationDays: null,
+        minDaysPerBlock: 1,
+        maxDaysPerBlock: 4,
+      }))
+    }
   }
 
   const toggleRuleMonth = (monthNumber: number) => {
@@ -274,32 +382,74 @@ export function SuggestionsPanel({
     () => activePartners.find(p => p.id === selectedPartnerId) ?? activePartners[0] ?? null,
     [activePartners, selectedPartnerId],
   )
+  const selectedPartnerSummary = useMemo(
+    () => (selectedPartner ? sharedPlanSummaries.find(s => s.id === selectedPartner.id) ?? null : null),
+    [selectedPartner, sharedPlanSummaries],
+  )
+  const effectivePartnerRemaining = useMemo(() => {
+    if (partnerBudgetInput.trim() !== '' && Number.isFinite(Number(partnerBudgetInput))) {
+      return Math.max(0, Number(partnerBudgetInput))
+    }
+    if (selectedPartnerSummary) {
+      return overwrite ? selectedPartnerSummary.total : Math.max(0, selectedPartnerSummary.remaining)
+    }
+    return selectedPartner?.vacationDays ?? 30
+  }, [partnerBudgetInput, selectedPartnerSummary, selectedPartner, overwrite])
+
+  const partnerHasDifferentWorkWeek = useMemo(() => {
+    if (!selectedPartner) return false
+    const pw = selectedPartner.workDays?.length ? selectedPartner.workDays : DEFAULT_WORK_DAYS
+    return !isStandardFiveDayWeek(pw) || pw.length !== workDays.length || pw.some(d => !workDays.includes(d))
+  }, [selectedPartner, workDays])
+
+  const effectivePartnerMode: PartnerPlanningMode =
+    activePartners.length > 0 && selectedPartner ? partnerMode : 'off'
 
   const handleGenerate = async () => {
     setLoading(true)
     setError(null)
     setAddedByBlock({})
     try {
+      const requestPrefs: PlanningPreferences = {
+        ...prefs,
+        partnerOptions: {
+          mode: effectivePartnerMode,
+          strength: partnerStrength,
+          offWeekdayMode: partnerOffWeekdayMode,
+          maxLongWeekendsOnPartnerOffDay: 3,
+          partnerBudget: effectivePartnerMode === 'plan_both' ? effectivePartnerRemaining : null,
+          partnerReserveDays: 0,
+          fillSoloAfterJoint,
+        },
+      }
       const params = new URLSearchParams({
         country,
         year: String(year),
         remainingDays: String(Math.max(0, overwrite ? totalDays : remainingDays)),
         overwrite: String(overwrite),
-        preferences: JSON.stringify(prefs),
+        preferences: JSON.stringify(requestPrefs),
         existingDates: existingVacationDates.join(','),
         noteDates: noteDates.join(','),
       })
       if (subdivision) params.set('subdivision', subdivision)
       if (group) params.set('group', group)
-      if (alignWithPartner && selectedPartner) {
-        params.set('alignWithPartner', 'true')
+      if (effectivePartnerMode !== 'off' && selectedPartner) {
+        params.set('partnerMode', effectivePartnerMode)
+        if (effectivePartnerMode === 'align_to_partner') {
+          params.set('alignWithPartner', 'true')
+        }
         const pDates = selectedPartner.entries
-          .filter(e => (e.type === 'vacation' || e.type === 'gleittag') && e.date.startsWith(`${year}-`))
+          .filter(e => (e.type === 'vacation' || e.type === 'gleittag' || e.type === 'special') && e.date.startsWith(`${year}-`))
           .map(e => e.date.slice(0, 10))
         if (pDates.length > 0) params.set('partnerDates', [...new Set(pDates)].join(','))
         if (selectedPartner.workDays?.length) params.set('partnerWorkDays', selectedPartner.workDays.join(','))
         if (selectedPartner.country) params.set('partnerCountry', selectedPartner.country)
         if (selectedPartner.subdivision) params.set('partnerSubdivision', selectedPartner.subdivision)
+        if (selectedPartner.halfDaysChristmas !== undefined) {
+          params.set('partnerHalfDaysChristmas', String(selectedPartner.halfDaysChristmas))
+        }
+        params.set('partnerRemainingDays', String(effectivePartnerRemaining))
+        params.set('partnerLabel', selectedPartner.label)
       }
       const res = await fetch(`/api/suggestions?${params}`)
       if (!res.ok) throw new Error(res.status === 502 ? 'Feiertage konnten nicht geladen werden. Bitte erneut versuchen.' : 'Fehler beim Laden der Vorschläge')
@@ -371,11 +521,68 @@ export function SuggestionsPanel({
   }
 
   const totalSuggestedCost = useMemo(() => suggestions.reduce((sum, s) => sum + s.cost, 0), [suggestions])
+  const totalPartnerSuggestedCost = useMemo(() => suggestions.reduce((sum, s) => sum + (s.partnerCost ?? 0), 0), [suggestions])
+  const hasPartnerSuggestedDays = useMemo(() => suggestions.some(s => (s.partnerVacationDays?.length ?? 0) > 0), [suggestions])
   const totalFreeDaysGained = useMemo(() => suggestions.reduce((sum, s) => sum + s.freeDaysGained, 0), [suggestions])
   const avgEfficiency = totalSuggestedCost > 0 ? totalFreeDaysGained / totalSuggestedCost : 0
 
+  const handleApplyAllWithPartner = async () => {
+    handleApplyAll()
+    if (
+      selectedPartner?.permission === 'edit' &&
+      selectedPartner.token &&
+      onApplyPartner &&
+      hasPartnerSuggestedDays
+    ) {
+      const pDates = [...new Set(suggestions.flatMap(s => s.partnerVacationDays ?? []))]
+      if (pDates.length > 0) {
+        setPartnerApplying(true)
+        try {
+          await onApplyPartner(selectedPartner.token, pDates, overwrite)
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Partner-Kalender konnte nicht aktualisiert werden.')
+        } finally {
+          setPartnerApplying(false)
+        }
+      }
+    }
+  }
+
+  const handleApplyOneBoth = async (idx: number) => {
+    handleApplyOne(idx)
+    const pDates = suggestions[idx]?.partnerVacationDays ?? []
+    if (
+      pDates.length > 0 &&
+      selectedPartner?.permission === 'edit' &&
+      selectedPartner.token &&
+      onApplyPartner
+    ) {
+      setPartnerApplying(true)
+      try {
+        await onApplyPartner(selectedPartner.token, pDates, false)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Partner-Kalender konnte nicht aktualisiert werden.')
+      } finally {
+        setPartnerApplying(false)
+      }
+    }
+  }
+
+  const handleCopyPartnerDates = async (dates: string[], key: string) => {
+    if (dates.length === 0) return
+    const formatted = dates.map(d => format(parseISO(d), 'dd.MM.yyyy (EE)', { locale: de })).join('\n')
+    try {
+      await navigator.clipboard.writeText(formatted)
+      setCopiedPartnerKey(key)
+      setTimeout(() => setCopiedPartnerKey(null), 2000)
+    } catch {
+      // ignore clipboard errors
+    }
+  }
+
   const activeAdvancedCount =
     (prefs.avoidMonths?.length ?? 0) +
+    (prefs.preferredMonths?.length ?? 0) +
     (prefs.excludedDateRanges?.length ?? 0) +
     (prefs.planStartMode && prefs.planStartMode !== 'today' ? 1 : 0) +
     (prefs.maxBlocks ? 1 : 0) +
@@ -405,50 +612,187 @@ export function SuggestionsPanel({
           </Badge>
         </div>
 
-        {/* Paar- & Gemeinsam-Optimierer Bar (wenn Partner-Plan eingeblendet ist) */}
-        {activePartners.length > 0 && (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-emerald-500/35 bg-emerald-500/10 px-3.5 py-2.5 text-xs">
-            <label className="flex cursor-pointer items-center gap-2.5 font-medium text-foreground">
-              <Switch checked={alignWithPartner} onCheckedChange={setAlignWithPartner} />
-              <span className="flex items-center gap-1.5">
-                <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-                <span>
-                  🤝 Gemeinsam frei optimieren mit{' '}
-                  {activePartners.length === 1 ? <strong>{activePartners[0].label}</strong> : 'Partner-Plan'}
-                </span>
-              </span>
-            </label>
-            {activePartners.length > 1 ? (
-              <select
-                aria-label="Partner-Plan für Optimierung auswählen"
-                value={selectedPartner?.id ?? ''}
-                onChange={e => setSelectedPartnerId(e.target.value)}
-                disabled={!alignWithPartner}
-                className="rounded-md border bg-background px-2.5 py-1 text-xs"
-              >
-                {activePartners.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <span className="text-[11px] text-muted-foreground">
-                Berücksichtigt {activePartners[0].label}s Urlaub, Feiertage &amp; Arbeitswoche
-              </span>
+        {/* Schnell-Vorlagen (Presets) */}
+        <div className="mb-4 flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mr-1">
+            Schnell-Vorlagen:
+          </span>
+          {([
+            { id: 'balanced', label: '✨ Ausgewogen' },
+            { id: 'bridges', label: '🔥 Brückentag-Profi' },
+            { id: 'family', label: '🏫 Familien-Plan' },
+            { id: 'two_big', label: '☀️ 2× Großer Urlaub' },
+            { id: 'mini', label: '⚡ Kurztrips' },
+          ] as const).map(preset => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => applyQuickPreset(preset.id)}
+              className="rounded-full border bg-background px-2.5 py-1 text-[11px] font-medium hover:border-primary hover:text-primary transition-colors"
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Paar- & Gemeinsam-Optimierer (wenn Partner-Plan eingeblendet ist) */}
+        {activePartners.length > 0 && selectedPartner && (
+          <fieldset className="mb-4 rounded-xl border border-emerald-500/35 bg-emerald-500/10 p-3.5 text-xs space-y-3">
+            <legend className="px-1 font-semibold text-foreground flex items-center gap-1.5">
+              <Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+              <span>Gemeinsame Urlaubsplanung</span>
+            </legend>
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3 flex-1">
+                {([
+                  { id: 'off' as const, title: 'Nur für mich', sub: 'Partner ausblenden' },
+                  { id: 'align_to_partner' as const, title: `An ${selectedPartner.label} anpassen`, sub: 'Nur dein Kalender' },
+                  { id: 'plan_both' as const, title: 'Für BEIDE optimieren', sub: 'Gemeinsamer Jahresplan' },
+                ]).map(opt => {
+                  const active = partnerMode === opt.id
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setPartnerMode(opt.id)}
+                      aria-pressed={active}
+                      className={`rounded-lg border px-2.5 py-2 text-left transition-colors ${
+                        active ? 'border-emerald-600 bg-background font-medium ring-1 ring-emerald-600' : 'bg-background/60 hover:bg-background'
+                      }`}
+                    >
+                      <div className="text-xs font-semibold text-foreground">{opt.title}</div>
+                      <div className="text-[10px] text-muted-foreground">{opt.sub}</div>
+                    </button>
+                  )
+                })}
+              </div>
+              {activePartners.length > 1 && (
+                <select
+                  aria-label="Partner-Plan für Optimierung auswählen"
+                  value={selectedPartner.id}
+                  onChange={e => setSelectedPartnerId(e.target.value)}
+                  disabled={partnerMode === 'off'}
+                  className="min-h-9 rounded-md border bg-background px-2.5 py-1 text-xs"
+                >
+                  {activePartners.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {partnerMode === 'align_to_partner' && (
+              <div className="space-y-2 rounded-lg border bg-background/80 p-2.5">
+                <p className="text-[11px] text-muted-foreground">
+                  Plant <strong>nur deinen eigenen Kalender</strong> und richtet deine Urlaubsblöcke bevorzugt nach{' '}
+                  <strong>{selectedPartner.label}</strong>s bereits eingetragenem Urlaub und Feiertagen aus.
+                </p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-1.5">
+                    <span className="text-muted-foreground font-medium">Ausrichtung:</span>
+                    <select
+                      value={partnerStrength}
+                      onChange={e => setPartnerStrength(e.target.value as PartnerAlignStrength)}
+                      className="rounded border bg-background px-2 py-1 text-xs"
+                    >
+                      <option value="gentle">Locker (Brücken vorrangig)</option>
+                      <option value="balanced">Ausgewogen</option>
+                      <option value="strong">Stark (Überschneidungen priorisieren)</option>
+                    </select>
+                  </label>
+
+                  {partnerHasDifferentWorkWeek && (
+                    <label className="flex items-center gap-1.5">
+                      <span className="text-muted-foreground font-medium">
+                        Freie Wochentage ({formatWorkDaysLabel(selectedPartner.workDays)}):
+                      </span>
+                      <select
+                        value={partnerOffWeekdayMode}
+                        onChange={e => setPartnerOffWeekdayMode(e.target.value as PartnerOffWeekdayMode)}
+                        className="rounded border bg-background px-2 py-1 text-xs"
+                      >
+                        <option value="bonus_only">Nur als Bonus bei echten Urlauben</option>
+                        <option value="allow_few_weekends">Max. 3 lange Wochenenden vorschlagen</option>
+                        <option value="ignore">Ignorieren (kein extra Bonus)</option>
+                      </select>
+                    </label>
+                  )}
+                </div>
+              </div>
             )}
-          </div>
+
+            {partnerMode === 'plan_both' && (
+              <div className="space-y-2 rounded-lg border bg-background/80 p-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[11px] text-muted-foreground">
+                    Berechnet einen <strong>gemeinsamen Urlaubsplan für dich &amp; {selectedPartner.label}</strong> unter Berücksichtigung beider Budgets und Arbeitswochen ({formatWorkDaysLabel(selectedPartner.workDays)}).
+                  </p>
+                  {selectedPartner.permission === 'edit' && selectedPartner.token ? (
+                    <Badge variant="default" className="text-[10px] bg-emerald-600 text-white gap-1">
+                      <Edit3 className="h-3 w-3" /> Direkt in beide Kalender übernehmbar
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-[10px] gap-1">
+                      <Eye className="h-3 w-3" /> Nur Lesezugriff (Partner-Tage kopierbar)
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-1.5">
+                    <span className="text-muted-foreground font-medium">Budget {selectedPartner.label}:</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={60}
+                      value={partnerBudgetInput}
+                      placeholder={String(effectivePartnerRemaining)}
+                      onChange={e => setPartnerBudgetInput(e.target.value)}
+                      className="w-16 rounded border bg-background px-2 py-1 text-center text-xs"
+                    />
+                    <span className="text-muted-foreground">UT</span>
+                  </label>
+
+                  {partnerHasDifferentWorkWeek && (
+                    <label className="flex items-center gap-1.5">
+                      <span className="text-muted-foreground font-medium">
+                        Freie Wochentage ({formatWorkDaysLabel(selectedPartner.workDays)}):
+                      </span>
+                      <select
+                        value={partnerOffWeekdayMode}
+                        onChange={e => setPartnerOffWeekdayMode(e.target.value as PartnerOffWeekdayMode)}
+                        className="rounded border bg-background px-2 py-1 text-xs"
+                      >
+                        <option value="bonus_only">Kein Einzel-Freitag-Spam</option>
+                        <option value="allow_few_weekends">Max. 3 lange Wochenenden</option>
+                        <option value="ignore">Ignorieren</option>
+                      </select>
+                    </label>
+                  )}
+
+                  <label className="flex cursor-pointer items-center gap-1.5">
+                    <Switch checked={fillSoloAfterJoint} onCheckedChange={setFillSoloAfterJoint} />
+                    <span className="text-muted-foreground">Rest-Budget danach alleine verplanen</span>
+                  </label>
+                </div>
+              </div>
+            )}
+          </fieldset>
         )}
 
         {/* 1. Optimierungs-Strategie */}
         <div className="mb-4 space-y-2">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">1. Optimierungs-Ziel</span>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
             {([
               { id: 'balanced', icon: Sparkles, title: 'Smart & Ausgewogen', desc: 'Top-Brückentage + Haupturlaub' },
               { id: 'max_efficiency', icon: Flame, title: 'Max. freie Tage', desc: 'Höchste Effizienz pro Tag' },
               { id: 'long_breaks', icon: Sun, title: 'Lange Auszeiten', desc: 'Fokus auf 1–3 Wochen am Stück' },
               { id: 'distributed', icon: Compass, title: 'Regelmäßige Pausen', desc: 'Gleichmäßig übers Jahr verteilt' },
+              { id: 'mini_breaks', icon: Zap, title: 'Viele Kurztrips', desc: 'Verlängerte Wochenenden (3–5T)' },
             ] as const).map(item => {
               const Icon = item.icon
               const active = (prefs.goal ?? 'balanced') === item.id
@@ -850,6 +1194,32 @@ export function SuggestionsPanel({
                   })}
                 </div>
               </div>
+
+              <div>
+                <span className="block text-muted-foreground mb-1">Bevorzugte Reisemonate (weiche Priorität):</span>
+                <div className="flex flex-wrap gap-1">
+                  {MONTH_NAMES.map((name, idx) => {
+                    const m = idx + 1
+                    const preferred = (prefs.preferredMonths ?? []).includes(m)
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => togglePreferredMonth(m)}
+                        className={`rounded px-2 py-1 font-medium transition-colors ${
+                          preferred ? 'bg-emerald-600 text-white' : 'border bg-background hover:bg-muted'
+                        }`}
+                      >
+                        {preferred ? `★ ${name}` : name}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <p className="text-[11px] text-muted-foreground">
+                Hinweis: Pflicht-Zeiträume (Abschnitt 3) haben immer Vorrang vor Sperrzeiträumen und ausgeschlossenen Monaten.
+              </p>
             </div>
 
             {/* C. Block-Längen, Reserve, Mindestabstand, Mindest-Effizienz & Haupturlaub */}
@@ -956,7 +1326,14 @@ export function SuggestionsPanel({
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/30 bg-primary/5 p-3 text-sm">
               <div>
                 <span className="font-semibold text-primary">Ergebnis:</span>{' '}
-                Aus <strong>{formatDays(totalSuggestedCost)} Urlaubstagen</strong> holst du{' '}
+                Aus <strong>{formatDays(totalSuggestedCost)} Urlaubstagen</strong>
+                {hasPartnerSuggestedDays && selectedPartner && (
+                  <span>
+                    {' '}
+                    (+ <strong>{formatDays(totalPartnerSuggestedCost)} UT</strong> von {selectedPartner.label})
+                  </span>
+                )}{' '}
+                holst du{' '}
                 <strong className="text-green-600 dark:text-green-400">{totalFreeDaysGained} freie Tage</strong> heraus!
                 <span className="ml-2 text-xs text-muted-foreground">
                   (Ø {avgEfficiency.toFixed(1)}x Effizienz · {suggestions.length} {suggestions.length === 1 ? 'Zeitraum' : 'Zeiträume'})
@@ -978,9 +1355,12 @@ export function SuggestionsPanel({
 
             <div className="space-y-2.5 mb-4">
               {suggestions.map((s, i) => {
-                const isApplied = getMissingVacationDays(s).length === 0
+                const isApplied = s.vacationDays.length > 0 && getMissingVacationDays(s).length === 0
                 const removable = isApplied && Boolean(addedByBlock[i])
                 const isExpanded = expandedBlock === i
+                const partnerDays = s.partnerVacationDays ?? []
+                const hasPartnerDays = partnerDays.length > 0
+                const partnerCanEdit = Boolean(selectedPartner?.permission === 'edit' && selectedPartner?.token && onApplyPartner)
                 const spanText = s.startDate && s.endDate
                   ? `${format(parseISO(s.startDate), 'dd.MM.yyyy', { locale: de })} – ${format(parseISO(s.endDate), 'dd.MM.yyyy', { locale: de })}`
                   : ''
@@ -990,11 +1370,16 @@ export function SuggestionsPanel({
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 flex flex-wrap items-center gap-2">
                         <span className="text-sm font-semibold">{s.label}</span>
-                        <span className="text-xs text-muted-foreground">{weekLabel(s.vacationDays)}</span>
+                        <span className="text-xs text-muted-foreground">{weekLabel(s.vacationDays.length > 0 ? s.vacationDays : partnerDays)}</span>
                         <Badge variant={s.efficiency >= 2 ? 'default' : 'secondary'} className="text-xs">
                           {s.efficiency.toFixed(1)}x Effizienz
                         </Badge>
-                        {s.inSchoolHolidays && (
+                        {s.highlights?.map(tag => (
+                          <Badge key={tag} variant="outline" className="text-[10px]">
+                            {tag}
+                          </Badge>
+                        ))}
+                        {s.inSchoolHolidays && !(s.highlights ?? []).includes('Schulferien') && (
                           <Badge variant="outline" className="text-[11px] border-amber-400 text-amber-700 dark:text-amber-300">
                             🏫 In den Schulferien
                           </Badge>
@@ -1006,7 +1391,16 @@ export function SuggestionsPanel({
                         )}
                       </div>
                       <p className="text-xs font-medium text-foreground/90 mb-0.5">
-                        {formatDays(s.cost)} Urlaubstag{s.cost !== 1 ? 'e' : ''} → <span className="text-green-600 dark:text-green-400 font-semibold">{s.freeDaysGained} freie Tage am Stück</span>
+                        {hasPartnerDays && selectedPartner ? (
+                          <>
+                            Du: {formatDays(s.cost)} UT · {selectedPartner.label}: {formatDays(s.partnerCost ?? 0)} UT →{' '}
+                            <span className="text-green-600 dark:text-green-400 font-semibold">{s.freeDaysGained} Tage gemeinsam frei</span>
+                          </>
+                        ) : (
+                          <>
+                            {formatDays(s.cost)} Urlaubstag{s.cost !== 1 ? 'e' : ''} → <span className="text-green-600 dark:text-green-400 font-semibold">{s.freeDaysGained} freie Tage am Stück</span>
+                          </>
+                        )}
                         {spanText && <span className="text-muted-foreground font-normal"> ({spanText})</span>}
                       </p>
                       {s.reason && (
@@ -1015,49 +1409,112 @@ export function SuggestionsPanel({
 
                       {/* Quick interactive resize/move controls right inside the dialog */}
                       <div className="flex flex-wrap items-center gap-1.5 text-[11px] pt-0.5">
-                        <div className="inline-flex items-center rounded border bg-muted/40 px-1 py-0.5 gap-0.5" title="Starttag verschieben">
-                          <span className="text-muted-foreground px-1">Start:</span>
-                          <button type="button" onClick={() => handleAdjustBlock(i, 'start', -1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 font-bold" title="1 Tag früher starten">−1T</button>
-                          <button type="button" onClick={() => handleAdjustBlock(i, 'start', 1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 font-bold" title="1 Tag später starten">+1T</button>
-                        </div>
-                        <div className="inline-flex items-center rounded border bg-muted/40 px-1 py-0.5 gap-0.5" title="Gesamten Block verschieben">
-                          <button type="button" onClick={() => handleAdjustBlock(i, 'move', -1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 flex items-center justify-center" title="Block 1 Tag nach vorne schieben"><ChevronLeft className="h-3 w-3" /></button>
-                          <span className="text-muted-foreground px-1">Schieben</span>
-                          <button type="button" onClick={() => handleAdjustBlock(i, 'move', 1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 flex items-center justify-center" title="Block 1 Tag nach hinten schieben"><ChevronRight className="h-3 w-3" /></button>
-                        </div>
-                        <div className="inline-flex items-center rounded border bg-muted/40 px-1 py-0.5 gap-0.5" title="Endtag verschieben">
-                          <span className="text-muted-foreground px-1">Ende:</span>
-                          <button type="button" onClick={() => handleAdjustBlock(i, 'end', -1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 font-bold" title="1 Tag kürzer">−1T</button>
-                          <button type="button" onClick={() => handleAdjustBlock(i, 'end', 1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 font-bold" title="1 Tag länger">+1T</button>
-                        </div>
+                        {s.vacationDays.length > 0 && (
+                          <>
+                            <div className="inline-flex items-center rounded border bg-muted/40 px-1 py-0.5 gap-0.5" title="Starttag verschieben">
+                              <span className="text-muted-foreground px-1">Start:</span>
+                              <button type="button" onClick={() => handleAdjustBlock(i, 'start', -1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 font-bold" title="1 Tag früher starten">−1T</button>
+                              <button type="button" onClick={() => handleAdjustBlock(i, 'start', 1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 font-bold" title="1 Tag später starten">+1T</button>
+                            </div>
+                            <div className="inline-flex items-center rounded border bg-muted/40 px-1 py-0.5 gap-0.5" title="Gesamten Block verschieben">
+                              <button type="button" onClick={() => handleAdjustBlock(i, 'move', -1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 flex items-center justify-center" title="Block 1 Tag nach vorne schieben"><ChevronLeft className="h-3 w-3" /></button>
+                              <span className="text-muted-foreground px-1">Schieben</span>
+                              <button type="button" onClick={() => handleAdjustBlock(i, 'move', 1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 flex items-center justify-center" title="Block 1 Tag nach hinten schieben"><ChevronRight className="h-3 w-3" /></button>
+                            </div>
+                            <div className="inline-flex items-center rounded border bg-muted/40 px-1 py-0.5 gap-0.5" title="Endtag verschieben">
+                              <span className="text-muted-foreground px-1">Ende:</span>
+                              <button type="button" onClick={() => handleAdjustBlock(i, 'end', -1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 font-bold" title="1 Tag kürzer">−1T</button>
+                              <button type="button" onClick={() => handleAdjustBlock(i, 'end', 1)} className="min-h-8 min-w-8 sm:min-h-0 sm:min-w-0 hover:bg-background rounded px-1.5 font-bold" title="1 Tag länger">+1T</button>
+                            </div>
+                          </>
+                        )}
                         <button
                           type="button"
                           onClick={() => setExpandedBlock(isExpanded ? null : i)}
                           className="ml-1 text-primary hover:underline"
                         >
-                          {isExpanded ? 'Tage ausblenden ▲' : `Alle ${s.vacationDays.length} Tage ▼`}
+                          {isExpanded ? 'Tage ausblenden ▲' : `Alle ${s.vacationDays.length + partnerDays.length} Tage ▼`}
                         </button>
                       </div>
 
                       {isExpanded && (
-                        <ul className="mt-1.5 text-xs text-muted-foreground space-y-0.5 border-l-2 border-primary/30 pl-2">
-                          {s.vacationDays.map(d => (
-                            <li key={d}>{format(parseISO(d), 'dd.MM.yyyy (EEEE)', { locale: de })} · KW {getISOWeek(parseISO(d))}</li>
-                          ))}
-                        </ul>
+                        <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+                          {s.vacationDays.length > 0 && (
+                            <ul className="text-xs text-muted-foreground space-y-0.5 border-l-2 border-primary/30 pl-2">
+                              {hasPartnerDays && (
+                                <li className="font-semibold text-foreground">Deine Tage ({s.vacationDays.length}):</li>
+                              )}
+                              {s.vacationDays.map(d => (
+                                <li key={d}>{format(parseISO(d), 'dd.MM.yyyy (EEEE)', { locale: de })} · KW {getISOWeek(parseISO(d))}</li>
+                              ))}
+                            </ul>
+                          )}
+                          {hasPartnerDays && selectedPartner && (
+                            <ul className="text-xs text-muted-foreground space-y-0.5 border-l-2 border-emerald-500/40 pl-2">
+                              <li className="font-semibold text-foreground">
+                                Tage für {selectedPartner.label} ({partnerDays.length}):
+                              </li>
+                              {partnerDays.map(d => (
+                                <li key={d}>{format(parseISO(d), 'dd.MM.yyyy (EEEE)', { locale: de })} · KW {getISOWeek(parseISO(d))}</li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
                       )}
                     </div>
-                    <Button
-                      size="sm"
-                      variant={isApplied ? 'secondary' : 'default'}
-                      onClick={() => removable ? handleRemoveOne(i) : handleApplyOne(i)}
-                      disabled={busy || (isApplied && !removable)}
-                      aria-pressed={isApplied}
-                      title={removable ? 'Klicken, um den Vorschlag wieder zu entfernen' : undefined}
-                      className="w-full sm:w-auto shrink-0"
-                    >
-                      {removable ? <>✓ Übernommen <X className="h-3.5 w-3.5" /></> : isApplied ? '✓ Bereits geplant' : 'Übernehmen'}
-                    </Button>
+                    <div className="flex flex-col gap-1.5 w-full sm:w-auto shrink-0">
+                      {hasPartnerDays && partnerCanEdit ? (
+                        <>
+                          <Button
+                            size="sm"
+                            variant={isApplied ? 'secondary' : 'default'}
+                            onClick={() => void handleApplyOneBoth(i)}
+                            disabled={busy || partnerApplying || isApplied}
+                            className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white"
+                          >
+                            {isApplied ? '✓ Übernommen' : 'Beide übernehmen'}
+                          </Button>
+                          {!isApplied && s.vacationDays.length > 0 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleApplyOne(i)}
+                              disabled={busy}
+                              className="w-full sm:w-auto text-xs"
+                            >
+                              Nur meine
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {s.vacationDays.length > 0 && (
+                            <Button
+                              size="sm"
+                              variant={isApplied ? 'secondary' : 'default'}
+                              onClick={() => removable ? handleRemoveOne(i) : handleApplyOne(i)}
+                              disabled={busy || (isApplied && !removable)}
+                              aria-pressed={isApplied}
+                              title={removable ? 'Klicken, um den Vorschlag wieder zu entfernen' : undefined}
+                              className="w-full sm:w-auto shrink-0"
+                            >
+                              {removable ? <>✓ Übernommen <X className="h-3.5 w-3.5" /></> : isApplied ? '✓ Bereits geplant' : 'Übernehmen'}
+                            </Button>
+                          )}
+                          {hasPartnerDays && selectedPartner && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void handleCopyPartnerDates(partnerDays, `blk-${i}`)}
+                              className="w-full sm:w-auto text-xs gap-1"
+                            >
+                              {copiedPartnerKey === `blk-${i}` ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                              {copiedPartnerKey === `blk-${i}` ? 'Kopiert!' : `${selectedPartner.label}-Tage kopieren`}
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 )
               })}
@@ -1074,8 +1531,42 @@ export function SuggestionsPanel({
                   Auf dem Kalender einblenden &amp; ziehen
                 </Button>
               )}
-              <div className="flex flex-col gap-2 sm:flex-row sm:ml-auto">
-                <Button variant="outline" onClick={handleApplyAll} disabled={busy} className="w-full sm:w-auto">Alle übernehmen</Button>
+              <div className="flex flex-wrap gap-2 sm:ml-auto">
+                {hasPartnerSuggestedDays && selectedPartner?.permission === 'edit' && selectedPartner?.token && onApplyPartner ? (
+                  <>
+                    <Button
+                      onClick={() => void handleApplyAllWithPartner()}
+                      disabled={busy || partnerApplying}
+                      className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white"
+                    >
+                      {partnerApplying ? 'Wird übertragen…' : 'Alle in beide Kalender übernehmen'}
+                    </Button>
+                    <Button variant="outline" onClick={handleApplyAll} disabled={busy} className="w-full sm:w-auto">
+                      Nur in meinen Kalender
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    {hasPartnerSuggestedDays && selectedPartner && (
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          void handleCopyPartnerDates(
+                            [...new Set(suggestions.flatMap(s => s.partnerVacationDays ?? []))].sort(),
+                            'all-partner',
+                          )
+                        }
+                        className="w-full sm:w-auto gap-1"
+                      >
+                        {copiedPartnerKey === 'all-partner' ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+                        {copiedPartnerKey === 'all-partner' ? 'Kopiert!' : `${selectedPartner.label}-Tage kopieren`}
+                      </Button>
+                    )}
+                    <Button variant="outline" onClick={handleApplyAll} disabled={busy} className="w-full sm:w-auto">
+                      {hasPartnerSuggestedDays ? 'Meine Tage übernehmen' : 'Alle übernehmen'}
+                    </Button>
+                  </>
+                )}
                 <Button onClick={onClose} className="w-full sm:w-auto">Schließen</Button>
               </div>
             </div>

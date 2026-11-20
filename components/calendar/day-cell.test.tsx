@@ -155,7 +155,7 @@ describe('DayCell visual indicators and Bundesland frame', () => {
       />
     )
 
-    const cell = screen.getByRole('button', { name: /Urlaub an einem gesetzlichen Feiertag/ })
+    const cell = screen.getByRole('button', { name: /Feiertag im Urlaub \(0 Urlaubstage abgezogen\)/ })
     // Vacation styling:
     expect(cell.className).toContain('bg-blue-600')
     // Fine white frame on top of vacation:
@@ -373,5 +373,119 @@ describe('DayCell visual indicators and Bundesland frame', () => {
     )
     const anchorCell = screen.getByRole('button', { name: /02\.05\.2026/ })
     expect(anchorCell.className).toContain('ring-blue-500')
+  })
+
+  it('renders a shared note as a framed colored StickyNote icon instead of a leave bar', () => {
+    const { container } = render(
+      <DayCell
+        date={dummyDate}
+        entries={[]}
+        publicHolidays={[]}
+        schoolHolidays={[]}
+        isWeekend={false}
+        isToday={false}
+        isOtherMonth={false}
+        isPast={false}
+        isOverBudget={false}
+        showHeatmap={false}
+        isBridgeDay={false}
+        showBridgeDays={false}
+        showOtherMonthDays={true}
+        sharedItems={[{ label: 'Partner', color: '#ec4899', type: 'note', title: 'Arzt' }]}
+        onToggle={vi.fn()}
+        selectedType="vacation"
+      />
+    )
+    const badge = container.querySelector('[data-shared-note-color="#ec4899"]')
+    expect(badge).toBeTruthy()
+    expect(badge?.className).toContain('top-0.5')
+    expect(badge?.className).toContain('left-0.5')
+    expect(badge?.querySelector('svg.lucide-sticky-note')).toBeTruthy()
+    // Must not render the top-center leave overlay bar for a note
+    expect(container.querySelector('.inset-x-3\\.5')).toBeNull()
+  })
+
+  it('places shared note top-right when own note occupies top-left', () => {
+    const ownNote: VacationEntry = {
+      id: 'n-own',
+      userId: 'u1',
+      date: '2026-05-01',
+      type: 'note',
+      title: 'Eigene Notiz',
+      year: 2026,
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    }
+    const { container } = render(
+      <DayCell
+        date={dummyDate}
+        entries={[ownNote]}
+        publicHolidays={[]}
+        schoolHolidays={[]}
+        isWeekend={false}
+        isToday={false}
+        isOtherMonth={false}
+        isPast={false}
+        isOverBudget={false}
+        showHeatmap={false}
+        isBridgeDay={false}
+        showBridgeDays={false}
+        showOtherMonthDays={true}
+        sharedItems={[{ label: 'Partner', color: '#06b6d4', type: 'note', title: 'Partner Notiz' }]}
+        onToggle={vi.fn()}
+        selectedType="vacation"
+      />
+    )
+    const ownBadge = container.querySelector('[title="Notiz: Eigene Notiz"]')
+    const sharedBadge = container.querySelector('[data-shared-note-color="#06b6d4"]')
+    expect(ownBadge?.className).toContain('top-0.5')
+    expect(ownBadge?.className).toContain('left-0.5')
+    expect(sharedBadge?.className).toContain('top-0.5')
+    expect(sharedBadge?.className).toContain('right-0.5')
+  })
+
+  it('places shared note bottom-right when own note is top-left and holiday badge is top-right', () => {
+    const ownNote: VacationEntry = {
+      id: 'n-own-hol',
+      userId: 'u1',
+      date: '2026-05-01',
+      type: 'note',
+      title: 'Eigene Notiz',
+      year: 2026,
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    }
+    const vacEntry: VacationEntry = {
+      id: 'v-hol',
+      userId: 'u1',
+      date: '2026-05-01',
+      type: 'vacation',
+      year: 2026,
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01',
+    }
+    const { container } = render(
+      <DayCell
+        date={dummyDate}
+        entries={[ownNote, vacEntry]}
+        publicHolidays={[nationwideHoliday]}
+        schoolHolidays={[]}
+        isWeekend={false}
+        isToday={false}
+        isOtherMonth={false}
+        isPast={false}
+        isOverBudget={false}
+        showHeatmap={false}
+        isBridgeDay={false}
+        showBridgeDays={false}
+        showOtherMonthDays={true}
+        sharedItems={[{ label: 'Partner', color: '#10b981', type: 'note', title: 'Partner Notiz' }]}
+        onToggle={vi.fn()}
+        selectedType="vacation"
+      />
+    )
+    const sharedBadge = container.querySelector('[data-shared-note-color="#10b981"]')
+    expect(sharedBadge?.className).toContain('bottom-0.5')
+    expect(sharedBadge?.className).toContain('right-0.5')
   })
 })

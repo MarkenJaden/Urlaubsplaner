@@ -1,7 +1,8 @@
 'use client'
 
+import { useContext } from 'react'
 import Link from 'next/link'
-import { signOut } from 'next-auth/react'
+import { SessionContext, signOut } from 'next-auth/react'
 import { Button } from '@/components/ui/button'
 import { Settings, LogOut, LogIn, BarChart3 } from 'lucide-react'
 import { useProfile } from '@/hooks/use-profile'
@@ -12,8 +13,10 @@ interface HeaderProps {
   isAdmin?: boolean
 }
 
-export function Header({ isLoggedIn, isAdmin }: HeaderProps) {
-  const profile = useProfile(Boolean(isLoggedIn))
+export function Header({ isLoggedIn: isLoggedInProp, isAdmin }: HeaderProps) {
+  const sessionCtx = useContext(SessionContext)
+  const isLoggedIn = isLoggedInProp ?? (sessionCtx?.status === 'authenticated')
+  const profile = useProfile(isLoggedIn)
   const showAdmin = Boolean(isAdmin ?? profile.data?.isAdmin)
 
   return (

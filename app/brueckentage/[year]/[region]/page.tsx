@@ -5,7 +5,7 @@ import { differenceInCalendarDays, format, parseISO } from 'date-fns'
 import { de } from 'date-fns/locale'
 import { Header } from '@/components/layout/header'
 import { Button } from '@/components/ui/button'
-import { PublicYearCalendar } from '@/components/calendar/public-year-calendar'
+import { RecommendedBlocksExplorer } from '@/components/calendar/recommended-blocks-explorer'
 import { fetchHolidays, resolveSchoolGroup } from '@/lib/holiday-api'
 import { detectBridgeDays } from '@/lib/bridge-days'
 import { suggestVacation, DEFAULT_PREFERENCES } from '@/lib/vacation-suggester'
@@ -272,85 +272,21 @@ export default async function BrueckentageRegionPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Graphical 12-Month Calendar (Printable & Embeddable) */}
-        <PublicYearCalendar
+        {/* Graphical 12-Month Calendar & Interactive Recommended Blocks */}
+        <RecommendedBlocksExplorer
           year={year}
           regionName={region.name}
           regionSlug={region.slug}
-          mode="brueckentage"
+          heading={`Optimaler Urlaubsplan ${year} ${region.preposition}`}
+          subtitle="Passe Strategie, Urlaubstage, Arbeitswoche oder Schulferien direkt an – Kalender und Blöcke aktualisieren sich live:"
           publicHolidays={publicHolidays}
           schoolHolidays={schoolHolidays}
-          bridgeDays={bridgeDays}
-          optimalBlocks={optimalBlocks}
+          initialBridgeDays={bridgeDays}
+          initialOptimalBlocks={optimalBlocks}
           plannerHref={plannerHref}
+          initialBudget={28}
+          initialGoal="max_efficiency"
         />
-
-        {/* Optimal Multi-Day Vacation Blocks */}
-        {optimalBlocks.length > 0 && (
-          <section aria-labelledby="region-blocks-heading" className="rounded-xl border bg-card p-5 space-y-4 print:hidden">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 id="region-blocks-heading" className="text-lg font-bold">
-                  Optimaler Urlaubsplan {year} {region.preposition}
-                </h2>
-                <p className="text-xs text-muted-foreground">
-                  Smarte Kombination aller Feiertage {region.preposition} bei einer 5-Tage-Woche (Mo–Fr):
-                </p>
-              </div>
-              <Button size="sm" asChild>
-                <Link href={plannerHref}>Im Kalender übernehmen →</Link>
-              </Button>
-            </div>
-
-            <div
-              tabIndex={0}
-              role="region"
-              aria-labelledby="region-blocks-heading"
-              className="overflow-x-auto rounded-lg border"
-            >
-              <table className="w-full text-left text-xs">
-                <thead className="bg-muted text-muted-foreground border-b">
-                  <tr>
-                    <th scope="col" className="p-3">Freier Zeitraum</th>
-                    <th scope="col" className="p-3">Feiertage &amp; Anlass</th>
-                    <th scope="col" className="p-3">Urlaubstage</th>
-                    <th scope="col" className="p-3">Freie Tage gesamt</th>
-                    <th scope="col" className="p-3">Effizienz</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {optimalBlocks.map((block, i) => (
-                    <tr key={block.id ?? i} className="hover:bg-muted/20">
-                      <th scope="row" className="p-3 font-semibold whitespace-nowrap text-left">
-                        {format(parseISO(block.startDate), 'dd.MM.', { locale: de })} –{' '}
-                        {format(parseISO(block.endDate), 'dd.MM.yyyy', { locale: de })}
-                      </th>
-                      <td className="p-3">
-                        <div className="font-medium text-foreground">{block.label}</div>
-                        {block.holidaysIncluded.length > 0 && (
-                          <div className="text-[11px] text-muted-foreground">
-                            {block.holidaysIncluded.join(', ')}
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-3 whitespace-nowrap font-medium">
-                        {formatDays(block.cost)} UT
-                      </td>
-                      <td className="p-3 whitespace-nowrap font-bold text-emerald-600 dark:text-emerald-400">
-                        {block.freeDaysGained} Tage frei
-                      </td>
-                      <td className="p-3 whitespace-nowrap">
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
-                          {block.efficiency.toFixed(1)}x
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
 
         {/* Single Day Bridges */}
         {bridgeDays.length > 0 && (

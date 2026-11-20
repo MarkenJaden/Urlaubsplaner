@@ -231,7 +231,21 @@ export type NoteHandling = 'avoid' | 'prefer' | 'ignore'
 
 export type SchoolHolidayStrategy = 'neutral' | 'prefer' | 'avoid' | 'avoid_heatmap'
 
-export type OptimizationGoal = 'balanced' | 'max_efficiency' | 'long_breaks' | 'distributed'
+export type OptimizationGoal = 'balanced' | 'max_efficiency' | 'long_breaks' | 'distributed' | 'mini_breaks'
+
+export type PartnerPlanningMode = 'off' | 'align_to_partner' | 'plan_both'
+export type PartnerAlignStrength = 'gentle' | 'balanced' | 'strong'
+export type PartnerOffWeekdayMode = 'bonus_only' | 'allow_few_weekends' | 'ignore'
+
+export interface PartnerPlanningOptions {
+  mode: PartnerPlanningMode
+  strength?: PartnerAlignStrength
+  offWeekdayMode?: PartnerOffWeekdayMode
+  maxLongWeekendsOnPartnerOffDay?: number
+  partnerBudget?: number | null
+  partnerReserveDays?: number
+  fillSoloAfterJoint?: boolean
+}
 
 export type PlanStartMode = 'today' | 'year_start' | 'after_last_vacation' | 'custom_date'
 
@@ -271,6 +285,7 @@ export interface PlanningPreferences {
   reserveDaysToKeep?: number
   allowSingleDayBridges?: boolean
   avoidMonths?: number[]
+  preferredMonths?: number[]
   workDays?: number[]
   planStartMode?: PlanStartMode
   customStartDate?: string | null
@@ -279,6 +294,7 @@ export interface PlanningPreferences {
   maxBlocks?: number | null
   minEfficiency?: number | null
   requireMainVacationDays?: number | null
+  partnerOptions?: PartnerPlanningOptions
   periodPreferences: PeriodPreference[]
 }
 
@@ -300,6 +316,7 @@ export const DEFAULT_PLANNING_PREFS: PlanningPreferences = {
   reserveDaysToKeep: 0,
   allowSingleDayBridges: true,
   avoidMonths: [],
+  preferredMonths: [],
   workDays: [1, 2, 3, 4, 5],
   planStartMode: 'today',
   customStartDate: null,
@@ -308,5 +325,39 @@ export const DEFAULT_PLANNING_PREFS: PlanningPreferences = {
   maxBlocks: null,
   minEfficiency: null,
   requireMainVacationDays: null,
+  partnerOptions: {
+    mode: 'off',
+    strength: 'balanced',
+    offWeekdayMode: 'bonus_only',
+    maxLongWeekendsOnPartnerOffDay: 3,
+    partnerBudget: null,
+    partnerReserveDays: 0,
+    fillSoloAfterJoint: true,
+  },
   periodPreferences: [],
+}
+
+export type WidgetViewMode = 'calendar' | 'list'
+
+export interface CalendarWidgetConfig {
+  id: string
+  token: string
+  name: string
+  year: number | null
+  viewMode: WidgetViewMode
+  includeVacations: boolean
+  includeGleittage: boolean
+  includeSpecial: boolean
+  includeNotes: boolean
+  includeNoteTitles: boolean
+  includePublicHolidays: boolean
+  includeSchoolHolidays: boolean
+  includeBridgeDays: boolean
+  includeSharedOverlays: boolean
+  sharedOverlayIds: string[]
+  showLegend: boolean
+  showStats: boolean
+  viewCount: number
+  lastViewedAt: string | null
+  createdAt: string
 }

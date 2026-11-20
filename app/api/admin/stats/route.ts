@@ -24,7 +24,7 @@ import {
   sendTestSmtpEmail,
 } from '@/lib/mail'
 import { validOrigin } from '@/lib/request'
-import { subDays } from 'date-fns'
+import { format, subDays } from 'date-fns'
 
 export async function GET() {
   const session = await auth()
@@ -83,6 +83,9 @@ export async function GET() {
     oauthSettings,
     smtpSettings,
     usersList,
+    widgetViewRows,
+    personalWidgetsCount,
+    personalWidgetsAgg,
   ] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { vacations: { some: {} } } }),
@@ -155,7 +158,35 @@ export async function GET() {
         },
       },
     }),
+    prisma.widgetViewDaily.findMany({
+      where: { date: { gte: format(thirtyDaysAgo, 'yyyy-MM-dd') } },
+    }),
+    prisma.calendarWidget.count(),
+    prisma.calendarWidget.aggregate({
+      _sum: { viewCount: true },
+    }),
   ])
+
+  const todayKey = now.toISOString().slice(0, 10)
+  const sevenDaysKey = format(sevenDaysAgo, 'yyyy-MM-dd')
+  let widgetViewsToday = 0
+  let widgetViews7d = 0
+  let widgetViews30d = 0
+  const widgetTypeMap = new Map<string, number>()
+  const widgetHostMap = new Map<string, number>()
+  const widgetRegionMap = new Map<string, number>()
+
+  for (const row of widgetViewRows) {
+    widgetViews30d += row.views
+    if (row.date === todayKey) widgetViewsToday += row.views
+    if (row.date >= sevenDaysKey) widgetViews7d += row.views
+    widgetTypeMap.set(row.widgetType, (widgetTypeMap.get(row.widgetType) ?? 0) + row.views)
+    const hostLabel = row.embedHost || 'direct'
+    widgetHostMap.set(hostLabel, (widgetHostMap.get(hostLabel) ?? 0) + row.views)
+    if (row.region) {
+      widgetRegionMap.set(row.region, (widgetRegionMap.get(row.region) ?? 0) + row.views)
+    }
+  }
 
   const visitorLastSeenMap = new Map<string, Date>()
   for (const row of visitorLastSeenByUser) {
@@ -266,7 +297,26 @@ export async function GET() {
       uniqueVisitors: d.totalVisitors,
       registeredUsers: d.authedVisitors,
       guestUsers: d.guestVisitors,
+      widgetViews: d.widgetViews,
     })),
+    widgets: {
+      viewsToday: widgetViewsToday,
+      views7d: widgetViews7d,
+      views30d: widgetViews30d,
+      personalWidgetsCount,
+      personalWidgetViewsTotal: personalWidgetsAgg._sum?.viewCount ?? 0,
+      byType: [...widgetTypeMap.entries()]
+        .map(([type, views]) => ({ type, views }))
+        .sort((a, b) => b.views - a.views),
+      topHosts: [...widgetHostMap.entries()]
+        .map(([host, views]) => ({ host, views }))
+        .sort((a, b) => b.views - a.views)
+        .slice(0, 12),
+      topRegions: [...widgetRegionMap.entries()]
+        .map(([region, views]) => ({ region, views }))
+        .sort((a, b) => b.views - a.views)
+        .slice(0, 12),
+    },
     contactMessages: contactMessages.map(m => ({
       id: m.id,
       name: m.name,

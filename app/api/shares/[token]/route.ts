@@ -163,6 +163,157 @@ export async function POST(
   const body = await readJson(request)
   if (!body) return jsonError('Ungültige Anfrage.')
 
+  if (body.action === 'batch_apply' || body.action === 'batch_remove') {
+    const rawDates = Array.isArray(body.dates) ? body.dates : null
+    const entryType = typeof body.type === 'string' ? body.type : ''
+    const rawTitle = body.title === null || body.title === undefined ? null : body.title
+    const replace = body.replace === true
+    const rawYear = body.year !== undefined ? Number(body.year) : undefined
+    const year =
+      rawYear !== undefined && Number.isInteger(rawYear) && rawYear >= 1900 && rawYear <= 2200
+        ? rawYear
+        : undefined
+
+    if (
+      !rawDates ||
+      rawDates.length === 0 ||
+      rawDates.length > 150 ||
+      !['vacation', 'gleittag', 'special', 'note'].includes(entryType) ||
+      (rawTitle !== null && (typeof rawTitle !== 'string' || rawTitle.length > 500))
+    ) {
+      return jsonError('Ungültige Batch-Daten.')
+    }
+
+    const parsedEntries: NonNullable<ReturnType<typeof parseEntry>>[] = []
+    const seenDates = new Set<string>()
+    for (const d of rawDates) {
+      if (typeof d !== 'string') return jsonError('Ungültiges Datum in Batch.')
+      const parsedItem = parseEntry({ date: d, type: entryType, title: rawTitle })
+      if (!parsedItem) return jsonError('Ungültiger Eintrag in Batch.')
+      const key = parsedItem.date.toISOString().slice(0, 10)
+      if (!seenDates.has(key)) {
+        seenDates.add(key)
+        parsedEntries.push(parsedItem)
+      }
+    }
+
+    if (token.startsWith('g_')) {
+      const setting = await prisma.systemSetting.findUnique({
+        where: { key: `guest_share:${token}` },
+      })
+      const record = setting?.value as unknown as GuestShareRecord | undefined
+      if (!record || !record.token) return jsonError('Geteilter Plan nicht gefunden.', 404)
+      if (record.permission !== 'edit') return jsonError('Dieser Link erlaubt nur Lesezugriff.', 403)
+      if (entryType === 'note' && !record.includeNotes) {
+        return jsonError('Notizen sind für diesen geteilten Plan deaktiviert.', 403)
+      }
+
+      const currentEntries = [...(record.entries ?? [])]
+      if (body.action === 'batch_apply') {
+        const filtered =
+          replace && year
+            ? currentEntries.filter(
+                e => !(e.type === entryType && e.date.startsWith(`${year}-`) && !seenDates.has(e.date.slice(0, 10))),
+              )
+            : currentEntries
+        const existingKeys = new Set(
+          filtered.filter(e => e.type === entryType).map(e => e.date.slice(0, 10)),
+        )
+        const additions = parsedEntries
+          .filter(p => !existingKeys.has(p.date.toISOString().slice(0, 10)))
+          .map((p, idx) => ({
+            id: `ge-${Date.now()}-${idx}-${p.date.toISOString().slice(0, 10)}-${p.type}`,
+            date: p.date.toISOString().slice(0, 10),
+            type: p.type,
+            title: p.title ?? null,
+            year: p.year,
+          }))
+        record.entries = [...filtered, ...additions].sort((a, b) => a.date.localeCompare(b.date))
+      } else {
+        record.entries = currentEntries.filter(
+          e => !(e.type === entryType && seenDates.has(e.date.slice(0, 10))),
+        )
+      }
+      record.updatedAt = new Date().toISOString()
+
+      await prisma.systemSetting.update({
+        where: { key: `guest_share:${token}` },
+        data: { value: record as unknown as object },
+      })
+      publishPlanUpdate({ tokens: [token] })
+
+      const visibleEntries = record.entries
+        .filter(e => record.includeNotes || e.type !== 'note')
+        .map((e, i) => ({
+          id: e.id ?? `ge-${i}-${e.date.slice(0, 10)}`,
+          date: e.date.slice(0, 10),
+          type: e.type,
+          title: e.title ?? null,
+          year: e.year ?? Number(e.date.slice(0, 4)),
+        }))
+      return NextResponse.json({ ok: true, entries: visibleEntries })
+    }
+
+    const share = await prisma.planShare.findUnique({ where: { token } })
+    if (!share) return jsonError('Geteilter Plan nicht gefunden.', 404)
+    if (share.permission !== 'edit') return jsonError('Dieser Link erlaubt nur Lesezugriff.', 403)
+    if (entryType === 'note' && !share.includeNotes) {
+      return jsonError('Notizen sind für diesen geteilten Plan deaktiviert.', 403)
+    }
+
+    if (body.action === 'batch_apply') {
+      if (replace && year) {
+        await prisma.vacationEntry.deleteMany({
+          where: {
+            userId: share.userId,
+            type: entryType,
+            year,
+            date: { notIn: parsedEntries.map(p => p.date) },
+          },
+        })
+      }
+      await prisma.vacationEntry.createMany({
+        data: parsedEntries.map(p => ({
+          userId: share.userId,
+          date: p.date,
+          type: p.type,
+          title: p.title,
+          year: p.year,
+        })),
+        skipDuplicates: true,
+      })
+    } else {
+      await prisma.vacationEntry.deleteMany({
+        where: {
+          userId: share.userId,
+          type: entryType,
+          date: { in: parsedEntries.map(p => p.date) },
+        },
+      })
+    }
+
+    const updatedRows = await prisma.vacationEntry.findMany({
+      where: {
+        userId: share.userId,
+        ...(share.includeNotes ? {} : { type: { not: 'note' } }),
+      },
+      orderBy: { date: 'asc' },
+    })
+
+    publishPlanUpdate({ userId: share.userId, tokens: [token] })
+
+    return NextResponse.json({
+      ok: true,
+      entries: updatedRows.map(e => ({
+        id: e.id,
+        date: e.date.toISOString().slice(0, 10),
+        type: e.type,
+        title: e.title,
+        year: e.year,
+      })),
+    })
+  }
+
   const action = body.action === 'remove' ? 'remove' : 'toggle'
   const parsed = parseEntry(body)
   if (!parsed) return jsonError('Ungültiger Eintrag.')
